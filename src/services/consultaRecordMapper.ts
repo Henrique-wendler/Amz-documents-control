@@ -1,5 +1,7 @@
 import {
   getCarByFarm,
+  getAttachmentsByDocument,
+  getDocumentValidityStatus,
   getDocumentsByFarm,
   getFarmsByOwner,
   getGuaranteesByOperation,
@@ -25,7 +27,7 @@ const guaranteeStatus: Record<MockDatabase["guarantees"][number]["status"], Sear
   closed: "Encerrada",
   cancelled: "Cancelada",
 };
-const documentStatus: Record<MockDatabase["documents"][number]["status"], SearchStatus> = {
+const documentStatus: Record<ReturnType<typeof getDocumentValidityStatus>, SearchStatus> = {
   active: "Ativa",
   expiring: "A vencer",
   expired: "Vencido",
@@ -131,12 +133,15 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
 
   const documents: SearchRecord[] = db.documents.map((document) => {
     const farm = db.farms.find((item) => item.id === document.farmId);
+    const registration = document.registrationId ? db.registrations.find((item) => item.id === document.registrationId) : undefined;
+    const attachments = getAttachmentsByDocument(document.id, db);
     return {
       id: document.id, entityType: "document", title: document.type, reference: farm?.name ?? "—",
-      details: `Vencimento ${formatIsoDate(document.expirationDate)}`, status: documentStatus[document.status], updatedAt: entityDate(document.updatedAt),
+      details: `Vencimento ${formatIsoDate(document.expirationDate)}`, status: documentStatus[getDocumentValidityStatus(document)], updatedAt: entityDate(document.updatedAt),
       farmId: farm?.id, farmName: farm?.name,
       attributes: { number: document.number ?? "—", farm: farm?.name ?? "—", issuedAt: formatIsoDate(document.issueDate), validUntil: formatIsoDate(document.expirationDate), documentType: documentCategory(document.type) },
-      relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Arquivo", value: document.number ?? "Sem arquivo" }],
+      relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Arquivos", value: countLabel(attachments.length, "arquivo", "arquivos") }],
+      openPath: `/documentos?id=${document.id}`,
     };
   });
 
@@ -153,4 +158,3 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
   });
   return [...owners, ...farms, ...registrations, ...operations, ...guarantees, ...documents, ...cars];
 }
-

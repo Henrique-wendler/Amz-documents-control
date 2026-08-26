@@ -6,7 +6,7 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status }: StatusBadgeProps) {
   const color =
-    status === "Ativa" || status === "Ativo"
+    status === "Ativa" || status === "Ativo" || status === "Vigente"
       ? "success"
       : status === "Em análise" || status === "A vencer"
         ? "warning"

@@ -23,6 +23,7 @@ import { ConsultaPage } from "./pages/ConsultaPage";
 import { ProprietariosPage } from "./pages/ProprietariosPage";
 import { FazendasPage } from "./pages/FazendasPage";
 import { MatriculasPage } from "./pages/MatriculasPage";
+import { DocumentosPage } from "./pages/DocumentosPage";
 
 type DialogState =
   | { kind: "none" }
@@ -144,6 +145,10 @@ export default function App() {
 
   if (currentPath === "/matriculas") {
     return <MatriculasPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/documentos") {
+    return <DocumentosPage onNavigate={navigate} />;
   }
 
   if (!data) {

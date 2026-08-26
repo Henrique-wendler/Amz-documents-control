@@ -1,5 +1,5 @@
 import { mockStore } from "../data/mock/mockStore";
-import { getExpiringDocuments, getOwnersByRegistration } from "../data/mock/selectors";
+import { getDocumentValidityStatus, getExpiringDocuments, getOwnersByRegistration, MOCK_REFERENCE_DATE } from "../data/mock/selectors";
 import type { Activity, MockDatabase } from "../types/domain";
 import type { ChartDatum, DashboardData, DashboardLoadMode, RecentActivityItem } from "../types/dashboard";
 import { formatCurrency, formatIsoDate } from "./searchUtils";
@@ -7,7 +7,7 @@ import { formatCurrency, formatIsoDate } from "./searchUtils";
 const clone = <T,>(value: T): T => structuredClone(value);
 const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 const empty: DashboardData = { kpis: [], operationsByStatus: [], alerts: [], expiringDocuments: [], guaranteesByType: [], recentActivity: [] };
-const referenceDate = "2026-08-21";
+const referenceDate = MOCK_REFERENCE_DATE;
 
 const compactCurrency = (value: number) => {
   if (value >= 1_000_000) return `R$ ${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value / 1_000_000)} milhões`;
@@ -53,7 +53,7 @@ const buildDashboard = (): DashboardData => {
   const activeRegistrations = db.registrations.filter((registration) => registration.status === "active");
   const activeOperations = db.operations.filter((operation) => operation.status === "active");
   const activeGuarantees = db.guarantees.filter((guarantee) => guarantee.status === "active");
-  const pendingDocuments = db.documents.filter((document) => document.status === "expiring" || document.status === "expired");
+  const pendingDocuments = db.documents.filter((document) => ["expiring", "expired"].includes(getDocumentValidityStatus(document, referenceDate)));
   const expiring = getExpiringDocuments(referenceDate, 30, db);
   const outdatedAppraisals = activeGuarantees.filter((guarantee) => (guarantee.evaluationYear ?? 0) < 2026).length;
   const registrationsWithoutActiveOwner = db.registrations.filter((registration) => !getOwnersByRegistration(registration.id, db).some((owner) => owner.status === "active")).length;

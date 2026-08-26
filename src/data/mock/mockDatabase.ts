@@ -2,6 +2,7 @@ import type { MockDatabase } from "../../types/domain";
 import { activitySeeds } from "./seeds/activities";
 import { carRecordSeeds } from "./seeds/carRecords";
 import { documentSeeds } from "./seeds/documents";
+import { documentAttachmentSeeds } from "./seeds/documentAttachments";
 import { farmSeeds } from "./seeds/farms";
 import { guaranteeItemSeeds } from "./seeds/guaranteeItems";
 import { guaranteeSeeds } from "./seeds/guarantees";
@@ -19,9 +20,9 @@ export const mockDatabaseSeed: MockDatabase = {
   guarantees: guaranteeSeeds,
   guaranteeItems: guaranteeItemSeeds,
   documents: documentSeeds,
+  documentAttachments: documentAttachmentSeeds,
   carRecords: carRecordSeeds,
   activities: activitySeeds,
 };
 
 export const createMockDatabase = (): MockDatabase => structuredClone(mockDatabaseSeed);
-

@@ -35,6 +35,9 @@ export function validateMockDatabase(database: MockDatabase): string[] {
     if (!hasId(database.farms, document.farmId)) errors.push(`Document ${document.id} referencia Farm inexistente: ${document.farmId}`);
     if (document.registrationId && !hasId(database.registrations, document.registrationId)) errors.push(`Document ${document.id} referencia Registration inexistente: ${document.registrationId}`);
   });
+  database.documentAttachments.forEach((attachment) => {
+    if (!hasId(database.documents, attachment.documentId)) errors.push(`DocumentAttachment ${attachment.id} referencia Document inexistente: ${attachment.documentId}`);
+  });
   database.carRecords.forEach((car) => {
     if (!hasId(database.farms, car.farmId)) errors.push(`CAR ${car.id} referencia Farm inexistente: ${car.farmId}`);
     if (car.registrationId && !hasId(database.registrations, car.registrationId)) errors.push(`CAR ${car.id} referencia Registration inexistente: ${car.registrationId}`);

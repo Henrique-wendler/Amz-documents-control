@@ -1,4 +1,4 @@
-import type { MockDatabase } from "../../types/domain";
+import type { DocumentValidityStatus, MockDatabase, RuralDocument } from "../../types/domain";
 import { mockStore } from "./mockStore";
 
 const database = (source?: MockDatabase) => source ?? mockStore.getState();
@@ -9,6 +9,7 @@ export const getRegistrationById = (id: string, source?: MockDatabase) => databa
 export const getOperationById = (id: string, source?: MockDatabase) => database(source).operations.find((operation) => operation.id === id);
 export const getGuaranteeById = (id: string, source?: MockDatabase) => database(source).guarantees.find((guarantee) => guarantee.id === id);
 export const getDocumentById = (id: string, source?: MockDatabase) => database(source).documents.find((document) => document.id === id);
+export const getAttachmentsByDocument = (documentId: string, source?: MockDatabase) => database(source).documentAttachments.filter((attachment) => attachment.documentId === documentId);
 export const getCarById = (id: string, source?: MockDatabase) => database(source).carRecords.find((car) => car.id === id);
 
 export const getRegistrationsByFarm = (farmId: string, source?: MockDatabase) => database(source).registrations.filter((registration) => registration.farmId === farmId);
@@ -102,7 +103,22 @@ export const getOwnerRelationCounts = (ownerId: string, source?: MockDatabase) =
   };
 };
 
-export const getExpiringDocuments = (referenceDate: string, days: number, source?: MockDatabase) => {
+export const MOCK_REFERENCE_DATE = "2026-08-21";
+
+export const getDocumentValidityInfo = (document: RuralDocument, referenceDate = MOCK_REFERENCE_DATE): { status: DocumentValidityStatus; daysUntilExpiration?: number } => {
+  if (document.status === "inactive") return { status: "inactive" };
+  if (!document.expirationDate) return { status: "active" };
+  const reference = new Date(`${referenceDate}T00:00:00Z`).getTime();
+  const expiration = new Date(`${document.expirationDate}T00:00:00Z`).getTime();
+  const daysUntilExpiration = Math.round((expiration - reference) / 86400000);
+  if (daysUntilExpiration < 0) return { status: "expired", daysUntilExpiration };
+  if (daysUntilExpiration <= 30) return { status: "expiring", daysUntilExpiration };
+  return { status: "active", daysUntilExpiration };
+};
+
+export const getDocumentValidityStatus = (document: RuralDocument, referenceDate = MOCK_REFERENCE_DATE) => getDocumentValidityInfo(document, referenceDate).status;
+
+export const getExpiringDocuments = (referenceDate = MOCK_REFERENCE_DATE, days = 30, source?: MockDatabase) => {
   const reference = new Date(`${referenceDate}T00:00:00Z`).getTime();
   const maximum = reference + days * 86400000;
   return database(source).documents.filter((document) => {

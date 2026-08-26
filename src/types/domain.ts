@@ -104,14 +104,26 @@ export interface RuralDocument {
   number?: string;
   issueDate?: string;
   expirationDate?: string;
-  status: "active" | "expiring" | "expired" | "inactive";
+  status: EntityStatus;
   exercise?: string;
   purpose?: string;
   licensedArea?: number;
   cab?: string;
   sigamStatus?: string;
   notes?: string;
-  filePath?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DocumentValidityStatus = "active" | "expiring" | "expired" | "inactive";
+
+export interface DocumentAttachment {
+  id: string;
+  documentId: string;
+  fileName: string;
+  filePath: string;
+  fileType?: string;
+  fileSize?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +158,7 @@ export interface MockDatabase {
   guarantees: Guarantee[];
   guaranteeItems: GuaranteeItem[];
   documents: RuralDocument[];
+  documentAttachments: DocumentAttachment[];
   carRecords: CarRecord[];
   activities: Activity[];
 }

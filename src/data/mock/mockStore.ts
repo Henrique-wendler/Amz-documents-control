@@ -1,4 +1,4 @@
-import type { Activity, Farm, Guarantee, GuaranteeItem, MockDatabase, Operation, Owner, OwnershipLink, Registration } from "../../types/domain";
+import type { Activity, DocumentAttachment, Farm, Guarantee, GuaranteeItem, MockDatabase, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "../../types/domain";
 import { createMockDatabase } from "./mockDatabase";
 import { reportMockDatabaseIntegrity, validateMockDatabase } from "./validateMockDatabase";
 
@@ -215,6 +215,60 @@ class MockDatabaseStore {
   deleteGuaranteeItem(id: string) {
     this.database.guaranteeItems = this.database.guaranteeItems.filter((item) => item.id !== id);
     this.database.activities = this.database.activities.filter((activity) => !(activity.entityType === "guaranteeItem" && activity.entityId === id));
+    this.commit();
+  }
+
+  createDocument(draft: Omit<RuralDocument, "id" | "createdAt" | "updatedAt">): RuralDocument {
+    const date = dateIso();
+    const document: RuralDocument = { ...draft, id: nextId("DOC", this.database.documents), createdAt: date, updatedAt: date };
+    this.database.documents.push(document);
+    this.addActivity("document", document.id, "Documento cadastrado", "US");
+    this.commit();
+    return structuredClone(document);
+  }
+
+  updateDocument(id: string, changes: Partial<Omit<RuralDocument, "id" | "createdAt">>): RuralDocument {
+    const index = this.database.documents.findIndex((document) => document.id === id);
+    if (index < 0) throw new Error("Documento não encontrado.");
+    const document = { ...this.database.documents[index], ...changes, updatedAt: dateIso() };
+    this.database.documents[index] = document;
+    this.addActivity("document", id, changes.status === "inactive" ? "Documento inativado" : "Documento atualizado", "US");
+    this.commit();
+    return structuredClone(document);
+  }
+
+  deleteDocument(id: string) {
+    this.database.documents = this.database.documents.filter((document) => document.id !== id);
+    this.database.documentAttachments = this.database.documentAttachments.filter((attachment) => attachment.documentId !== id);
+    this.database.activities = this.database.activities.filter((activity) => !(activity.entityType === "document" && activity.entityId === id));
+    this.commit();
+  }
+
+  addDocumentAttachment(documentId: string, draft: Omit<DocumentAttachment, "id" | "documentId" | "createdAt" | "updatedAt">): DocumentAttachment {
+    if (!this.database.documents.some((document) => document.id === documentId)) throw new Error("Documento não encontrado.");
+    const date = dateIso();
+    const attachment: DocumentAttachment = { ...draft, id: nextId("ATT", this.database.documentAttachments), documentId, createdAt: date, updatedAt: date };
+    this.database.documentAttachments.push(attachment);
+    this.addActivity("document", documentId, "Referência de arquivo adicionada", "US");
+    this.commit();
+    return structuredClone(attachment);
+  }
+
+  updateDocumentAttachment(id: string, changes: Partial<Omit<DocumentAttachment, "id" | "documentId" | "createdAt">>): DocumentAttachment {
+    const index = this.database.documentAttachments.findIndex((attachment) => attachment.id === id);
+    if (index < 0) throw new Error("Referência de arquivo não encontrada.");
+    const attachment = { ...this.database.documentAttachments[index], ...changes, updatedAt: dateIso() };
+    this.database.documentAttachments[index] = attachment;
+    this.addActivity("document", attachment.documentId, "Referência de arquivo atualizada", "US");
+    this.commit();
+    return structuredClone(attachment);
+  }
+
+  removeDocumentAttachment(id: string) {
+    const attachment = this.database.documentAttachments.find((item) => item.id === id);
+    if (!attachment) throw new Error("Referência de arquivo não encontrada.");
+    this.database.documentAttachments = this.database.documentAttachments.filter((item) => item.id !== id);
+    this.addActivity("document", attachment.documentId, "Referência de arquivo removida", "US");
     this.commit();
   }
 
