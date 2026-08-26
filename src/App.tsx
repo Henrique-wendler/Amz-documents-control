@@ -25,6 +25,7 @@ import { FazendasPage } from "./pages/FazendasPage";
 import { MatriculasPage } from "./pages/MatriculasPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
 import { CarPage } from "./pages/CarPage";
+import { RelatoriosPage } from "./pages/RelatoriosPage";
 
 type DialogState =
   | { kind: "none" }
@@ -154,6 +155,10 @@ export default function App() {
 
   if (currentPath === "/car") {
     return <CarPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/relatorios") {
+    return <RelatoriosPage onNavigate={navigate} />;
   }
 
   if (!data) {
