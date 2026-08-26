@@ -25,7 +25,7 @@ const items: NavItem[] = [
   { label: "Matrículas", icon: Document24Regular, path: "/matriculas" },
   { label: "Operações e Garantias", icon: Money24Regular, path: "/" },
   { label: "Documentos", icon: Folder24Regular, path: "/documentos" },
-  { label: "CAR", icon: Shield24Regular },
+  { label: "CAR", icon: Shield24Regular, path: "/car" },
   { label: "Relatórios", icon: ChartMultiple24Regular },
 ];
 

@@ -65,6 +65,7 @@ export const getGuaranteeItems = (guaranteeId: string, source?: MockDatabase) =>
 export const getDocumentsByFarm = (farmId: string, source?: MockDatabase) => database(source).documents.filter((document) => document.farmId === farmId);
 export const getDocumentsByRegistration = (registrationId: string, source?: MockDatabase) => database(source).documents.filter((document) => document.registrationId === registrationId);
 export const getCarByFarm = (farmId: string, source?: MockDatabase) => database(source).carRecords.find((car) => car.farmId === farmId);
+export const getCarsByFarm = (farmId: string, source?: MockDatabase) => database(source).carRecords.filter((car) => car.farmId === farmId);
 
 export const getOwnersByFarm = (farmId: string, source?: MockDatabase) => {
   const db = database(source);
@@ -84,7 +85,7 @@ export const getFarmRelationCounts = (farmId: string, source?: MockDatabase) => 
     activeOperationCount: getActiveOperationsByFarm(farmId, db).length,
     operationCount: getOperationsByFarm(farmId, db).length,
     documentCount: getDocumentsByFarm(farmId, db).length,
-    carCount: getCarByFarm(farmId, db) ? 1 : 0,
+    carCount: getCarsByFarm(farmId, db).length,
   };
 };
 

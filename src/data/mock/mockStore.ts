@@ -1,4 +1,4 @@
-import type { Activity, DocumentAttachment, Farm, Guarantee, GuaranteeItem, MockDatabase, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "../../types/domain";
+import type { Activity, CarRecord, DocumentAttachment, Farm, Guarantee, GuaranteeItem, MockDatabase, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "../../types/domain";
 import { createMockDatabase } from "./mockDatabase";
 import { reportMockDatabaseIntegrity, validateMockDatabase } from "./validateMockDatabase";
 
@@ -269,6 +269,31 @@ class MockDatabaseStore {
     if (!attachment) throw new Error("Referência de arquivo não encontrada.");
     this.database.documentAttachments = this.database.documentAttachments.filter((item) => item.id !== id);
     this.addActivity("document", attachment.documentId, "Referência de arquivo removida", "US");
+    this.commit();
+  }
+
+  createCarRecord(draft: Omit<CarRecord, "id" | "createdAt" | "updatedAt">): CarRecord {
+    const date = dateIso();
+    const car: CarRecord = { ...draft, id: nextId("CAR", this.database.carRecords), createdAt: date, updatedAt: date };
+    this.database.carRecords.push(car);
+    this.addActivity("car", car.id, "CAR cadastrado", "US");
+    this.commit();
+    return structuredClone(car);
+  }
+
+  updateCarRecord(id: string, changes: Partial<Omit<CarRecord, "id" | "createdAt">>): CarRecord {
+    const index = this.database.carRecords.findIndex((car) => car.id === id);
+    if (index < 0) throw new Error("CAR não encontrado.");
+    const car = { ...this.database.carRecords[index], ...changes, updatedAt: dateIso() };
+    this.database.carRecords[index] = car;
+    this.addActivity("car", id, changes.status === "inactive" ? "CAR inativado" : "CAR atualizado", "US");
+    this.commit();
+    return structuredClone(car);
+  }
+
+  deleteCarRecord(id: string) {
+    this.database.carRecords = this.database.carRecords.filter((car) => car.id !== id);
+    this.database.activities = this.database.activities.filter((activity) => !(activity.entityType === "car" && activity.entityId === id));
     this.commit();
   }
 

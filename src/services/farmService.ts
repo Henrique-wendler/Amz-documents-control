@@ -1,6 +1,6 @@
 import { mockStore } from "../data/mock/mockStore";
 import {
-  getCarByFarm,
+  getCarsByFarm,
   getDocumentsByFarm,
   getFarmRelationCounts,
   getOperationsByFarm,
@@ -77,7 +77,7 @@ export const farmService = {
       owners: getOwnersByFarm(id),
       operations: getOperationsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
       documents: getDocumentsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-      car: getCarByFarm(id),
+      cars: getCarsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     });
   },
 

@@ -41,6 +41,8 @@ export function validateMockDatabase(database: MockDatabase): string[] {
   database.carRecords.forEach((car) => {
     if (!hasId(database.farms, car.farmId)) errors.push(`CAR ${car.id} referencia Farm inexistente: ${car.farmId}`);
     if (car.registrationId && !hasId(database.registrations, car.registrationId)) errors.push(`CAR ${car.id} referencia Registration inexistente: ${car.registrationId}`);
+    const registration = car.registrationId ? database.registrations.find((item) => item.id === car.registrationId) : undefined;
+    if (registration && registration.farmId !== car.farmId) errors.push(`CAR ${car.id} referencia Registration de outra Farm: ${car.registrationId}`);
     if (car.ownerId && !hasId(database.owners, car.ownerId)) errors.push(`CAR ${car.id} referencia Owner inexistente: ${car.ownerId}`);
   });
 

@@ -8,7 +8,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const color =
     status === "Ativa" || status === "Ativo" || status === "Vigente"
       ? "success"
-      : status === "Em análise" || status === "A vencer"
+      : status === "Em análise" || status === "Pendente" || status === "A vencer"
         ? "warning"
         : status === "Cancelada" || status === "Vencido"
           ? "danger"

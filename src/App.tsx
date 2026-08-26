@@ -24,6 +24,7 @@ import { ProprietariosPage } from "./pages/ProprietariosPage";
 import { FazendasPage } from "./pages/FazendasPage";
 import { MatriculasPage } from "./pages/MatriculasPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
+import { CarPage } from "./pages/CarPage";
 
 type DialogState =
   | { kind: "none" }
@@ -149,6 +150,10 @@ export default function App() {
 
   if (currentPath === "/documentos") {
     return <DocumentosPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/car") {
+    return <CarPage onNavigate={navigate} />;
   }
 
   if (!data) {

@@ -1,5 +1,5 @@
 import {
-  getCarByFarm,
+  getCarsByFarm,
   getAttachmentsByDocument,
   getDocumentValidityStatus,
   getDocumentsByFarm,
@@ -74,7 +74,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
     const ownerMap = new Map(registrations.flatMap((registration) => getOwnersByRegistration(registration.id, db)).map((owner) => [owner.id, owner]));
     const operations = getOperationsByFarm(farm.id, db);
     const documents = getDocumentsByFarm(farm.id, db);
-    const car = getCarByFarm(farm.id, db);
+    const cars = getCarsByFarm(farm.id, db);
     return {
       id: farm.id, entityType: "farm", title: farm.name, reference: `${farm.municipality} / ${farm.state}`,
       details: formatArea(farm.totalArea), status: farm.status === "active" ? "Ativa" : "Inativa", updatedAt: entityDate(farm.updatedAt),
@@ -84,7 +84,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
         { label: "Matrículas", value: countLabel(registrations.length, "matrícula", "matrículas") },
         { label: "Operações", value: countLabel(operations.length, "operação", "operações") },
         { label: "Documentos", value: countLabel(documents.length, "documento", "documentos") },
-        { label: "CAR", value: car ? "1 cadastro" : "Nenhum cadastro" },
+        { label: "CAR", value: countLabel(cars.length, "cadastro", "cadastros") },
       ],
     };
   });
@@ -147,13 +147,15 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
 
   const cars: SearchRecord[] = db.carRecords.map((car) => {
     const farm = db.farms.find((item) => item.id === car.farmId);
+    const registration = car.registrationId ? db.registrations.find((item) => item.id === car.registrationId) : undefined;
     const owner = car.ownerId ? db.owners.find((item) => item.id === car.ownerId) : undefined;
     return {
       id: car.id, entityType: "car", title: car.number, reference: farm?.name ?? "—",
       details: `Recibo ${car.receiptNumber ?? "—"}`, status: carStatus[car.status], updatedAt: entityDate(car.updatedAt),
       farmId: farm?.id, farmName: farm?.name,
-      attributes: { farm: farm?.name ?? "—", owner: owner?.name ?? "—", receipt: car.receiptNumber ?? "—" },
-      relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Proprietário", value: owner?.name ?? "—" }],
+      attributes: { farm: farm?.name ?? "—", registration: registration?.number ?? "—", owner: owner?.name ?? "—", receipt: car.receiptNumber ?? "—" },
+      relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Proprietário", value: owner?.name ?? "—" }],
+      openPath: `/car?id=${car.id}`,
     };
   });
   return [...owners, ...farms, ...registrations, ...operations, ...guarantees, ...documents, ...cars];

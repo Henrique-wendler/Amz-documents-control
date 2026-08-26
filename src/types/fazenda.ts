@@ -35,7 +35,7 @@ export interface FarmDetailsViewModel {
   owners: Owner[];
   operations: Operation[];
   documents: RuralDocument[];
-  car?: CarRecord;
+  cars: CarRecord[];
 }
 
 export interface FarmListResponse {
