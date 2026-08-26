@@ -1,0 +1,18 @@
+COMO ABRIR O PROTOTIPO NESTE COMPUTADOR
+
+1. Abra a pasta front-imoveis-rurais.
+2. Clique duas vezes em INICIAR_PROTOTIPO.cmd.
+3. Aguarde o navegador abrir em http://127.0.0.1:4173/.
+4. Para encerrar o prototipo, volte ao terminal e pressione Ctrl+C.
+
+O inicializador usa o Node.js ja fornecido pelo Codex. Nao e necessario
+executar npm install novamente neste computador enquanto a pasta
+node_modules estiver presente.
+
+OPCAO PARA USAR npm NORMALMENTE
+
+Instale o Node.js LTS no Windows e abra um novo PowerShell. Depois execute:
+
+  cd "C:\Users\amzag\Documents\Codex\2026-08-19\v\front-imoveis-rurais"
+  npm install
+  npm run dev

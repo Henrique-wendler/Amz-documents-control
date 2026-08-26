@@ -1,0 +1,13 @@
+import type { Guarantee } from "../../../types/domain";
+
+export const guaranteeSeeds: Guarantee[] = [
+  { id: "GAR-001", operationId: "OP-001", registrationId: "REG-001", bank: "Banco do Brasil", type: "Penhor pecuário", description: "Garantia vinculada à operação", degree: "1º grau", value: 20000, evaluationYear: 2026, status: "active", startDate: "2026-07-24", endDate: "2027-08-13", notes: "Garantia vinculada ao investimento rural.", createdAt: "2026-07-24", updatedAt: "2026-08-23" },
+  { id: "GAR-002", operationId: "OP-002", registrationId: "REG-003", bank: "Banco da Amazônia", type: "Hipoteca", description: "Hipoteca da propriedade rural", degree: "1º grau", value: 600000, evaluationYear: 2026, status: "active", startDate: "2026-08-11", endDate: "2028-08-11", createdAt: "2026-08-11", updatedAt: "2026-08-22" },
+  { id: "GAR-003", operationId: "OP-003", registrationId: "REG-005", bank: "Sicredi", type: "Penhor agrícola", description: "Safra vinculada à operação", degree: "1º grau", value: 300000, evaluationYear: 2026, status: "active", startDate: "2026-08-08", endDate: "2027-08-08", createdAt: "2026-08-08", updatedAt: "2026-08-21" },
+  { id: "GAR-004", operationId: "OP-004", registrationId: "REG-002", bank: "Bradesco", type: "Alienação fiduciária", description: "Máquinas agrícolas vinculadas", degree: "1º grau", value: 250000, evaluationYear: 2026, status: "active", startDate: "2026-08-04", endDate: "2027-08-04", createdAt: "2026-08-04", updatedAt: "2026-08-20" },
+  { id: "GAR-005", operationId: "OP-005", registrationId: "REG-007", bank: "Banco do Brasil", type: "Hipoteca", description: "Imóvel rural em garantia", degree: "1º grau", value: 950000, evaluationYear: 2025, status: "active", startDate: "2026-07-30", endDate: "2029-07-30", createdAt: "2026-07-30", updatedAt: "2026-08-19" },
+  { id: "GAR-006", operationId: "OP-006", registrationId: "REG-009", bank: "Caixa Econômica", type: "Aval de terceiros", description: "Aval vinculado à operação", value: 180000, evaluationYear: 2025, status: "cancelled", startDate: "2026-07-24", endDate: "2027-07-24", createdAt: "2026-07-24", updatedAt: "2026-08-18" },
+  { id: "GAR-007", operationId: "OP-007", registrationId: "REG-011", bank: "Sicredi", type: "Penhor agrícola", description: "Safra liquidada", value: 410000, evaluationYear: 2025, status: "closed", startDate: "2025-07-18", endDate: "2026-07-18", createdAt: "2025-07-18", updatedAt: "2026-08-17" },
+  { id: "GAR-008", operationId: "OP-008", registrationId: "REG-004", bank: "Banco do Brasil", type: "Hipoteca", description: "Hipoteca para armazenagem", degree: "1º grau", value: 720000, evaluationYear: 2026, status: "active", startDate: "2026-07-12", endDate: "2028-07-12", createdAt: "2026-07-12", updatedAt: "2026-08-16" },
+];
+
