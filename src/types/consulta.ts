@@ -12,10 +12,14 @@ export type SearchCategory = "all" | SearchEntityType;
 export type SearchStatus =
   | "Ativa"
   | "Ativo"
+  | "Inativo"
   | "Em análise"
+  | "Pendente"
+  | "Concluída"
   | "Encerrada"
   | "Inativa"
   | "Cancelada"
+  | "Vigente"
   | "A vencer"
   | "Vencido";
 

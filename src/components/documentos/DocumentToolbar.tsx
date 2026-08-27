@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Dropdown, Field, Input, Option, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
 import { Add20Regular, Filter20Regular, Search20Regular } from "@fluentui/react-icons";
 import type { DocumentFilters, DocumentOption } from "../../types/documento";
+import { documentValidityLabels } from "../../services/statusLabels";
 
 interface Props { query: string; value: DocumentFilters; types: string[]; farms: DocumentOption[]; registrations: DocumentOption[]; hasActiveFilters: boolean; onQueryChange: (value: string) => void; onChange: React.Dispatch<React.SetStateAction<DocumentFilters>>; onClear: () => void; onNew: () => void; }
 const labelFor = (options: DocumentOption[], id: string, fallback: string) => options.find((item) => item.id === id)?.label ?? fallback;
@@ -12,7 +13,7 @@ export function DocumentToolbar({ query, value, types, farms, registrations, has
   return <div className="document-toolbar">
     <Field className="document-toolbar__search" label="Busca"><Input value={query} contentBefore={<Search20Regular />} placeholder="Buscar por tipo, número, fazenda, matrícula ou finalidade" onChange={(_, data) => onQueryChange(data.value)} /></Field>
     <Field label="Tipo"><Dropdown value={value.type || "Todos os tipos"} selectedOptions={[value.type]} onOptionSelect={(_, data) => set("type", data.optionValue ?? "")}><Option value="">Todos os tipos</Option>{types.map((type) => <Option key={type} value={type}>{type}</Option>)}</Dropdown></Field>
-    <Field label="Situação"><Dropdown value={{ all: "Todas", active: "Vigente", expiring: "A vencer", expired: "Vencido", inactive: "Inativo" }[value.status]} selectedOptions={[value.status]} onOptionSelect={(_, data) => set("status", (data.optionValue ?? "all") as DocumentFilters["status"])}><Option value="all">Todas</Option><Option value="active">Vigente</Option><Option value="expiring">A vencer</Option><Option value="expired">Vencido</Option><Option value="inactive">Inativo</Option></Dropdown></Field>
+    <Field label="Situação"><Dropdown value={value.status === "all" ? "Todas" : documentValidityLabels[value.status]} selectedOptions={[value.status]} onOptionSelect={(_, data) => set("status", (data.optionValue ?? "all") as DocumentFilters["status"])}><Option value="all">Todas</Option>{(["active", "expiring", "expired", "inactive"] as const).map((status) => <Option key={status} value={status}>{documentValidityLabels[status]}</Option>)}</Dropdown></Field>
     <Field label="Fazenda"><Dropdown value={labelFor(farms, value.farmId, "Todas as fazendas")} selectedOptions={[value.farmId]} onOptionSelect={(_, data) => { const farmId = data.optionValue ?? ""; onChange((current) => ({ ...current, farmId, registrationId: current.registrationId && registrations.find((item) => item.id === current.registrationId)?.farmId !== farmId ? "" : current.registrationId, page: 1 })); }}><Option value="">Todas as fazendas</Option>{farms.map((farm) => <Option key={farm.id} value={farm.id}>{farm.label}</Option>)}</Dropdown></Field>
     <Popover open={advancedOpen} onOpenChange={(_, data) => setAdvancedOpen(data.open)} positioning="below-end"><PopoverTrigger disableButtonEnhancement><Button appearance={hasActiveFilters ? "primary" : "secondary"} icon={<Filter20Regular />}>Mais filtros</Button></PopoverTrigger><PopoverSurface className="document-advanced-filter"><div className="document-advanced-filter__heading"><strong>Filtros avançados</strong><span>Refine por vínculo, exercício, finalidade e vencimento</span></div><div className="document-advanced-filter__grid">
       <Field label="Matrícula"><Dropdown value={labelFor(registrations, value.registrationId, "Todas as matrículas")} selectedOptions={[value.registrationId]} onOptionSelect={(_, data) => set("registrationId", data.optionValue ?? "")}><Option value="">Todas as matrículas</Option>{registrations.filter((item) => !value.farmId || item.farmId === value.farmId).map((item) => <Option key={item.id} value={item.id}>{item.label}</Option>)}</Dropdown></Field>
@@ -24,4 +25,3 @@ export function DocumentToolbar({ query, value, types, farms, registrations, has
     <Button className="document-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Novo documento</Button>
   </div>;
 }
-

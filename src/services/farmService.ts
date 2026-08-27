@@ -2,6 +2,7 @@ import { mockStore } from "../data/mock/mockStore";
 import {
   getCarsByFarm,
   getDocumentsByFarm,
+  getDocumentValidityStatus,
   getFarmRelationCounts,
   getOperationsByFarm,
   getOwnersByFarm,
@@ -76,7 +77,7 @@ export const farmService = {
       registrations: getRegistrationsByFarm(id),
       owners: getOwnersByFarm(id),
       operations: getOperationsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-      documents: getDocumentsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      documents: getDocumentsByFarm(id).map((document) => ({ ...document, validityStatus: getDocumentValidityStatus(document) })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
       cars: getCarsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     });
   },

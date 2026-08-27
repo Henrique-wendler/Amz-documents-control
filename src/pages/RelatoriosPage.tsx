@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Toast, ToastTitle, Toaster, useToastController } from "@fluentui/react-components";
 import { Header } from "../components/Header";
+import { DashboardMessageState } from "../components/dashboard/DashboardState";
 import { ReportFiltersPanel } from "../components/reports/ReportFiltersPanel";
 import { ReportGrid } from "../components/reports/ReportGrid";
 import { ReportSummary } from "../components/reports/ReportSummary";
@@ -17,9 +18,22 @@ export function RelatoriosPage({ onNavigate }: Props) {
   const [filters, setFilters] = useState<ReportFilters>(initialReportFilters);
   const [report, setReport] = useState<ReportViewModel>();
   const [generating, setGenerating] = useState(true);
+  const [error, setError] = useState(false);
   const toasterId = "report-feedback";
   const { dispatchToast } = useToastController(toasterId);
-  const generate = useCallback(async (nextType: ReportType, nextFilters: ReportFilters) => { setGenerating(true); try { setReport(await reportService.generate(nextType, nextFilters)); } finally { setGenerating(false); } }, []);
+  const generate = useCallback(async (nextType: ReportType, nextFilters: ReportFilters) => {
+    setGenerating(true);
+    setError(false);
+    try {
+      const mode = new URLSearchParams(window.location.search).get("state") === "error" ? "error" : "success";
+      setReport(await reportService.generate(nextType, nextFilters, mode));
+    } catch {
+      setReport(undefined);
+      setError(true);
+    } finally {
+      setGenerating(false);
+    }
+  }, []);
   useEffect(() => { void generate("farms", initialReportFilters); }, [generate]);
   const selectType = (nextType: ReportType) => { const nextFilters = { ...initialReportFilters }; setType(nextType); setFilters(nextFilters); void generate(nextType, nextFilters); };
   const options = reportService.getFilterOptions(type);
@@ -27,9 +41,9 @@ export function RelatoriosPage({ onNavigate }: Props) {
   return <div className="app-shell"><Sidebar activePath="/relatorios" onNavigate={onNavigate} /><div className="app-workspace"><Header title="Relatórios" subtitle="Consultas consolidadas e exportação de informações" refreshing={generating} onRefresh={() => void generate(type, filters)} /><main className="main-content reports-content">
     <ReportTypeCards items={reportDefinitions} selected={type} onSelect={selectType} />
     <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={exportReport} /></SectionCard>
-    <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{report?.rows.length ?? 0} registros</Badge>}>
+    {error ? <DashboardMessageState kind="error" title="Não foi possível gerar o relatório" description="Tente novamente para atualizar a pré-visualização." onRetry={() => void generate(type, filters)} /> : <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{report?.rows.length ?? 0} registros</Badge>}>
       {report ? <ReportSummary metrics={report.metrics} /> : null}
       <ReportGrid columns={report?.columns ?? []} rows={report?.rows ?? []} loading={generating} />
-    </SectionCard>
+    </SectionCard>}
   </main></div><Toaster toasterId={toasterId} position="top-end" /></div>;
 }

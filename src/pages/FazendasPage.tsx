@@ -32,6 +32,7 @@ export function FazendasPage({ onNavigate }: FazendasPageProps) {
   const [formError, setFormError] = useState<string>();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const requestId = useRef(0);
+  const initialDetailHandled = useRef(false);
   const toasterId = "farm-feedback";
   const { dispatchToast } = useToastController(toasterId);
 
@@ -45,6 +46,17 @@ export function FazendasPage({ onNavigate }: FazendasPageProps) {
 
   useEffect(() => { void load(filters); }, [filters, load]);
   useEffect(() => { const timer = window.setTimeout(() => setFilters((current) => current.query === searchInput ? current : { ...current, query: searchInput, page: 1 }), 300); return () => window.clearTimeout(timer); }, [searchInput]);
+  useEffect(() => {
+    if (initialDetailHandled.current || loading || error) return;
+    initialDetailHandled.current = true;
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    void farmService.getDetails(id).then((record) => {
+      if (!record) return;
+      setDetails(record);
+      setDetailsOpen(true);
+    });
+  }, [error, loading]);
 
   const hasActiveFilters = Boolean(searchInput || filters.status !== "all" || filters.state || filters.municipality || filters.areaRange !== "all" || filters.hasRegistration !== "all" || filters.hasActiveOperation !== "all" || filters.hasCar !== "all");
   const clearFilters = () => { setSearchInput(""); setFilters(initialFilters); };

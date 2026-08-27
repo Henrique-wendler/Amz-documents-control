@@ -43,6 +43,7 @@ export function MatriculasPage({ onNavigate }: MatriculasPageProps) {
   const [ownershipError, setOwnershipError] = useState<string>();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const requestId = useRef(0);
+  const initialDetailHandled = useRef(false);
   const toasterId = "registration-feedback";
   const { dispatchToast } = useToastController(toasterId);
   const farms = registrationService.getFarmOptions();
@@ -52,6 +53,17 @@ export function MatriculasPage({ onNavigate }: MatriculasPageProps) {
   const load = useCallback(async (nextFilters: RegistrationFilters, showFeedback = false) => { const currentRequest = ++requestId.current; setLoading(true); setError(false); try { const next = await registrationService.list(nextFilters, getLoadMode()); if (currentRequest !== requestId.current) return; setResponse(next); if (next.page !== nextFilters.page) setFilters((current) => ({ ...current, page: next.page })); if (showFeedback) notify("Dados atualizados."); } catch { if (currentRequest !== requestId.current) return; setResponse(undefined); setError(true); } finally { if (currentRequest === requestId.current) setLoading(false); } }, [notify]);
   useEffect(() => { void load(filters); }, [filters, load]);
   useEffect(() => { const timer = window.setTimeout(() => setFilters((current) => current.query === searchInput ? current : { ...current, query: searchInput, page: 1 }), 300); return () => window.clearTimeout(timer); }, [searchInput]);
+  useEffect(() => {
+    if (initialDetailHandled.current || loading || error) return;
+    initialDetailHandled.current = true;
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    void registrationService.getDetails(id).then((record) => {
+      if (!record) return;
+      setDetails(record);
+      setDetailsOpen(true);
+    });
+  }, [error, loading]);
 
   const hasActiveFilters = Boolean(searchInput || filters.farmId || filters.status !== "all" || filters.ownerRelation !== "all" || filters.operationRelation !== "all" || filters.guaranteeRelation !== "all" || filters.hp !== "all" || filters.areaRange !== "all" || filters.certificateFrom);
   const clearFilters = () => { setSearchInput(""); setFilters(initialFilters); };

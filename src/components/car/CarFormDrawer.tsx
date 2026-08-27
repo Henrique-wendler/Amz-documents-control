@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Combobox, Drawer, DrawerBody, DrawerFooter, DrawerHeader, DrawerHeaderTitle, Dropdown, Field, Input, Option } from "@fluentui/react-components";
 import { Dismiss24Regular, Save20Regular } from "@fluentui/react-icons";
 import type { CarDraft, CarListItem, CarOption, CarOwnerOption } from "../../types/car";
+import { carStatusLabels } from "../../services/statusLabels";
 
 interface Props { open: boolean; car?: CarListItem; farms: CarOption[]; registrations: CarOption[]; owners: CarOwnerOption[]; saving: boolean; serviceError?: string; onClose: () => void; onSave: (draft: CarDraft) => void; }
 type State = { farmId: string; registrationId: string; ownerId: string; number: string; receiptNumber: string; status: CarDraft["status"]; };
@@ -36,7 +37,7 @@ export function CarFormDrawer({ open, car, farms, registrations, owners, saving,
       <Field label="Proprietário do CAR"><Dropdown disabled={!draft.farmId} value={availableOwners.find((item) => item.id === draft.ownerId)?.label ?? "Não informado"} selectedOptions={[draft.ownerId]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, ownerId: data.optionValue ?? "" }))}><Option value="">Não informado</Option>{availableOwners.map((owner) => <Option key={owner.id} value={owner.id}>{owner.label}</Option>)}</Dropdown></Field>
       <Field className="document-form__wide" label="Número CAR" required validationState={submitted && errors.number ? "error" : "none"} validationMessage={submitted ? errors.number : undefined}><Input value={draft.number} placeholder="Informe o número do cadastro" onChange={(_, data) => setDraft((current) => ({ ...current, number: data.value }))} /></Field>
       <Field label="Número do recibo"><Input value={draft.receiptNumber} placeholder="Opcional" onChange={(_, data) => setDraft((current) => ({ ...current, receiptNumber: data.value }))} /></Field>
-      <Field label="Situação"><Dropdown value={{ active: "Ativo", pending: "Pendente", inactive: "Inativo" }[draft.status]} selectedOptions={[draft.status]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, status: (data.optionValue ?? "active") as State["status"] }))}><Option value="active">Ativo</Option><Option value="pending">Pendente</Option><Option value="inactive">Inativo</Option></Dropdown></Field>
+      <Field label="Situação"><Dropdown value={carStatusLabels[draft.status]} selectedOptions={[draft.status]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, status: (data.optionValue ?? "active") as State["status"] }))}>{(["active", "pending", "inactive"] as const).map((status) => <Option key={status} value={status}>{carStatusLabels[status]}</Option>)}</Dropdown></Field>
     </div>{serviceError ? <p className="registration-form__service-error" role="alert">{serviceError}</p> : null}</form></DrawerBody>
     <DrawerFooter><Button appearance="primary" icon={<Save20Regular />} type="submit" form="car-form" disabled={saving}>{saving ? "Salvando..." : car ? "Salvar alterações" : "Salvar CAR"}</Button><Button appearance="secondary" disabled={saving} onClick={onClose}>Cancelar</Button></DrawerFooter>
   </Drawer>;

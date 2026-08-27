@@ -2,6 +2,7 @@ import { mockStore } from "../data/mock/mockStore";
 import {
   getActiveOwnershipPercentage,
   getDocumentsByRegistration,
+  getDocumentValidityStatus,
   getFarmByRegistration,
   getGuaranteesByRegistration,
   getOperationsByRegistration,
@@ -84,7 +85,8 @@ export const registrationService = {
     const registration = db.registrations.find((item) => item.id === id);
     if (!registration) return undefined;
     const ownerships = getOwnershipLinksByRegistration(id, db).map((link) => ({ link, owner: db.owners.find((owner) => owner.id === link.ownerId) })).filter((item): item is { link: typeof item.link; owner: NonNullable<typeof item.owner> } => Boolean(item.owner));
-    return clone({ registration: toListItem(registration), farm: getFarmByRegistration(id, db), ownerships, operations: getOperationsByRegistration(id, db), guarantees: getGuaranteesByRegistration(id, db), documents: getDocumentsByRegistration(id, db), activePercentage: getActiveOwnershipPercentage(id, db) });
+    const documents = getDocumentsByRegistration(id, db).map((document) => ({ ...document, validityStatus: getDocumentValidityStatus(document) }));
+    return clone({ registration: toListItem(registration), farm: getFarmByRegistration(id, db), ownerships, operations: getOperationsByRegistration(id, db), guarantees: getGuaranteesByRegistration(id, db), documents, activePercentage: getActiveOwnershipPercentage(id, db) });
   },
 
   async create(draft: RegistrationDraft): Promise<RegistrationListItem> {

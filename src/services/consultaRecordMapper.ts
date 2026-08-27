@@ -14,29 +14,13 @@ import {
 import type { MockDatabase } from "../types/domain";
 import type { SearchRecord, SearchStatus } from "../types/consulta";
 import { formatArea, formatCurrency, formatIsoDate } from "./searchUtils";
+import { carStatusLabels, documentValidityLabels, operationStatusLabels } from "./statusLabels";
 
 const entityDate = (value: string) => value.includes("/") ? value : formatIsoDate(value);
-const operationStatus: Record<MockDatabase["operations"][number]["status"], SearchStatus> = {
-  under_review: "Em análise",
-  active: "Ativa",
-  completed: "Encerrada",
-  cancelled: "Cancelada",
-};
 const guaranteeStatus: Record<MockDatabase["guarantees"][number]["status"], SearchStatus> = {
   active: "Ativa",
   closed: "Encerrada",
   cancelled: "Cancelada",
-};
-const documentStatus: Record<ReturnType<typeof getDocumentValidityStatus>, SearchStatus> = {
-  active: "Ativa",
-  expiring: "A vencer",
-  expired: "Vencido",
-  inactive: "Inativa",
-};
-const carStatus: Record<MockDatabase["carRecords"][number]["status"], SearchStatus> = {
-  active: "Ativo",
-  pending: "Em análise",
-  inactive: "Inativa",
 };
 const documentCategory = (type: string) => {
   if (type.includes("Licença")) return "Licença";
@@ -86,6 +70,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
         { label: "Documentos", value: countLabel(documents.length, "documento", "documentos") },
         { label: "CAR", value: countLabel(cars.length, "cadastro", "cadastros") },
       ],
+      openPath: `/fazendas?id=${farm.id}`,
     };
   });
 
@@ -99,6 +84,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
       farmId: farm?.id, farmName: farm?.name,
       attributes: { farm: farm?.name ?? "—", legalArea: formatArea(registration.legalArea ?? 0), hp: registration.hp ?? "—", certificateDate: registration.certificateDate ?? "—" },
       relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Operações", value: countLabel(operations.length, "operação vinculada", "operações vinculadas") }],
+      openPath: `/matriculas?id=${registration.id}`,
     };
   });
 
@@ -108,7 +94,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
     const guarantees = getGuaranteesByOperation(operation.id, db);
     return {
       id: operation.id, entityType: "operation", title: operation.number, reference: farm?.name ?? "—",
-      details: `${operation.bank} · ${formatCurrency(operation.value)}`, status: operationStatus[operation.status], updatedAt: entityDate(operation.updatedAt),
+      details: `${operation.bank} · ${formatCurrency(operation.value)}`, status: operationStatusLabels[operation.status], updatedAt: entityDate(operation.updatedAt),
       farmId: farm?.id, farmName: farm?.name,
       attributes: { farm: farm?.name ?? "—", bank: operation.bank, purpose: operation.purpose ?? "—", value: formatCurrency(operation.value), startDate: formatIsoDate(operation.startDate), registration: registration?.number ?? "—", registrationId: registration?.id ?? "" },
       relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration ? `Matrícula ${registration.number}` : "—" }, { label: "Garantias", value: countLabel(guarantees.length, "garantia", "garantias") }],
@@ -137,7 +123,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
     const attachments = getAttachmentsByDocument(document.id, db);
     return {
       id: document.id, entityType: "document", title: document.type, reference: farm?.name ?? "—",
-      details: `Vencimento ${formatIsoDate(document.expirationDate)}`, status: documentStatus[getDocumentValidityStatus(document)], updatedAt: entityDate(document.updatedAt),
+      details: `Vencimento ${formatIsoDate(document.expirationDate)}`, status: documentValidityLabels[getDocumentValidityStatus(document)], updatedAt: entityDate(document.updatedAt),
       farmId: farm?.id, farmName: farm?.name,
       attributes: { number: document.number ?? "—", farm: farm?.name ?? "—", issuedAt: formatIsoDate(document.issueDate), validUntil: formatIsoDate(document.expirationDate), documentType: documentCategory(document.type) },
       relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Arquivos", value: countLabel(attachments.length, "arquivo", "arquivos") }],
@@ -151,7 +137,7 @@ export function buildSearchRecords(db: MockDatabase): SearchRecord[] {
     const owner = car.ownerId ? db.owners.find((item) => item.id === car.ownerId) : undefined;
     return {
       id: car.id, entityType: "car", title: car.number, reference: farm?.name ?? "—",
-      details: `Recibo ${car.receiptNumber ?? "—"}`, status: carStatus[car.status], updatedAt: entityDate(car.updatedAt),
+      details: `Recibo ${car.receiptNumber ?? "—"}`, status: carStatusLabels[car.status], updatedAt: entityDate(car.updatedAt),
       farmId: farm?.id, farmName: farm?.name,
       attributes: { farm: farm?.name ?? "—", registration: registration?.number ?? "—", owner: owner?.name ?? "—", receipt: car.receiptNumber ?? "—" },
       relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Proprietário", value: owner?.name ?? "—" }],

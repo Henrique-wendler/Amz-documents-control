@@ -7,6 +7,7 @@ import {
   Save20Regular,
 } from "@fluentui/react-icons";
 import type { OperationFormModel, OperationFormStatus } from "../types/models";
+import { operationStatusLabels } from "../services/statusLabels";
 import { SectionCard } from "./SectionCard";
 
 interface OperationFormProps {
@@ -19,7 +20,9 @@ interface OperationFormProps {
   onClear: () => void;
 }
 
-const operationStatuses: OperationFormStatus[] = ["Em análise", "Ativa", "Concluída", "Cancelada"];
+const operationStatuses: OperationFormStatus[] = ["under_review", "active", "completed", "cancelled"].map(
+  (status) => operationStatusLabels[status as keyof typeof operationStatusLabels],
+);
 
 export function OperationForm({
   value,

@@ -9,6 +9,7 @@ import {
 import type { Guarantee, Operation, RuralDocument } from "../types/domain";
 import type { ReportColumn, ReportDefinition, ReportExportFormat, ReportFilterOptions, ReportFilters, ReportMetric, ReportRow, ReportType, ReportViewModel } from "../types/report";
 import { formatArea, formatCurrency, formatIsoDate } from "./searchUtils";
+import { carStatusLabels, documentValidityLabels, operationStatusLabels } from "./statusLabels";
 
 const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 const clone = <T,>(value: T): T => structuredClone(value);
@@ -28,10 +29,7 @@ export const initialReportFilters: ReportFilters = { farmId: "", status: "", sta
 
 const labels = {
   entity: { active: "Ativo", inactive: "Inativo" },
-  operation: { under_review: "Em análise", active: "Ativa", completed: "Concluída", cancelled: "Cancelada" },
   guarantee: { active: "Ativa", closed: "Encerrada", cancelled: "Cancelada" },
-  document: { active: "Vigente", expiring: "A vencer", expired: "Vencido", inactive: "Inativo" },
-  car: { active: "Ativo", pending: "Pendente", inactive: "Inativo" },
 } as const;
 
 const columns = (items: Array<[string, string, ("start" | "end")?]>): ReportColumn[] => items.map(([key, label, align]) => ({ key, label, align }));
@@ -76,7 +74,7 @@ const buildOperations = (filters: ReportFilters): Pick<ReportViewModel, "columns
   const records = db.operations.filter((operation) => farmMatches(operation.farmId, filters) && statusMatches(operation.status, filters) && (!filters.bank || operation.bank === filters.bank) && inPeriod(operationDate(operation), filters));
   return {
     columns: columns([["number", "Número"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["bank", "Banco"], ["purpose", "Finalidade"], ["value", "Valor", "end"], ["status", "Situação"], ["date", "Data"]]),
-    rows: records.map((operation) => row(operation.id, { number: operation.number, farm: db.farms.find((farm) => farm.id === operation.farmId)?.name ?? "—", registration: operation.registrationId ? db.registrations.find((registration) => registration.id === operation.registrationId)?.number ?? "—" : "—", bank: operation.bank, purpose: operation.purpose ?? "—", value: formatCurrency(operation.value), status: labels.operation[operation.status], date: formatIsoDate(operationDate(operation)) })),
+    rows: records.map((operation) => row(operation.id, { number: operation.number, farm: db.farms.find((farm) => farm.id === operation.farmId)?.name ?? "—", registration: operation.registrationId ? db.registrations.find((registration) => registration.id === operation.registrationId)?.number ?? "—" : "—", bank: operation.bank, purpose: operation.purpose ?? "—", value: formatCurrency(operation.value), status: operationStatusLabels[operation.status], date: formatIsoDate(operationDate(operation)) })),
     metrics: [...baseMetrics(records.length), sumMetric("Valor das operações", records.reduce((sum, operation) => sum + operation.value, 0), formatCurrency), { label: "Operações ativas", value: count(records.filter((operation) => operation.status === "active").length) }],
   };
 };
@@ -99,7 +97,7 @@ const buildDocuments = (filters: ReportFilters): Pick<ReportViewModel, "columns"
   const expirationCount = records.filter((document) => ["expiring", "expired"].includes(getDocumentValidityStatus(document))).length;
   return {
     columns: columns([["document", "Documento"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["validity", "Validade"], ["status", "Situação"]]),
-    rows: records.map((document) => row(document.id, { document: document.number ? `${document.type} · ${document.number}` : document.type, farm: db.farms.find((farm) => farm.id === document.farmId)?.name ?? "—", registration: document.registrationId ? db.registrations.find((registration) => registration.id === document.registrationId)?.number ?? "—" : "—", validity: formatIsoDate(document.expirationDate), status: labels.document[getDocumentValidityStatus(document)] })),
+    rows: records.map((document) => row(document.id, { document: document.number ? `${document.type} · ${document.number}` : document.type, farm: db.farms.find((farm) => farm.id === document.farmId)?.name ?? "—", registration: document.registrationId ? db.registrations.find((registration) => registration.id === document.registrationId)?.number ?? "—" : "—", validity: formatIsoDate(document.expirationDate), status: documentValidityLabels[getDocumentValidityStatus(document)] })),
     metrics: [...baseMetrics(records.length), { label: "Vencidos ou a vencer", value: count(expirationCount) }, { label: "Com validade", value: count(records.filter((document) => Boolean(document.expirationDate)).length) }],
   };
 };
@@ -109,7 +107,7 @@ const buildCar = (filters: ReportFilters): Pick<ReportViewModel, "columns" | "ro
   const records = db.carRecords.filter((car) => farmMatches(car.farmId, filters) && statusMatches(car.status, filters));
   return {
     columns: columns([["number", "Número CAR"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["owner", "Proprietário"], ["receipt", "Número do recibo"], ["status", "Situação"], ["updated", "Atualizado em"]]),
-    rows: records.map((car) => row(car.id, { number: car.number, farm: db.farms.find((farm) => farm.id === car.farmId)?.name ?? "—", registration: car.registrationId ? db.registrations.find((registration) => registration.id === car.registrationId)?.number ?? "—" : "—", owner: car.ownerId ? db.owners.find((owner) => owner.id === car.ownerId)?.name ?? "—" : "—", receipt: car.receiptNumber ?? "—", status: labels.car[car.status], updated: formatIsoDate(car.updatedAt) })),
+    rows: records.map((car) => row(car.id, { number: car.number, farm: db.farms.find((farm) => farm.id === car.farmId)?.name ?? "—", registration: car.registrationId ? db.registrations.find((registration) => registration.id === car.registrationId)?.number ?? "—" : "—", owner: car.ownerId ? db.owners.find((owner) => owner.id === car.ownerId)?.name ?? "—" : "—", receipt: car.receiptNumber ?? "—", status: carStatusLabels[car.status], updated: formatIsoDate(car.updatedAt) })),
     metrics: [...baseMetrics(records.length), { label: "Ativos", value: count(records.filter((car) => car.status === "active").length) }, { label: "Pendentes", value: count(records.filter((car) => car.status === "pending").length) }],
   };
 };
@@ -117,15 +115,16 @@ const buildCar = (filters: ReportFilters): Pick<ReportViewModel, "columns" | "ro
 const builders: Record<ReportType, (filters: ReportFilters) => Pick<ReportViewModel, "columns" | "rows" | "metrics">> = { farms: buildFarms, owners: buildOwners, registrations: buildRegistrations, operations: buildOperations, guarantees: buildGuarantees, documents: buildDocuments, car: buildCar };
 const statusOptions: Record<ReportType, Array<[string, string]>> = {
   farms: [["active", "Ativa"], ["inactive", "Inativa"]], owners: [["active", "Ativo"], ["inactive", "Inativo"]], registrations: [["active", "Ativa"], ["inactive", "Inativa"]],
-  operations: [["under_review", "Em análise"], ["active", "Ativa"], ["completed", "Concluída"], ["cancelled", "Cancelada"]],
+  operations: (["under_review", "active", "completed", "cancelled"] as const).map((status) => [status, operationStatusLabels[status]]),
   guarantees: [["active", "Ativa"], ["closed", "Encerrada"], ["cancelled", "Cancelada"]],
-  documents: [["active", "Vigente"], ["expiring", "A vencer"], ["expired", "Vencido"], ["inactive", "Inativo"]],
-  car: [["active", "Ativo"], ["pending", "Pendente"], ["inactive", "Inativo"]],
+  documents: (["active", "expiring", "expired", "inactive"] as const).map((status) => [status, documentValidityLabels[status]]),
+  car: (["active", "pending", "inactive"] as const).map((status) => [status, carStatusLabels[status]]),
 };
 
 export const reportService = {
-  async generate(type: ReportType, filters: ReportFilters): Promise<ReportViewModel> {
+  async generate(type: ReportType, filters: ReportFilters, mode: "success" | "error" = "success"): Promise<ReportViewModel> {
     await delay(220);
+    if (mode === "error") throw new Error("Não foi possível gerar o relatório.");
     const definition = reportDefinitions.find((item) => item.id === type)!;
     return clone({ type, title: definition.title, ...builders[type](filters), generatedAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) });
   },

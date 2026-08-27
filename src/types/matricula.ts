@@ -1,4 +1,4 @@
-import type { EntityStatus, Farm, Guarantee, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "./domain";
+import type { DocumentValidityStatus, EntityStatus, Farm, Guarantee, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "./domain";
 
 export interface RegistrationListItem extends Registration {
   farmName: string;
@@ -43,7 +43,7 @@ export interface RegistrationDetailsViewModel {
   ownerships: RegistrationOwnershipView[];
   operations: Operation[];
   guarantees: Guarantee[];
-  documents: RuralDocument[];
+  documents: Array<RuralDocument & { validityStatus: DocumentValidityStatus }>;
   activePercentage: number;
 }
 

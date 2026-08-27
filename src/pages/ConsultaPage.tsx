@@ -161,20 +161,16 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
   })();
 
   const openRecord = (record: SearchRecord) => {
-    if (record.openPath) {
-      onNavigate(record.openPath);
-      return;
-    }
-    const pageNames: Record<SearchRecord["entityType"], string> = {
-      owner: "Proprietários",
-      farm: "Fazendas",
-      registration: "Matrículas",
-      operation: "Operações e Garantias",
-      guarantee: "Operações e Garantias",
-      document: "Documentos",
-      car: "CAR",
+    const fallbackPaths: Record<SearchRecord["entityType"], string> = {
+      owner: "/proprietarios",
+      farm: "/fazendas",
+      registration: "/matriculas",
+      operation: "/",
+      guarantee: "/",
+      document: "/documentos",
+      car: "/car",
     };
-    notify(`Tela de ${pageNames[record.entityType]} será implementada na próxima etapa.`);
+    onNavigate(record.openPath ?? fallbackPaths[record.entityType]);
   };
 
   return (

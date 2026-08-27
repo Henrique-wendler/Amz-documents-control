@@ -3,10 +3,8 @@ import { getGuaranteeItems, getGuaranteesByOperation } from "../data/mock/select
 import type { Guarantee, GuaranteeItem, Operation } from "../types/domain";
 import type { AppData, GuaranteeFormModel, GuaranteeFormStatus, GuaranteeItemFormModel, OperationFormModel, OperationFormStatus } from "../types/models";
 import { formatCurrency } from "./searchUtils";
+import { operationStatusLabels } from "./statusLabels";
 
-const operationStatusToUi: Record<Operation["status"], OperationFormStatus> = {
-  under_review: "Em análise", active: "Ativa", completed: "Concluída", cancelled: "Cancelada",
-};
 const operationStatusToDomain: Record<OperationFormStatus, Operation["status"]> = {
   "Em análise": "under_review", Ativa: "active", Concluída: "completed", Cancelada: "cancelled",
 };
@@ -20,7 +18,7 @@ const parseCurrency = (value: string) => Number(value.replace(/[^\d,]/g, "").rep
 
 const toOperationForm = (operation: Operation): OperationFormModel => {
   const registration = operation.registrationId ? mockStore.getState().registrations.find((item) => item.id === operation.registrationId) : undefined;
-  return { id: operation.id, matricula: registration?.number ?? "", banco: operation.bank, numero: operation.number, finalidade: operation.purpose ?? "", valor: formatCurrency(operation.value), situacao: operationStatusToUi[operation.status], dataInicio: operation.startDate ?? "" };
+  return { id: operation.id, matricula: registration?.number ?? "", banco: operation.bank, numero: operation.number, finalidade: operation.purpose ?? "", valor: formatCurrency(operation.value), situacao: operationStatusLabels[operation.status], dataInicio: operation.startDate ?? "" };
 };
 
 const toGuaranteeForm = (guarantee: Guarantee): GuaranteeFormModel => {
@@ -121,4 +119,3 @@ export const operationService = {
     mockStore.deleteGuaranteeItem(id);
   },
 };
-

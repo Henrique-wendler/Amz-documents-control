@@ -3,10 +3,10 @@ import { Button, DataGrid, DataGridBody, DataGridCell, DataGridHeader, DataGridH
 import type { TableColumnDefinition } from "@fluentui/react-components";
 import { Add20Regular, ChevronLeft20Regular, ChevronRight20Regular, Delete20Regular, Edit20Regular, Eye20Regular, MoreHorizontal20Regular, PersonProhibited20Regular, Shield24Regular } from "@fluentui/react-icons";
 import type { CarListItem } from "../../types/car";
+import { carStatusLabels } from "../../services/statusLabels";
 import { StatusBadge } from "../StatusBadge";
 
 interface Props { records: CarListItem[]; loading: boolean; filtered: boolean; page: number; totalPages: number; onView: (record: CarListItem) => void; onEdit: (record: CarListItem) => void; onInactivate: (record: CarListItem) => void; onDelete: (record: CarListItem) => void; onPageChange: (page: number) => void; onClear: () => void; onNew: () => void; }
-const labels = { active: "Ativo", pending: "Pendente", inactive: "Inativo" } as const;
 const displayDate = (value: string) => value.includes("/") ? value : new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
 const textCell = (value: string, strong = false) => <Tooltip content={value} relationship="description"><span className={`search-cell-text${strong ? " search-cell-text--strong" : ""}`}>{value}</span></Tooltip>;
 
@@ -17,7 +17,7 @@ export function CarGrid({ records, loading, filtered, page, totalPages, onView, 
     createTableColumn({ columnId: "registration", compare: (a, b) => (a.registrationNumber ?? "").localeCompare(b.registrationNumber ?? ""), renderHeaderCell: () => "Matrícula", renderCell: (item) => textCell(item.registrationNumber ?? "—") }),
     createTableColumn({ columnId: "owner", compare: (a, b) => (a.ownerName ?? "").localeCompare(b.ownerName ?? "", "pt-BR"), renderHeaderCell: () => "Proprietário", renderCell: (item) => textCell(item.ownerName ?? "—") }),
     createTableColumn({ columnId: "receipt", compare: (a, b) => (a.receiptNumber ?? "").localeCompare(b.receiptNumber ?? ""), renderHeaderCell: () => "Número do recibo", renderCell: (item) => textCell(item.receiptNumber ?? "—") }),
-    createTableColumn({ columnId: "status", compare: (a, b) => a.status.localeCompare(b.status), renderHeaderCell: () => "Situação", renderCell: (item) => <StatusBadge status={labels[item.status]} /> }),
+    createTableColumn({ columnId: "status", compare: (a, b) => a.status.localeCompare(b.status), renderHeaderCell: () => "Situação", renderCell: (item) => <StatusBadge status={carStatusLabels[item.status]} /> }),
     createTableColumn({ columnId: "updated", compare: (a, b) => a.updatedAt.localeCompare(b.updatedAt), renderHeaderCell: () => "Atualizado em", renderCell: (item) => displayDate(item.updatedAt) }),
     createTableColumn({ columnId: "actions", renderHeaderCell: () => "Ações", renderCell: (item) => <div className="document-grid__actions" onClick={(event) => event.stopPropagation()}><Button appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`Abrir ${item.number}`} onClick={() => onView(item)} /><Menu><MenuTrigger disableButtonEnhancement><Button appearance="subtle" size="small" icon={<MoreHorizontal20Regular />} aria-label={`Ações de ${item.number}`} /></MenuTrigger><MenuPopover><MenuList><MenuItem icon={<Edit20Regular />} onClick={() => onEdit(item)}>Editar</MenuItem><MenuItem icon={<PersonProhibited20Regular />} disabled={item.status === "inactive"} onClick={() => onInactivate(item)}>Inativar</MenuItem><MenuItem icon={<Delete20Regular />} onClick={() => onDelete(item)}>Excluir</MenuItem></MenuList></MenuPopover></Menu></div> }),
   ], [onDelete, onEdit, onInactivate, onView]);

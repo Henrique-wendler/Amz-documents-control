@@ -1,6 +1,7 @@
 import { Button, Dropdown, Field, Option } from "@fluentui/react-components";
 import { Dismiss20Regular } from "@fluentui/react-icons";
 import type { SearchCategory, SearchFilters as SearchFiltersValue } from "../../types/consulta";
+import { searchStatusLabels } from "../../services/statusLabels";
 import { AdvancedFilters } from "./AdvancedFilters";
 
 interface SearchFiltersProps {
@@ -34,17 +35,7 @@ export function SearchFilters({
           selectedOptions={value.status ? [value.status] : []}
           onOptionSelect={(_, data) => onChange({ ...value, status: data.optionValue === "Todas" ? "" : (data.optionValue ?? ""), page: 1 })}
         >
-          {[
-            "Todas",
-            "Ativa",
-            "Ativo",
-            "Em análise",
-            "Encerrada",
-            "Inativa",
-            "Cancelada",
-            "A vencer",
-            "Vencido",
-          ].map((option) => <Option value={option} key={option}>{option}</Option>)}
+          {["Todas", ...searchStatusLabels].map((option) => <Option value={option} key={option}>{option}</Option>)}
         </Dropdown>
       </Field>
 
