@@ -139,7 +139,6 @@ export function SearchResultsGrid({
   records,
   category,
   loading,
-  selectedId,
   page,
   totalPages,
   onSelect,
@@ -176,14 +175,7 @@ export function SearchResultsGrid({
           columns={columns}
           size="small"
           sortable
-          selectionMode="single"
-          selectedItems={selectedId ? new Set([selectedId]) : new Set()}
           getRowId={(record) => record.id}
-          onSelectionChange={(_, data) => {
-            const id = Array.from(data.selectedItems)[0];
-            const record = records.find((item) => item.id === id);
-            if (record) onSelect(record);
-          }}
         >
           <DataGridHeader>
             <DataGridRow>
