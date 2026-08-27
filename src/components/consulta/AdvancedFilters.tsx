@@ -65,7 +65,7 @@ export function AdvancedFilters({ category, filters, activeCount, onApply, onCle
   return (
     <Popover open={open} onOpenChange={(_, data) => openPopover(data.open)} positioning="below-start">
       <PopoverTrigger disableButtonEnhancement>
-        <Button appearance="secondary" size="small" icon={<Filter20Regular />}>
+        <Button className="consulta-filters__advanced" appearance="secondary" size="small" icon={<Filter20Regular />}>
           Mais filtros{activeCount ? ` (${activeCount})` : ""}
         </Button>
       </PopoverTrigger>

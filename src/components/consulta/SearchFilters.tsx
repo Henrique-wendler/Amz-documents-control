@@ -27,8 +27,8 @@ export function SearchFilters({
 }: SearchFiltersProps) {
   const showFarm = category !== "owner";
   return (
-    <div className="consulta-filters" aria-label="Filtros da consulta">
-      <Field label="Situação">
+    <div className={`consulta-filters${showFarm ? "" : " consulta-filters--without-farm"}`} aria-label="Filtros da consulta">
+      <Field className="consulta-filters__status" label="Situação">
         <Dropdown
           size="small"
           value={value.status || "Todas"}
@@ -40,7 +40,7 @@ export function SearchFilters({
       </Field>
 
       {showFarm ? (
-        <Field label="Fazenda">
+        <Field className="consulta-filters__farm" label="Fazenda">
           <Dropdown
             size="small"
             value={value.farmId ? farms.find((farm) => farm.id === value.farmId)?.label : "Todas as fazendas"}

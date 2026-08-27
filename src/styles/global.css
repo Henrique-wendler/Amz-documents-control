@@ -397,8 +397,9 @@ textarea {
 }
 
 .dashboard-filters {
-  display: flex;
+  display: grid;
   min-width: 0;
+  grid-template-columns: max-content repeat(2, minmax(170px, 220px)) minmax(220px, 1fr);
   align-items: end;
   gap: 14px;
   padding: 9px 14px 10px;
@@ -419,12 +420,17 @@ textarea {
 }
 
 .dashboard-filters .fui-Field {
-  min-width: 170px;
-  max-width: 230px;
+  width: 100%;
+  min-width: 0;
 }
 
 .dashboard-filters .fui-Field:last-child {
-  min-width: 220px;
+  min-width: 0;
+}
+
+.dashboard-filters .fui-Dropdown {
+  width: 100%;
+  min-width: 0;
 }
 
 .dashboard-filters .fui-Field__label {
@@ -825,20 +831,42 @@ textarea {
 }
 
 .consulta-filters {
-  display: flex;
+  display: grid;
   min-width: 0;
+  grid-template-areas: "status farm advanced sort clear";
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.35fr) max-content minmax(180px, 1fr) max-content;
   align-items: end;
   gap: 10px;
   padding-top: 11px;
 }
 
 .consulta-filters > .fui-Field {
-  min-width: 170px;
-  max-width: 220px;
+  width: 100%;
+  min-width: 0;
 }
 
-.consulta-filters > .fui-Field:nth-child(2) {
-  min-width: 220px;
+.consulta-filters--without-farm {
+  grid-template-areas: "status advanced sort clear";
+  grid-template-columns: minmax(150px, 1fr) max-content minmax(180px, 1fr) max-content;
+}
+
+.consulta-filters__status {
+  grid-area: status;
+}
+
+.consulta-filters__farm {
+  grid-area: farm;
+}
+
+.consulta-filters__advanced {
+  grid-area: advanced;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.consulta-filters .fui-Dropdown {
+  width: 100%;
+  min-width: 0;
 }
 
 .consulta-filters .fui-Field__label {
@@ -847,11 +875,14 @@ textarea {
 }
 
 .consulta-sort {
-  margin-left: auto;
+  grid-area: sort;
+  margin-left: 0;
 }
 
 .consulta-clear {
+  grid-area: clear;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .advanced-filters {
@@ -1187,8 +1218,9 @@ textarea {
 }
 
 .owner-toolbar {
-  display: flex;
+  display: grid;
   min-width: 0;
+  grid-template-columns: minmax(280px, 2fr) repeat(2, minmax(150px, 1fr)) max-content max-content max-content;
   align-items: end;
   gap: 10px;
   padding: 12px 14px 13px;
@@ -1199,12 +1231,22 @@ textarea {
 }
 
 .owner-toolbar > .fui-Field:not(.owner-toolbar__search) {
-  width: 205px;
-  flex: 0 1 205px;
+  width: 100%;
 }
 
 .owner-toolbar__search {
-  flex: 1 1 360px;
+  width: 100%;
+}
+
+.owner-toolbar > .fui-Field .fui-Dropdown,
+.owner-toolbar > .fui-Field .fui-Input {
+  width: 100%;
+  min-width: 0;
+}
+
+.owner-toolbar > .fui-Button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .owner-toolbar .fui-Field__label {
@@ -2226,11 +2268,17 @@ textarea {
   }
 
   .consulta-filters {
-    flex-wrap: wrap;
+    grid-template-areas:
+      "status farm"
+      "advanced sort"
+      "clear clear";
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 
-  .consulta-sort {
-    margin-left: 0;
+  .consulta-filters--without-farm {
+    grid-template-areas:
+      "status sort"
+      "advanced clear";
   }
 
   .owner-summary {
@@ -2246,11 +2294,11 @@ textarea {
   }
 
   .owner-toolbar {
-    flex-wrap: wrap;
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 
   .owner-toolbar__search {
-    flex-basis: 100%;
+    grid-column: 1 / -1;
   }
 
   .owner-toolbar__new {
@@ -2352,18 +2400,20 @@ textarea {
   }
 
   .dashboard-filters {
-    flex-wrap: wrap;
+    grid-template-columns: repeat(2, minmax(190px, 1fr));
   }
 
   .dashboard-filters__label {
-    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .dashboard-filters .fui-Field,
   .dashboard-filters .fui-Field:last-child {
-    min-width: 190px;
-    max-width: none;
-    flex: 1 1 190px;
+    min-width: 0;
+  }
+
+  .dashboard-filters .fui-Field:last-child {
+    grid-column: 1 / -1;
   }
 
   .dashboard-kpis,
@@ -2382,9 +2432,7 @@ textarea {
 
   .consulta-filters > .fui-Field,
   .consulta-filters > .fui-Field:nth-child(2) {
-    min-width: 180px;
-    max-width: none;
-    flex: 1 1 180px;
+    min-width: 0;
   }
 
   .consulta-clear {
@@ -2471,6 +2519,39 @@ textarea {
 }
 
 @media (max-width: 560px) {
+  .dashboard-filters,
+  .consulta-filters,
+  .consulta-filters--without-farm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-filters .fui-Field:last-child {
+    grid-column: auto;
+  }
+
+  .consulta-filters {
+    grid-template-areas:
+      "status"
+      "farm"
+      "advanced"
+      "sort"
+      "clear";
+  }
+
+  .consulta-filters--without-farm {
+    grid-template-areas:
+      "status"
+      "advanced"
+      "sort"
+      "clear";
+  }
+
+  .consulta-filters__advanced,
+  .consulta-clear,
+  .owner-toolbar > .fui-Button {
+    width: 100%;
+  }
+
   .owner-summary,
   .owner-toolbar {
     grid-template-columns: minmax(0, 1fr);
