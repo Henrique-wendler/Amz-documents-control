@@ -12,6 +12,7 @@ import { OwnerDetailsDrawer } from "../components/proprietarios/OwnerDetailsDraw
 import { OwnerFormDrawer } from "../components/proprietarios/OwnerFormDrawer";
 import { proprietarioService } from "../services/proprietarioService";
 import type { OwnerDraft, OwnerFilters, OwnerListItem, OwnerListResponse, OwnerLoadMode, OwnerWithRelations } from "../types/proprietario";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface ProprietariosPageProps {
   onNavigate: (path: string) => void;
@@ -31,6 +32,10 @@ const getLoadMode = (): OwnerLoadMode => {
 };
 
 export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
+  const { hasPermission } = usePermissions();
+  const canWrite = hasPermission("owners.write");
+  const canInactivate = hasPermission("owners.inactivate");
+  const canDelete = hasPermission("owners.soft_delete");
   const [searchInput, setSearchInput] = useState("");
   const [filters, setFilters] = useState(initialFilters);
   const [response, setResponse] = useState<OwnerListResponse>();
@@ -178,19 +183,19 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
         <main className="main-content proprietarios-content">
           <OwnerSummary value={response?.summary} />
           <section className="section-card owner-search-panel" aria-label="Busca e filtros de proprietários">
-            <OwnerToolbar query={searchInput} value={filters} farms={farms} hasActiveFilters={hasActiveFilters} onQueryChange={setSearchInput} onChange={setFilters} onClear={clearFilters} onNew={openNew} />
+            <OwnerToolbar query={searchInput} value={filters} farms={farms} hasActiveFilters={hasActiveFilters} canCreate={canWrite} onQueryChange={setSearchInput} onChange={setFilters} onClear={clearFilters} onNew={openNew} />
           </section>
           {error ? (
             <DashboardMessageState kind="error" title="Não foi possível carregar os proprietários" description="Tente carregar novamente a lista de cadastros." onRetry={() => void load(filters)} />
           ) : (
             <SectionCard className="owner-results-card" title={`${response?.total ?? 0} proprietário${response?.total === 1 ? "" : "s"}`} subtitle="Selecione um cadastro para visualizar detalhes e vínculos" action={<Badge appearance="tint" color="subtle">10 por página</Badge>}>
-              <OwnerGrid records={response?.records ?? []} loading={loading} filtered={hasActiveFilters} page={response?.page ?? filters.page} totalPages={response?.totalPages ?? 1} onView={(owner) => void viewOwner(owner)} onEdit={openEdit} onInactivate={(owner) => setDialog({ kind: "inactivate", owner })} onDelete={requestDelete} onPageChange={(page) => setFilters((current) => ({ ...current, page }))} onClear={clearFilters} onNew={openNew} />
+              <OwnerGrid records={response?.records ?? []} loading={loading} filtered={hasActiveFilters} page={response?.page ?? filters.page} totalPages={response?.totalPages ?? 1} canWrite={canWrite} canInactivate={canInactivate} canDelete={canDelete} onView={(owner) => void viewOwner(owner)} onEdit={openEdit} onInactivate={(owner) => setDialog({ kind: "inactivate", owner })} onDelete={requestDelete} onPageChange={(page) => setFilters((current) => ({ ...current, page }))} onClear={clearFilters} onNew={openNew} />
             </SectionCard>
           )}
         </main>
       </div>
 
-      <OwnerDetailsDrawer record={details} open={detailsOpen} onClose={() => setDetailsOpen(false)} onEdit={() => { if (details) openEdit(details.owner); }} onRelation={(message) => notify(`${message}. O módulo de Fazendas será conectado em uma próxima etapa.`, "info")} />
+      <OwnerDetailsDrawer record={details} open={detailsOpen} canEdit={canWrite} onClose={() => setDetailsOpen(false)} onEdit={() => { if (details) openEdit(details.owner); }} onRelation={(message) => notify(`${message}. O módulo de Fazendas será conectado em uma próxima etapa.`, "info")} />
       <OwnerFormDrawer open={formOpen} owner={formOwner} saving={saving} serviceError={formError} onClose={() => { if (!saving) setFormOpen(false); }} onSave={(draft) => void saveOwner(draft)} />
       <Toaster toasterId={toasterId} position="top-end" />
       {dialogConfig ? <ConfirmDialog open title={dialogConfig.title} message={dialogConfig.message} confirmLabel={dialogConfig.confirmLabel} danger={dialogConfig.danger} onCancel={() => setDialog({ kind: "none" })} onConfirm={dialogConfig.onConfirm} /> : null}

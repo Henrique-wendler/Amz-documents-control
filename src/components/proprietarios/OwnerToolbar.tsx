@@ -16,13 +16,14 @@ interface OwnerToolbarProps {
   value: OwnerFilters;
   farms: OwnerFarmLink[];
   hasActiveFilters: boolean;
+  canCreate: boolean;
   onQueryChange: (value: string) => void;
   onChange: (value: OwnerFilters) => void;
   onClear: () => void;
   onNew: () => void;
 }
 
-export function OwnerToolbar({ query, value, farms, hasActiveFilters, onQueryChange, onChange, onClear, onNew }: OwnerToolbarProps) {
+export function OwnerToolbar({ query, value, farms, hasActiveFilters, canCreate, onQueryChange, onChange, onClear, onNew }: OwnerToolbarProps) {
   const selectedFarm = farms.find((farm) => farm.id === value.farmId)?.name ?? "Todas as fazendas";
   return (
     <div className="owner-toolbar">
@@ -82,8 +83,7 @@ export function OwnerToolbar({ query, value, farms, hasActiveFilters, onQueryCha
         <Button className="owner-toolbar__clear" appearance="subtle" icon={<Dismiss20Regular />} onClick={onClear}>Limpar</Button>
       ) : null}
 
-      <Button className="owner-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Novo proprietário</Button>
+      {canCreate ? <Button className="owner-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Novo proprietário</Button> : null}
     </div>
   );
 }
-

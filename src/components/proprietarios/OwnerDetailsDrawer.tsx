@@ -6,12 +6,13 @@ import { StatusBadge } from "../StatusBadge";
 interface OwnerDetailsDrawerProps {
   record?: OwnerWithRelations;
   open: boolean;
+  canEdit: boolean;
   onClose: () => void;
   onEdit: () => void;
   onRelation: (message: string) => void;
 }
 
-export function OwnerDetailsDrawer({ record, open, onClose, onEdit, onRelation }: OwnerDetailsDrawerProps) {
+export function OwnerDetailsDrawer({ record, open, canEdit, onClose, onEdit, onRelation }: OwnerDetailsDrawerProps) {
   const owner = record?.owner;
   return (
     <Drawer className="search-result-drawer owner-drawer" type="overlay" position="end" size="medium" open={open} onOpenChange={(_, data) => { if (!data.open) onClose(); }}>
@@ -52,8 +53,7 @@ export function OwnerDetailsDrawer({ record, open, onClose, onEdit, onRelation }
           </section>
         </div> : null}
       </DrawerBody>
-      <DrawerFooter><Button appearance="primary" icon={<Edit20Regular />} disabled={!owner} onClick={onEdit}>Editar</Button><Button appearance="secondary" onClick={onClose}>Fechar</Button></DrawerFooter>
+      <DrawerFooter>{canEdit ? <Button appearance="primary" icon={<Edit20Regular />} disabled={!owner} onClick={onEdit}>Editar</Button> : null}<Button appearance="secondary" onClick={onClose}>Fechar</Button></DrawerFooter>
     </Drawer>
   );
 }
-

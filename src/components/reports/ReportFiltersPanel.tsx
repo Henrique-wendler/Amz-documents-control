@@ -2,10 +2,10 @@ import { Button, Dropdown, Field, Input, Option } from "@fluentui/react-componen
 import { ArrowDownload20Regular, Play20Regular } from "@fluentui/react-icons";
 import type { ReportFilterOptions, ReportFilters, ReportType } from "../../types/report";
 
-interface Props { type: ReportType; value: ReportFilters; options: ReportFilterOptions; generating: boolean; onChange: React.Dispatch<React.SetStateAction<ReportFilters>>; onGenerate: () => void; onExport: () => void; }
+interface Props { type: ReportType; value: ReportFilters; options: ReportFilterOptions; generating: boolean; canGenerate: boolean; canExport: boolean; onChange: React.Dispatch<React.SetStateAction<ReportFilters>>; onGenerate: () => void; onExport: () => void; }
 const selectedLabel = (items: Array<{ value: string; label: string }>, value: string, fallback: string) => items.find((item) => item.value === value)?.label ?? fallback;
 
-export function ReportFiltersPanel({ type, value, options, generating, onChange, onGenerate, onExport }: Props) {
+export function ReportFiltersPanel({ type, value, options, generating, canGenerate, canExport, onChange, onGenerate, onExport }: Props) {
   const set = <K extends keyof ReportFilters>(key: K, next: ReportFilters[K]) => onChange((current) => ({ ...current, [key]: next }));
   const periodApplicable = type === "operations" || type === "guarantees" || type === "documents";
   return <div className="report-filters">
@@ -19,6 +19,6 @@ export function ReportFiltersPanel({ type, value, options, generating, onChange,
       {type === "documents" ? <><Field label="Tipo de documento"><Dropdown value={value.documentType || "Todos os tipos"} selectedOptions={[value.documentType]} onOptionSelect={(_, data) => set("documentType", data.optionValue ?? "")}><Option value="">Todos os tipos</Option>{options.documentTypes.map((item) => <Option key={item} value={item}>{item}</Option>)}</Dropdown></Field><Field label="Vencimento"><Dropdown value={value.expirationWindow === "all" ? "Qualquer data" : `Próximos ${value.expirationWindow} dias`} selectedOptions={[value.expirationWindow]} onOptionSelect={(_, data) => set("expirationWindow", (data.optionValue ?? "all") as ReportFilters["expirationWindow"])}><Option value="all">Qualquer data</Option><Option value="30">Próximos 30 dias</Option><Option value="60">Próximos 60 dias</Option><Option value="90">Próximos 90 dias</Option></Dropdown></Field></> : null}
       {periodApplicable ? <><Field label="Período inicial"><Input type="date" value={value.startDate} onInput={(event) => set("startDate", event.currentTarget.value)} onChange={(_, data) => set("startDate", data.value)} /></Field><Field label="Período final"><Input type="date" value={value.endDate} onInput={(event) => set("endDate", event.currentTarget.value)} onChange={(_, data) => set("endDate", data.value)} /></Field></> : null}
     </div>
-    <div className="report-filters__actions"><Button appearance="primary" icon={<Play20Regular />} disabled={generating} onClick={onGenerate}>{generating ? "Gerando..." : "Gerar relatório"}</Button><Button appearance="secondary" icon={<ArrowDownload20Regular />} onClick={onExport}>Exportar</Button></div>
+    <div className="report-filters__actions">{canGenerate ? <Button appearance="primary" icon={<Play20Regular />} disabled={generating} onClick={onGenerate}>{generating ? "Gerando..." : "Gerar relatório"}</Button> : null}{canExport ? <Button appearance="secondary" icon={<ArrowDownload20Regular />} onClick={onExport}>Exportar</Button> : null}</div>
   </div>;
 }

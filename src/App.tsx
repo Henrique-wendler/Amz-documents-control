@@ -26,6 +26,8 @@ import { MatriculasPage } from "./pages/MatriculasPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
 import { CarPage } from "./pages/CarPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
+import { LoginPage } from "./pages/LoginPage";
+import { useAuth } from "./contexts/AuthContext";
 
 type DialogState =
   | { kind: "none" }
@@ -73,6 +75,7 @@ const emptyItem: GuaranteeItemFormModel = {
 };
 
 export default function App() {
+  const { session, profile, loading: authLoading } = useAuth();
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname.replace(/\/+$/, "") || "/");
   const [data, setData] = useState<AppData>();
   const [operation, setOperation] = useState<OperationFormModel>(emptyOperation);
@@ -107,14 +110,28 @@ export default function App() {
   };
 
   useEffect(() => {
-    void loadData();
-  }, []);
+    if (profile) void loadData();
+    else setData(undefined);
+  }, [profile?.id]);
 
   useEffect(() => {
     const handlePopState = () => setCurrentPath(window.location.pathname.replace(/\/+$/, "") || "/");
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    const authenticated = Boolean(session && profile);
+    const nextPath = authenticated
+      ? currentPath === "/login" ? "/dashboard" : currentPath
+      : "/login";
+
+    if (nextPath !== currentPath) {
+      window.history.replaceState({}, "", nextPath);
+      setCurrentPath(nextPath);
+    }
+  }, [authLoading, currentPath, profile, session]);
 
   const navigate = (path: string) => {
     const targetPath = new URL(path, window.location.origin).pathname.replace(/\/+$/, "") || "/";
@@ -128,6 +145,18 @@ export default function App() {
     () => data?.guarantees.filter((current) => current.situacao === "Ativa").length ?? 0,
     [data],
   );
+
+  if (authLoading) {
+    return <div className="loading-screen"><Spinner label="Validando acesso…" /></div>;
+  }
+
+  if (!session || !profile) {
+    return <LoginPage />;
+  }
+
+  if (currentPath === "/login") {
+    return <div className="loading-screen"><Spinner label="Abrindo o sistema…" /></div>;
+  }
 
   if (currentPath === "/dashboard") {
     return <DashboardPage onNavigate={navigate} />;

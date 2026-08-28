@@ -10,10 +10,14 @@ import { SectionCard } from "../components/SectionCard";
 import { Sidebar } from "../components/Sidebar";
 import { initialReportFilters, reportDefinitions, reportService } from "../services/reportService";
 import type { ReportFilters, ReportType, ReportViewModel } from "../types/report";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface Props { onNavigate: (path: string) => void; }
 
 export function RelatoriosPage({ onNavigate }: Props) {
+  const { hasPermission } = usePermissions();
+  const canGenerate = hasPermission("reports.generate");
+  const canExport = hasPermission("reports.export");
   const [type, setType] = useState<ReportType>("farms");
   const [filters, setFilters] = useState<ReportFilters>(initialReportFilters);
   const [report, setReport] = useState<ReportViewModel>();
@@ -40,7 +44,7 @@ export function RelatoriosPage({ onNavigate }: Props) {
   const exportReport = () => dispatchToast(<Toast><ToastTitle>{reportService.simulateExport("xlsx")}</ToastTitle></Toast>, { intent: "info", timeout: 3500 });
   return <div className="app-shell"><Sidebar activePath="/relatorios" onNavigate={onNavigate} /><div className="app-workspace"><Header title="Relatórios" subtitle="Consultas consolidadas e exportação de informações" refreshing={generating} onRefresh={() => void generate(type, filters)} /><main className="main-content reports-content">
     <ReportTypeCards items={reportDefinitions} selected={type} onSelect={selectType} />
-    <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={exportReport} /></SectionCard>
+    <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} canGenerate={canGenerate} canExport={canExport} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={exportReport} /></SectionCard>
     {error ? <DashboardMessageState kind="error" title="Não foi possível gerar o relatório" description="Tente novamente para atualizar a pré-visualização." onRetry={() => void generate(type, filters)} /> : <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{report?.rows.length ?? 0} registros</Badge>}>
       {report ? <ReportSummary metrics={report.metrics} /> : null}
       <ReportGrid columns={report?.columns ?? []} rows={report?.rows ?? []} loading={generating} />

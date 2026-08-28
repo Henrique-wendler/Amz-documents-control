@@ -37,6 +37,9 @@ interface OwnerGridProps {
   filtered: boolean;
   page: number;
   totalPages: number;
+  canWrite: boolean;
+  canInactivate: boolean;
+  canDelete: boolean;
   onView: (owner: OwnerListItem) => void;
   onEdit: (owner: OwnerListItem) => void;
   onInactivate: (owner: OwnerListItem) => void;
@@ -52,7 +55,7 @@ const textCell = (value: string, strong = false) => (
   </Tooltip>
 );
 
-export function OwnerGrid({ records, loading, filtered, page, totalPages, onView, onEdit, onInactivate, onDelete, onPageChange, onClear, onNew }: OwnerGridProps) {
+export function OwnerGrid({ records, loading, filtered, page, totalPages, canWrite, canInactivate, canDelete, onView, onEdit, onInactivate, onDelete, onPageChange, onClear, onNew }: OwnerGridProps) {
   const columns: TableColumnDefinition<OwnerListItem>[] = useMemo(() => [
     createTableColumn({ columnId: "name", compare: (a, b) => a.name.localeCompare(b.name, "pt-BR"), renderHeaderCell: () => "Nome / Razão social", renderCell: (owner: OwnerListItem) => textCell(owner.name, true) }),
     createTableColumn({ columnId: "document", compare: (a, b) => a.document.localeCompare(b.document), renderHeaderCell: () => "CPF/CNPJ", renderCell: (owner: OwnerListItem) => textCell(owner.document) }),
@@ -70,27 +73,27 @@ export function OwnerGrid({ records, loading, filtered, page, totalPages, onView
           <Tooltip content={`Visualizar ${owner.name}`} relationship="label">
             <Button appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`Visualizar ${owner.name}`} onClick={() => onView(owner)} />
           </Tooltip>
-          <Menu positioning="below-end">
+          {canWrite || canInactivate || canDelete ? <Menu positioning="below-end">
             <MenuTrigger disableButtonEnhancement>
               <Button appearance="subtle" size="small" icon={<MoreHorizontal20Regular />} aria-label={`Mais ações para ${owner.name}`} />
             </MenuTrigger>
             <MenuPopover><MenuList>
               <MenuItem icon={<Eye20Regular />} onClick={() => onView(owner)}>Visualizar</MenuItem>
-              <MenuItem icon={<Edit20Regular />} onClick={() => onEdit(owner)}>Editar</MenuItem>
-              <MenuItem icon={<PersonProhibited20Regular />} disabled={owner.status === "inactive"} onClick={() => onInactivate(owner)}>Inativar</MenuItem>
-              <MenuItem className="owner-menu-danger" icon={<Delete20Regular />} onClick={() => onDelete(owner)}>Excluir</MenuItem>
+              {canWrite ? <MenuItem icon={<Edit20Regular />} onClick={() => onEdit(owner)}>Editar</MenuItem> : null}
+              {canInactivate ? <MenuItem icon={<PersonProhibited20Regular />} disabled={owner.status === "inactive"} onClick={() => onInactivate(owner)}>Inativar</MenuItem> : null}
+              {canDelete ? <MenuItem className="owner-menu-danger" icon={<Delete20Regular />} onClick={() => onDelete(owner)}>Excluir</MenuItem> : null}
             </MenuList></MenuPopover>
-          </Menu>
+          </Menu> : null}
         </div>
       ),
     }),
-  ], [onDelete, onEdit, onInactivate, onView]);
+  ], [canDelete, canInactivate, canWrite, onDelete, onEdit, onInactivate, onView]);
 
   if (loading) {
     return <Skeleton className="search-results-skeleton" aria-label="Carregando proprietários">{Array.from({ length: 8 }, (_, index) => <SkeletonItem key={index} shape="rectangle" size={40} />)}</Skeleton>;
   }
 
-  if (!records.length) return <OwnerEmptyState filtered={filtered} onClear={onClear} onNew={onNew} />;
+  if (!records.length) return <OwnerEmptyState filtered={filtered} canCreate={canWrite} onClear={onClear} onNew={onNew} />;
 
   return (
     <>
