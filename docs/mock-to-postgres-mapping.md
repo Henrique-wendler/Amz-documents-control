@@ -1,6 +1,19 @@
-# Mapeamento MockStore → PostgreSQL
+# Estado da migração MockStore → PostgreSQL
 
-Este documento descreve compatibilidade futura. Nenhuma alteração foi feita no React, services, selectors, seeds ou MockStore.
+O frontend opera temporariamente em modo híbrido durante a migração incremental. A arquitetura aprovada para módulos migrados é:
+
+`Component → Service → Repository → Supabase`
+
+Componentes não acessam o Supabase diretamente. Services mantêm as regras de aplicação, repositories encapsulam persistência e mapeamento `snake_case ↔ camelCase`, e nomes, contadores e relações enriquecidas continuam derivados.
+
+## Estado atual aprovado
+
+| Fonte | Módulos |
+|---|---|
+| Supabase local | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas e OwnershipLinks |
+| MockStore | Documentos, CAR, Operações, Garantias, Relatórios e partes dependentes de Consulta Geral/Dashboard |
+
+Consulta Geral e Dashboard usam dados Supabase somente para indicadores e categorias imobiliárias cuja resolução é segura. Partes que dependem de módulos ainda não migrados permanecem no MockStore; não há dual-write.
 
 | MockStore | PostgreSQL | Divergência relevante |
 |---|---|---|
@@ -19,21 +32,27 @@ Este documento descreve compatibilidade futura. Nenhuma alteração foi feita no
 ## Divergências transversais
 
 - IDs atuais são strings sem garantia de UUID; a migração exigirá tabela de correspondência legado → UUID para preservar deep links e referências.
-- O MockStore é mono-organização e não possui Auth/RLS; PostgreSQL torna `organization_id` obrigatório nas entidades sensíveis.
+- O MockStore é mono-organização e continua restrito aos módulos ainda não migrados. Supabase Auth, RLS e `organization_id` já protegem os módulos migrados.
 - Datas atuais são strings; precisam de validação e conversão distinta para `date` e `timestamptz`.
 - Números JavaScript serão convertidos para `numeric`; parsing deve evitar arredondamento de dinheiro e área.
 - O MockStore não possui `created_by`, `updated_by`, `version`, `deleted_at` ou `deleted_by`.
 - Bancos, tipos documentais e tipos de garantia são texto no mock e viram catálogos/FKs.
 - Contadores e ViewModels continuam derivados; não há colunas para totais de proprietários, matrículas, operações ou anexos.
 - Status internos permanecem em inglês; a tradução para português continua sendo responsabilidade de apresentação.
-- O futuro `SupabaseRepository` deve manter a cadeia `Component → Service → Selectors/ViewModels → Repository`, sem componentes consultando tabelas diretamente.
+- Os repositories Supabase mantêm a cadeia aprovada `Component → Service → Repository → Supabase`, sem componentes consultando tabelas diretamente.
 
-## Estratégia de migração futura
+## Próximas etapas da migração
 
-1. Congelar e validar uma cópia fictícia/anonimizada do MockStore.
-2. Criar mapeamentos de IDs, catálogos e organização antes das entidades dependentes.
-3. Migrar owners/farms/registrations/ownership; depois operações/garantias; por fim documentos/CAR.
-4. Reconciliar percentuais, FKs, status, datas e duplicidades antes de ativar constraints.
-5. Comparar selectors/ViewModels entre os dois repositórios em ambiente de development/staging.
-6. Só substituir o MockStore após aceite explícito; não há dual-write definido neste pacote.
+1. Manter Proprietários, Fazendas, Matrículas e OwnershipLinks exclusivamente no Supabase.
+2. Migrar Operações e Garantias antes de conectar suas relações aos Drawers imobiliários.
+3. Migrar Documentos e CAR antes de substituir suas relações dependentes em Consulta Geral e Dashboard.
+4. Migrar Relatórios somente após as fontes necessárias estarem estabilizadas.
+5. Reconciliar IDs, FKs, status, datas e duplicidades antes de importar qualquer dado real.
+6. Não criar dual-write nem novos mocks paralelos durante a transição.
 
+## Pendências e ambiente local
+
+- **HP permanece pendente:** não existe campo ou regra aprovada no PostgreSQL; o frontend não deve persistir valor alternativo.
+- **CAB permanece pendente:** significado, entidade e regras ainda não foram definidos.
+- Organizações fictícias inativadas são apenas resíduos identificados dos testes no Supabase local; não representam tenants reais nem dados de negócio.
+- Antes da entrada de dados reais, o banco de desenvolvimento poderá ser recriado integralmente pelas migrations para remover resíduos locais e confirmar um estado limpo e reproduzível.

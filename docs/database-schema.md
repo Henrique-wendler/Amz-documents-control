@@ -1,12 +1,23 @@
-# Arquitetura PostgreSQL/Supabase — pacote para revisão
+# Arquitetura PostgreSQL/Supabase
 
-> Estado: **somente revisão**. As migrations não foram executadas e o frontend continua usando o MockStore.
+> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas e OwnershipLinks. Os demais módulos permanecem temporariamente no MockStore.
 
 ## Visão geral
 
 O modelo usa UUIDs, `snake_case`, `timestamptz` para eventos, `date` para datas civis, `numeric(15,2)` para dinheiro, `numeric(15,4)` para hectares e `numeric(5,2)` para percentuais. As entidades editáveis mantêm autoria, timestamps, `version` e soft delete. `status` representa estado de negócio; `deleted_at` representa remoção lógica.
 
 Supabase Auth continua como fonte exclusiva de credenciais. A arquitetura é multi-tenant-ready, embora a V1 opere inicialmente com uma única organização. Cada `profile` possui exatamente um `organization_id NOT NULL`, sem troca de organização e sem `organization_memberships`. Autorização efetiva é `profile → role_permissions → permissions`, complementada por isolamento de organização em RLS.
+
+Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Service → Repository → Supabase`. Nenhum componente consulta tabelas diretamente, e RLS permanece a segurança efetiva mesmo quando ações sem permission são ocultadas na UI.
+
+## Estado da integração do frontend
+
+| Fonte atual | Escopo |
+|---|---|
+| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas e OwnershipLinks |
+| MockStore | Documentos, CAR, Operações, Garantias, Relatórios e partes dependentes de Consulta Geral/Dashboard |
+
+Não existe dual-write. Consulta Geral e Dashboard só consomem dados Supabase nas partes imobiliárias cuja integração já é segura; dependências dos módulos restantes continuam no MockStore até sua migração explícita.
 
 ## Migrations e dependências
 
@@ -18,6 +29,9 @@ Supabase Auth continua como fonte exclusiva de credenciais. A arquitetura é mul
 | 4 | `202608270004_documents_car.sql` | documentos, metadados de arquivos, acessos e CAR |
 | 5 | `202608270005_reports_audit.sql` | auditoria e metadados de relatórios |
 | 6 | `202608270006_rls_permissions.sql` | grants, RLS, transições protegidas e restauração controlada |
+| 7 | `202608280007_allow_attachment_path_validation.sql` | ajuste da validação de referências de arquivo |
+| 8 | `202608280008_harden_authenticated_table_grants.sql` | endurecimento dos grants para usuários autenticados |
+| 9 | `202608280009_expose_current_user_permissions.sql` | função segura para carregar permissions do usuário atual |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -118,12 +132,14 @@ Triggers gravam INSERT/UPDATE/INACTIVATE/CLOSE/CANCEL/SOFT_DELETE/RESTORE em `au
 
 ## Navegação por IDs
 
-Deep links futuros usam UUID (`/fazendas?open=<uuid>`, `/matriculas?open=<uuid>`, `/proprietarios?open=<uuid>`, `/documentos?open=<uuid>`, `/car?open=<uuid>`, `/operacoes?open=<uuid>`). Conhecer o UUID não concede acesso: RLS continua obrigatório.
+Os módulos imobiliários migrados usam deep links por UUID (`/fazendas?open=<uuid>`, `/matriculas?open=<uuid>` e `/proprietarios?open=<uuid>`). Deep links dos demais módulos serão consolidados durante suas respectivas migrações. Conhecer o UUID não concede acesso: RLS continua obrigatório.
 
 ## Ambientes e recuperação
 
 - `development`: apenas dados fictícios; `production`: dados reais; `staging` é recomendado antes da implantação.
 - Nunca colocar dados reais em seeds, Git, fixtures, screenshots ou console.
+- As organizações fictícias inativadas existentes são somente resíduos do ambiente local de teste e não representam organizações de negócio.
+- Antes da entrada de dados reais, o banco de desenvolvimento poderá ser recriado integralmente pelas migrations, removendo resíduos e comprovando a reprodutibilidade do schema.
 - PostgreSQL e arquivos precisam de backups automáticos, retenções separadas e testes periódicos de restauração. Backup sem restore testado não é considerado confiável.
 
 ## Pendências explícitas
