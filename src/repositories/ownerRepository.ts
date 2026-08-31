@@ -10,6 +10,7 @@ export interface OwnerRepositoryFilters {
   status: "all" | EntityStatus;
   page: number;
   pageSize: number;
+  ownerIds?: string[];
 }
 
 export interface OwnerRepositorySummary {
@@ -40,6 +41,7 @@ export interface OwnerRepositoryInput {
 
 export interface OwnerRepository {
   list(filters: OwnerRepositoryFilters): Promise<OwnerRepositoryPage>;
+  listAll(): Promise<PersistedOwner[]>;
   getById(id: string): Promise<PersistedOwner | undefined>;
   create(input: OwnerRepositoryInput): Promise<PersistedOwner>;
   update(id: string, expectedVersion: number, input: OwnerRepositoryInput): Promise<PersistedOwner>;

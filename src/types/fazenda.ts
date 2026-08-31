@@ -1,6 +1,7 @@
 import type { CarRecord, DocumentValidityStatus, EntityStatus, Farm, Operation, Owner, Registration, RuralDocument } from "./domain";
 
 export interface FarmListItem extends Farm {
+  version: number;
   registrationCount: number;
   ownerCount: number;
   activeOperationCount: number;

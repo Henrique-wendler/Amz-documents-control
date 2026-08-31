@@ -11,6 +11,14 @@ export interface OwnerFarmLink {
   status: EntityStatus;
 }
 
+export interface OwnerRegistrationLink {
+  id: string;
+  farmId: string;
+  farmName: string;
+  number: string;
+  status: EntityStatus;
+}
+
 export interface OwnerListItem extends Owner {
   version: number;
   farmCount: number;
@@ -21,6 +29,7 @@ export interface OwnerListItem extends Owner {
 export interface OwnerWithRelations {
   owner: OwnerListItem;
   farms: OwnerFarmLink[];
+  registrations: OwnerRegistrationLink[];
 }
 
 export interface OwnerSummary {

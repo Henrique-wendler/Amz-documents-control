@@ -59,6 +59,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
   const [filters, setFilters] = useState(initialFilters);
   const [response, setResponse] = useState<SearchResponse>();
   const [counts, setCounts] = useState<SearchCounts>();
+  const [farms, setFarms] = useState<Array<{ id: string; label: string }>>([]);
   const [selectedRecord, setSelectedRecord] = useState<SearchRecord>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -92,6 +93,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
 
   useEffect(() => {
     void loadCounts();
+    void consultaService.getFarmOptions().then(setFarms);
   }, [loadCounts]);
 
   useEffect(() => {
@@ -191,7 +193,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
               <SearchFilters
                 category={filters.category}
                 value={filters}
-                farms={consultaService.getFarmOptions()}
+                farms={farms}
                 hasActiveFilters={hasActiveFilters}
                 advancedCount={advancedCount}
                 onChange={setFilters}

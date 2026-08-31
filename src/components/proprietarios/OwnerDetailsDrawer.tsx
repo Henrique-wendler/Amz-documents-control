@@ -9,10 +9,11 @@ interface OwnerDetailsDrawerProps {
   canEdit: boolean;
   onClose: () => void;
   onEdit: () => void;
-  onRelation: (message: string) => void;
+  onFarm: (id: string) => void;
+  onRegistration: (id: string) => void;
 }
 
-export function OwnerDetailsDrawer({ record, open, canEdit, onClose, onEdit, onRelation }: OwnerDetailsDrawerProps) {
+export function OwnerDetailsDrawer({ record, open, canEdit, onClose, onEdit, onFarm, onRegistration }: OwnerDetailsDrawerProps) {
   const owner = record?.owner;
   return (
     <Drawer className="search-result-drawer owner-drawer" type="overlay" position="end" size="medium" open={open} onOpenChange={(_, data) => { if (!data.open) onClose(); }}>
@@ -39,10 +40,18 @@ export function OwnerDetailsDrawer({ record, open, canEdit, onClose, onEdit, onR
           <section className="drawer-record__section">
             <h3>Fazendas vinculadas</h3>
             {record?.farms.length ? <div className="drawer-relations">{record.farms.map((farm) => (
-              <button type="button" key={farm.id} onClick={() => onRelation(`${farm.name} · ${farm.location}`)}>
+              <button type="button" key={farm.id} onClick={() => onFarm(farm.id)}>
                 <span><strong>{farm.name}</strong><small>{farm.location} · {farm.area}</small></span><ArrowRight20Regular aria-hidden="true" />
               </button>
             ))}</div> : <p className="owner-drawer__empty">Nenhuma fazenda vinculada a este cadastro.</p>}
+          </section>
+          <section className="drawer-record__section">
+            <h3>Matrículas vinculadas</h3>
+            {record?.registrations.length ? <div className="drawer-relations">{record.registrations.map((registration) => (
+              <button type="button" key={registration.id} onClick={() => onRegistration(registration.id)}>
+                <span><strong>Matrícula {registration.number}</strong><small>{registration.farmName}</small></span><ArrowRight20Regular aria-hidden="true" />
+              </button>
+            ))}</div> : <p className="owner-drawer__empty">Nenhuma matrícula vinculada a este cadastro.</p>}
           </section>
           <section className="drawer-record__section">
             <h3>Observações</h3><p className="owner-drawer__notes">{owner.notes || "Nenhuma observação registrada."}</p>

@@ -41,6 +41,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [filters, setFilters] = useState(initialFilters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [farms, setFarms] = useState<Array<{ id: string; name: string }>>([]);
   const toasterId = "dashboard-feedback";
   const { dispatchToast } = useToastController(toasterId);
 
@@ -65,6 +66,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   useEffect(() => {
     void loadDashboard();
+    void dashboardService.getFarmOptions().then(setFarms);
   }, [loadDashboard]);
 
   const isEmpty = data ? data.kpis.length === 0 : false;
@@ -80,7 +82,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           onRefresh={() => void loadDashboard(true)}
         />
         <main className="main-content dashboard-content">
-          <DashboardFilters value={filters} onChange={setFilters} farms={dashboardService.getFarmOptions()} />
+          <DashboardFilters value={filters} onChange={setFilters} farms={farms} />
 
           {loading ? <DashboardLoadingState /> : null}
           {!loading && error ? <DashboardMessageState kind="error" onRetry={() => void loadDashboard()} /> : null}

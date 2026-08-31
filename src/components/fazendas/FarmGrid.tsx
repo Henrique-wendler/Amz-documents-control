@@ -9,13 +9,14 @@ import { FarmEmptyState } from "./FarmEmptyState";
 
 interface FarmGridProps {
   records: FarmListItem[]; loading: boolean; filtered: boolean; page: number; totalPages: number;
+  canWrite: boolean; canInactivate: boolean; canDelete: boolean;
   onView: (farm: FarmListItem) => void; onEdit: (farm: FarmListItem) => void; onInactivate: (farm: FarmListItem) => void; onDelete: (farm: FarmListItem) => void;
   onPageChange: (page: number) => void; onClear: () => void; onNew: () => void;
 }
 
 const textCell = (value: string, strong = false) => <Tooltip content={value} relationship="description"><span className={`search-cell-text${strong ? " search-cell-text--strong" : ""}`}>{value}</span></Tooltip>;
 
-export function FarmGrid({ records, loading, filtered, page, totalPages, onView, onEdit, onInactivate, onDelete, onPageChange, onClear, onNew }: FarmGridProps) {
+export function FarmGrid({ records, loading, filtered, page, totalPages, canWrite, canInactivate, canDelete, onView, onEdit, onInactivate, onDelete, onPageChange, onClear, onNew }: FarmGridProps) {
   const columns: TableColumnDefinition<FarmListItem>[] = useMemo(() => [
     createTableColumn({ columnId: "name", compare: (a, b) => a.name.localeCompare(b.name, "pt-BR"), renderHeaderCell: () => "Fazenda", renderCell: (farm) => textCell(farm.name, true) }),
     createTableColumn({ columnId: "location", compare: (a, b) => a.municipality.localeCompare(b.municipality, "pt-BR"), renderHeaderCell: () => "Município / UF", renderCell: (farm) => textCell(`${farm.municipality} / ${farm.state}`) }),
@@ -28,10 +29,10 @@ export function FarmGrid({ records, loading, filtered, page, totalPages, onView,
     createTableColumn({ columnId: "actions", renderHeaderCell: () => "Ações", renderCell: (farm) => <div className="farm-grid__actions" onClick={(event) => event.stopPropagation()}>
       <Tooltip content={`Visualizar ${farm.name}`} relationship="label"><Button appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`Visualizar ${farm.name}`} onClick={() => onView(farm)} /></Tooltip>
       <Menu positioning="below-end"><MenuTrigger disableButtonEnhancement><Button appearance="subtle" size="small" icon={<MoreHorizontal20Regular />} aria-label={`Mais ações para ${farm.name}`} /></MenuTrigger><MenuPopover><MenuList>
-        <MenuItem icon={<Eye20Regular />} onClick={() => onView(farm)}>Visualizar</MenuItem><MenuItem icon={<Edit20Regular />} onClick={() => onEdit(farm)}>Editar</MenuItem><MenuItem icon={<PersonProhibited20Regular />} disabled={farm.status === "inactive"} onClick={() => onInactivate(farm)}>Inativar</MenuItem><MenuItem className="farm-menu-danger" icon={<Delete20Regular />} onClick={() => onDelete(farm)}>Excluir</MenuItem>
+        <MenuItem icon={<Eye20Regular />} onClick={() => onView(farm)}>Visualizar</MenuItem>{canWrite ? <MenuItem icon={<Edit20Regular />} onClick={() => onEdit(farm)}>Editar</MenuItem> : null}{canInactivate ? <MenuItem icon={<PersonProhibited20Regular />} disabled={farm.status === "inactive"} onClick={() => onInactivate(farm)}>Inativar</MenuItem> : null}{canDelete ? <MenuItem className="farm-menu-danger" icon={<Delete20Regular />} onClick={() => onDelete(farm)}>Excluir</MenuItem> : null}
       </MenuList></MenuPopover></Menu>
     </div> }),
-  ], [onDelete, onEdit, onInactivate, onView]);
+  ], [canDelete, canInactivate, canWrite, onDelete, onEdit, onInactivate, onView]);
 
   if (loading) return <Skeleton className="search-results-skeleton" aria-label="Carregando fazendas">{Array.from({ length: 7 }, (_, index) => <SkeletonItem key={index} shape="rectangle" size={40} />)}</Skeleton>;
   if (!records.length) return <FarmEmptyState filtered={filtered} onClear={onClear} onNew={onNew} />;

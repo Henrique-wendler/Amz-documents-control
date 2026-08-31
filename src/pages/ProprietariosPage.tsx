@@ -11,7 +11,7 @@ import { OwnerGrid } from "../components/proprietarios/OwnerGrid";
 import { OwnerDetailsDrawer } from "../components/proprietarios/OwnerDetailsDrawer";
 import { OwnerFormDrawer } from "../components/proprietarios/OwnerFormDrawer";
 import { proprietarioService } from "../services/proprietarioService";
-import type { OwnerDraft, OwnerFilters, OwnerListItem, OwnerListResponse, OwnerLoadMode, OwnerWithRelations } from "../types/proprietario";
+import type { OwnerDraft, OwnerFarmLink, OwnerFilters, OwnerListItem, OwnerListResponse, OwnerLoadMode, OwnerWithRelations } from "../types/proprietario";
 import { usePermissions } from "../hooks/usePermissions";
 
 interface ProprietariosPageProps {
@@ -48,10 +48,11 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string>();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  const [farms, setFarms] = useState<OwnerFarmLink[]>([]);
   const requestId = useRef(0);
+  const initialDetailHandled = useRef(false);
   const toasterId = "owner-feedback";
   const { dispatchToast } = useToastController(toasterId);
-  const farms = proprietarioService.getFarmOptions();
 
   const notify = useCallback((message: string, intent: "success" | "error" | "info" = "success") => {
     dispatchToast(<Toast><ToastTitle>{message}</ToastTitle></Toast>, { intent, timeout: 3200 });
@@ -77,6 +78,15 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
   }, [notify]);
 
   useEffect(() => { void load(filters); }, [filters, load]);
+  useEffect(() => { void proprietarioService.getFarmOptions().then(setFarms); }, []);
+  useEffect(() => {
+    if (initialDetailHandled.current || loading || error) return;
+    initialDetailHandled.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("open") ?? params.get("id");
+    if (!id) return;
+    void proprietarioService.getById(id).then((record) => { if (record) { setDetails(record); setDetailsOpen(true); } });
+  }, [error, loading]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setFilters((current) => current.query === searchInput ? current : { ...current, query: searchInput, page: 1 }), 300);
@@ -205,7 +215,7 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
         </main>
       </div>
 
-      <OwnerDetailsDrawer record={details} open={detailsOpen} canEdit={canWrite} onClose={() => setDetailsOpen(false)} onEdit={() => { if (details) openEdit(details.owner); }} onRelation={(message) => notify(`${message}. O módulo de Fazendas será conectado em uma próxima etapa.`, "info")} />
+      <OwnerDetailsDrawer record={details} open={detailsOpen} canEdit={canWrite} onClose={() => setDetailsOpen(false)} onEdit={() => { if (details) openEdit(details.owner); }} onFarm={(id) => { setDetailsOpen(false); onNavigate(`/fazendas?open=${id}`); }} onRegistration={(id) => { setDetailsOpen(false); onNavigate(`/matriculas?open=${id}`); }} />
       <OwnerFormDrawer open={formOpen} owner={formOwner} saving={saving} canInactivate={canInactivate} serviceError={formError} onClose={() => { if (!saving) setFormOpen(false); }} onSave={(draft) => void saveOwner(draft)} />
       <Toaster toasterId={toasterId} position="top-end" />
       {dialogConfig ? <ConfirmDialog open title={dialogConfig.title} message={dialogConfig.message} confirmLabel={dialogConfig.confirmLabel} danger={dialogConfig.danger} onCancel={() => setDialog({ kind: "none" })} onConfirm={dialogConfig.onConfirm} /> : null}

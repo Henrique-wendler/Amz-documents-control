@@ -3,13 +3,13 @@ import { Add20Regular, Dismiss20Regular, Filter20Regular, Search20Regular } from
 import type { RegistrationFarmOption, RegistrationFilters } from "../../types/matricula";
 
 interface RegistrationToolbarProps {
-  query: string; value: RegistrationFilters; farms: RegistrationFarmOption[]; hasActiveFilters: boolean;
+  query: string; value: RegistrationFilters; farms: RegistrationFarmOption[]; hasActiveFilters: boolean; canCreate: boolean;
   onQueryChange: (value: string) => void; onChange: (value: RegistrationFilters) => void; onClear: () => void; onNew: () => void;
 }
 
 const relationLabel = (value: "all" | "with" | "without") => value === "all" ? "Todos" : value === "with" ? "Com vínculo" : "Sem vínculo";
 
-export function RegistrationToolbar({ query, value, farms, hasActiveFilters, onQueryChange, onChange, onClear, onNew }: RegistrationToolbarProps) {
+export function RegistrationToolbar({ query, value, farms, hasActiveFilters, canCreate, onQueryChange, onChange, onClear, onNew }: RegistrationToolbarProps) {
   const selectedFarm = farms.find((farm) => farm.id === value.farmId)?.name ?? "Todas as fazendas";
   const advancedActive = value.ownerRelation !== "all" || value.operationRelation !== "all" || value.guaranteeRelation !== "all" || value.hp !== "all" || value.areaRange !== "all" || Boolean(value.certificateFrom);
   return <div className="registration-toolbar">
@@ -20,14 +20,14 @@ export function RegistrationToolbar({ query, value, farms, hasActiveFilters, onQ
       <div className="registration-advanced-filter__heading"><strong>Filtros avançados</strong><span>Refine a lista por dados registrais e vínculos.</span></div>
       <div className="registration-advanced-filter__grid">
         <Field label="Proprietário ativo"><Dropdown value={relationLabel(value.ownerRelation)} selectedOptions={[value.ownerRelation]} onOptionSelect={(_, data) => onChange({ ...value, ownerRelation: data.optionValue as RegistrationFilters["ownerRelation"], page: 1 })}><Option value="all">Todos</Option><Option value="with">Com proprietário</Option><Option value="without">Sem proprietário</Option></Dropdown></Field>
-        <Field label="Operação"><Dropdown value={relationLabel(value.operationRelation)} selectedOptions={[value.operationRelation]} onOptionSelect={(_, data) => onChange({ ...value, operationRelation: data.optionValue as RegistrationFilters["operationRelation"], page: 1 })}><Option value="all">Todos</Option><Option value="with">Com operação</Option><Option value="without">Sem operação</Option></Dropdown></Field>
-        <Field label="Garantia"><Dropdown value={relationLabel(value.guaranteeRelation)} selectedOptions={[value.guaranteeRelation]} onOptionSelect={(_, data) => onChange({ ...value, guaranteeRelation: data.optionValue as RegistrationFilters["guaranteeRelation"], page: 1 })}><Option value="all">Todos</Option><Option value="with">Com garantia</Option><Option value="without">Sem garantia</Option></Dropdown></Field>
-        <Field label="HP"><Dropdown value={value.hp === "all" ? "Todos" : value.hp} selectedOptions={[value.hp]} onOptionSelect={(_, data) => onChange({ ...value, hp: data.optionValue as RegistrationFilters["hp"], page: 1 })}><Option value="all">Todos</Option><Option value="Sim">Sim</Option><Option value="Não">Não</Option></Dropdown></Field>
+        <Field label="Operação" hint="Aguardando migração"><Dropdown disabled value="Todos" selectedOptions={["all"]}><Option value="all">Todos</Option></Dropdown></Field>
+        <Field label="Garantia" hint="Aguardando migração"><Dropdown disabled value="Todos" selectedOptions={["all"]}><Option value="all">Todos</Option></Dropdown></Field>
+        <Field label="HP" hint="Pendente de definição"><Dropdown disabled value="Todos" selectedOptions={["all"]}><Option value="all">Todos</Option></Dropdown></Field>
         <Field label="Faixa de área legal"><Dropdown value={value.areaRange === "all" ? "Todas" : value.areaRange === "up-to-1000" ? "Até 1.000 ha" : value.areaRange === "1000-1800" ? "1.000 a 1.800 ha" : "Acima de 1.800 ha"} selectedOptions={[value.areaRange]} onOptionSelect={(_, data) => onChange({ ...value, areaRange: data.optionValue as RegistrationFilters["areaRange"], page: 1 })}><Option value="all">Todas</Option><Option value="up-to-1000">Até 1.000 ha</Option><Option value="1000-1800">1.000 a 1.800 ha</Option><Option value="above-1800">Acima de 1.800 ha</Option></Dropdown></Field>
         <Field label="Certidão a partir de"><Input type="date" value={value.certificateFrom} onChange={(_, data) => onChange({ ...value, certificateFrom: data.value, page: 1 })} /></Field>
       </div>
     </PopoverSurface></Popover>
     {hasActiveFilters ? <Button className="registration-toolbar__clear" appearance="subtle" icon={<Dismiss20Regular />} onClick={onClear}>Limpar</Button> : null}
-    <Button className="registration-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Nova matrícula</Button>
+    {canCreate ? <Button className="registration-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Nova matrícula</Button> : null}
   </div>;
 }

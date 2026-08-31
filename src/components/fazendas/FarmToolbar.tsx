@@ -8,6 +8,7 @@ interface FarmToolbarProps {
   states: string[];
   municipalities: string[];
   hasActiveFilters: boolean;
+  canCreate: boolean;
   onQueryChange: (value: string) => void;
   onChange: (value: FarmFilters) => void;
   onClear: () => void;
@@ -16,7 +17,7 @@ interface FarmToolbarProps {
 
 const yesNoLabel = (value: "all" | "yes" | "no") => value === "all" ? "Todos" : value === "yes" ? "Sim" : "Não";
 
-export function FarmToolbar({ query, value, states, municipalities, hasActiveFilters, onQueryChange, onChange, onClear, onNew }: FarmToolbarProps) {
+export function FarmToolbar({ query, value, states, municipalities, hasActiveFilters, canCreate, onQueryChange, onChange, onClear, onNew }: FarmToolbarProps) {
   const advancedActive = Boolean(value.municipality || value.areaRange !== "all" || value.hasRegistration !== "all" || value.hasActiveOperation !== "all" || value.hasCar !== "all");
   return (
     <div className="farm-toolbar">
@@ -49,13 +50,13 @@ export function FarmToolbar({ query, value, states, municipalities, hasActiveFil
           </Field>
           <div className="farm-advanced-filter__relations">
             <Field label="Com matrícula"><Dropdown value={yesNoLabel(value.hasRegistration)} selectedOptions={[value.hasRegistration]} onOptionSelect={(_, data) => onChange({ ...value, hasRegistration: data.optionValue as FarmFilters["hasRegistration"], page: 1 })}><Option value="all">Todos</Option><Option value="yes">Sim</Option><Option value="no">Não</Option></Dropdown></Field>
-            <Field label="Operação ativa"><Dropdown value={yesNoLabel(value.hasActiveOperation)} selectedOptions={[value.hasActiveOperation]} onOptionSelect={(_, data) => onChange({ ...value, hasActiveOperation: data.optionValue as FarmFilters["hasActiveOperation"], page: 1 })}><Option value="all">Todos</Option><Option value="yes">Sim</Option><Option value="no">Não</Option></Dropdown></Field>
-            <Field label="Com CAR"><Dropdown value={yesNoLabel(value.hasCar)} selectedOptions={[value.hasCar]} onOptionSelect={(_, data) => onChange({ ...value, hasCar: data.optionValue as FarmFilters["hasCar"], page: 1 })}><Option value="all">Todos</Option><Option value="yes">Sim</Option><Option value="no">Não</Option></Dropdown></Field>
+            <Field label="Operação ativa" hint="Aguardando migração"><Dropdown disabled value="Todos" selectedOptions={["all"]}><Option value="all">Todos</Option></Dropdown></Field>
+            <Field label="Com CAR" hint="Aguardando migração"><Dropdown disabled value="Todos" selectedOptions={["all"]}><Option value="all">Todos</Option></Dropdown></Field>
           </div>
         </PopoverSurface>
       </Popover>
       {hasActiveFilters ? <Button className="farm-toolbar__clear" appearance="subtle" icon={<Dismiss20Regular />} onClick={onClear}>Limpar</Button> : null}
-      <Button className="farm-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Nova fazenda</Button>
+      {canCreate ? <Button className="farm-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Nova fazenda</Button> : null}
     </div>
   );
 }

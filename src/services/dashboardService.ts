@@ -3,6 +3,9 @@ import { getDocumentValidityStatus, getExpiringDocuments, getOwnersByRegistratio
 import type { Activity, MockDatabase } from "../types/domain";
 import type { ChartDatum, DashboardData, DashboardLoadMode, RecentActivityItem } from "../types/dashboard";
 import { formatCurrency, formatIsoDate } from "./searchUtils";
+import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
+import { supabaseOwnershipRepository } from "../repositories/supabaseOwnershipRepository";
+import { supabaseRegistrationRepository } from "../repositories/supabaseRegistrationRepository";
 
 const clone = <T,>(value: T): T => structuredClone(value);
 const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
@@ -98,7 +101,20 @@ export const dashboardService = {
   async getSummary(mode: DashboardLoadMode = "success"): Promise<DashboardData> {
     await delay(520);
     if (mode === "error") throw new Error("Não foi possível carregar os indicadores.");
-    return clone(mode === "empty" ? empty : buildDashboard());
+    if (mode === "empty") return clone(empty);
+    const result = buildDashboard();
+    const [farms, registrations, links] = await Promise.all([supabaseFarmRepository.list(), supabaseRegistrationRepository.list(), supabaseOwnershipRepository.list()]);
+    const activeFarms = farms.filter((farm) => farm.status === "active");
+    const activeRegistrations = registrations.filter((registration) => registration.status === "active");
+    const activeRegistrationIds = new Set(links.filter((link) => link.status === "active").map((link) => link.registrationId));
+    const totalArea = farms.reduce((sum, farm) => sum + farm.totalArea, 0);
+    result.kpis = result.kpis.map((kpi) => kpi.id === "farms"
+      ? { ...kpi, value: String(activeFarms.length), detail: `${activeFarms.length} de ${farms.length} cadastradas` }
+      : kpi.id === "area" ? { ...kpi, value: `${new Intl.NumberFormat("pt-BR").format(totalArea)} ha`, detail: `${farms.length} propriedades` }
+      : kpi.id === "registries" ? { ...kpi, value: String(registrations.length), detail: `${activeRegistrations.length} ativas` }
+      : kpi);
+    result.alerts = result.alerts.map((alert) => alert.id === "owners" ? { ...alert, count: registrations.filter((registration) => !activeRegistrationIds.has(registration.id)).length } : alert);
+    return clone(result);
   },
   async getAlerts(): Promise<DashboardData["alerts"]> {
     await delay(180);
@@ -108,7 +124,7 @@ export const dashboardService = {
     await delay(180);
     return clone(buildDashboard().recentActivity);
   },
-  getFarmOptions() {
-    return mockStore.getState().farms.map((farm) => ({ id: farm.id, name: farm.name }));
+  async getFarmOptions() {
+    return (await supabaseFarmRepository.list()).map((farm) => ({ id: farm.id, name: farm.name }));
   },
 };

@@ -7,6 +7,7 @@ interface FarmFormDrawerProps {
   open: boolean;
   farm?: FarmListItem;
   saving: boolean;
+  canInactivate: boolean;
   serviceError?: string;
   onClose: () => void;
   onSave: (draft: FarmDraft) => void;
@@ -21,7 +22,7 @@ const states = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT"
 const toNumber = (value: string) => Number(value.replace(/\./g, "").replace(",", "."));
 const areaString = (value?: number) => value === undefined ? "" : String(value).replace(".", ",");
 
-export function FarmFormDrawer({ open, farm, saving, serviceError, onClose, onSave }: FarmFormDrawerProps) {
+export function FarmFormDrawer({ open, farm, saving, canInactivate, serviceError, onClose, onSave }: FarmFormDrawerProps) {
   const [draft, setDraft] = useState<FarmFormState>(emptyDraft);
   const [submitted, setSubmitted] = useState(false);
 
@@ -39,9 +40,9 @@ export function FarmFormDrawer({ open, farm, saving, serviceError, onClose, onSa
       name: draft.name.trim().length < 3 ? "Informe o nome da fazenda." : "",
       municipality: draft.municipality.trim().length < 2 ? "Informe o município." : "",
       state: !states.includes(draft.state) ? "Selecione uma UF válida." : "",
-      totalArea: !Number.isFinite(totalArea) || totalArea <= 0 ? "Informe uma área total maior que zero." : "",
-      reserveArea: !Number.isFinite(reserveArea) || reserveArea < 0 ? "A área de reserva não pode ser negativa." : reserveArea > totalArea ? "A reserva não pode superar a área total." : "",
-      consolidatedArea: !Number.isFinite(consolidatedArea) || consolidatedArea < 0 ? "A área consolidada não pode ser negativa." : consolidatedArea > totalArea ? "A área consolidada não pode superar a área total." : reserveArea + consolidatedArea > totalArea ? "Reserva e área consolidada não podem superar a área total." : "",
+      totalArea: !Number.isFinite(totalArea) || totalArea < 0 ? "A área total não pode ser negativa." : "",
+      reserveArea: !Number.isFinite(reserveArea) || reserveArea < 0 ? "A área de reserva não pode ser negativa." : "",
+      consolidatedArea: !Number.isFinite(consolidatedArea) || consolidatedArea < 0 ? "A área consolidada não pode ser negativa." : "",
     };
   }, [draft]);
 
@@ -64,7 +65,7 @@ export function FarmFormDrawer({ open, farm, saving, serviceError, onClose, onSa
         <Field label="Área total" required validationState={submitted && errors.totalArea ? "error" : "none"} validationMessage={submitted ? errors.totalArea : undefined}><Input inputMode="decimal" contentAfter="ha" value={draft.totalArea} placeholder="0,00" onChange={(_, data) => setDraft((current) => ({ ...current, totalArea: data.value }))} /></Field>
         <Field label="Área de reserva" validationState={submitted && errors.reserveArea ? "error" : "none"} validationMessage={submitted ? errors.reserveArea : undefined}><Input inputMode="decimal" contentAfter="ha" value={draft.reserveArea} placeholder="0,00" onChange={(_, data) => setDraft((current) => ({ ...current, reserveArea: data.value }))} /></Field>
         <Field label="Área consolidada" validationState={submitted && errors.consolidatedArea ? "error" : "none"} validationMessage={submitted ? errors.consolidatedArea : undefined}><Input inputMode="decimal" contentAfter="ha" value={draft.consolidatedArea} placeholder="0,00" onChange={(_, data) => setDraft((current) => ({ ...current, consolidatedArea: data.value }))} /></Field>
-        <Field label="Situação" required><Dropdown value={draft.status === "active" ? "Ativa" : "Inativa"} selectedOptions={[draft.status]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, status: data.optionValue as FarmDraft["status"] }))}><Option value="active">Ativa</Option><Option value="inactive">Inativa</Option></Dropdown></Field>
+        <Field label="Situação" required><Dropdown disabled={!canInactivate} value={draft.status === "active" ? "Ativa" : "Inativa"} selectedOptions={[draft.status]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, status: data.optionValue as FarmDraft["status"] }))}><Option value="active">Ativa</Option><Option value="inactive">Inativa</Option></Dropdown></Field>
         <Field className="farm-form__wide" label="Observações"><Textarea resize="vertical" value={draft.notes} placeholder="Informações adicionais relevantes ao imóvel" onChange={(_, data) => setDraft((current) => ({ ...current, notes: data.value }))} /></Field>
       </div>
       {serviceError ? <p className="farm-form__service-error" role="alert">{serviceError}</p> : null}

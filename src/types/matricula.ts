@@ -1,6 +1,7 @@
 import type { DocumentValidityStatus, EntityStatus, Farm, Guarantee, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "./domain";
 
 export interface RegistrationListItem extends Registration {
+  version: number;
   farmName: string;
   farmLocation: string;
   ownerCount: number;
@@ -32,8 +33,12 @@ export interface RegistrationFilters {
   pageSize: number;
 }
 
+export interface OwnershipLinkView extends OwnershipLink {
+  version: number;
+}
+
 export interface RegistrationOwnershipView {
-  link: OwnershipLink;
+  link: OwnershipLinkView;
   owner: Owner;
 }
 

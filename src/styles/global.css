@@ -1677,7 +1677,8 @@ textarea {
   gap: 7px;
 }
 
-.farm-detail-list > div {
+.farm-detail-list > div,
+.farm-detail-list > button {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -1689,7 +1690,16 @@ textarea {
   border-radius: 7px;
 }
 
-.farm-detail-list > div > span:first-child {
+.farm-detail-list > button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.farm-detail-list > div > span:first-child,
+.farm-detail-list > button > span:first-child {
   display: grid;
   min-width: 0;
   gap: 2px;
@@ -2084,12 +2094,31 @@ textarea {
   border-radius: 7px;
 }
 
+button.registration-farm-card {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .registration-farm-card > span,
 .registration-detail-list > div > span:first-child,
-.registration-ownership-list > div > span:first-child {
+.registration-ownership-list > div > span:first-child,
+.registration-ownership-list > div > button:first-child {
   display: grid;
   min-width: 0;
   gap: 2px;
+}
+
+.registration-ownership-list > div > button:first-child {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .registration-farm-card strong,

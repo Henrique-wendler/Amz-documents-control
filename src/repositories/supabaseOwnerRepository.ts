@@ -110,6 +110,14 @@ export const supabaseOwnerRepository: OwnerRepository = {
       .select("id, owner_type, name, document_number, phone, email, status, notes, created_at, updated_at, version")
       .is("deleted_at", null);
 
+    if (filters.ownerIds) {
+      if (!filters.ownerIds.length) {
+        return { records: [], total: 0, page: 1, pageSize: filters.pageSize, totalPages: 1, summary };
+      }
+      countQuery = countQuery.in("id", filters.ownerIds);
+      recordsQuery = recordsQuery.in("id", filters.ownerIds);
+    }
+
     const search = sanitizeSearch(filters.query);
     if (search) {
       const documentSearch = filters.query.replace(/\D/g, "");
@@ -150,6 +158,22 @@ export const supabaseOwnerRepository: OwnerRepository = {
       totalPages,
       summary,
     };
+  },
+
+  async listAll() {
+    const records: PersistedOwner[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase
+        .from("owners")
+        .select("id, owner_type, name, document_number, phone, email, status, notes, created_at, updated_at, version")
+        .is("deleted_at", null)
+        .order("name")
+        .range(offset, offset + 499);
+      if (error) throw friendlyError(error);
+      const batch = ((data ?? []) as OwnerRow[]).map(mapRow);
+      records.push(...batch);
+      if (batch.length < 500) return records;
+    }
   },
 
   async getById(id: string) {

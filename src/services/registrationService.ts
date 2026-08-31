@@ -1,66 +1,78 @@
-import { mockStore } from "../data/mock/mockStore";
-import {
-  getActiveOwnershipPercentage,
-  getDocumentsByRegistration,
-  getDocumentValidityStatus,
-  getFarmByRegistration,
-  getGuaranteesByRegistration,
-  getOperationsByRegistration,
-  getOwnersByRegistration,
-  getOwnershipLinksByRegistration,
-  getRegistrationRelationCounts,
-} from "../data/mock/selectors";
-import type { Registration } from "../types/domain";
+import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
+import { supabaseOwnerRepository } from "../repositories/supabaseOwnerRepository";
+import { supabaseOwnershipRepository } from "../repositories/supabaseOwnershipRepository";
+import { supabaseRegistrationRepository } from "../repositories/supabaseRegistrationRepository";
+import type { PersistedOwnershipLink } from "../repositories/ownershipRepository";
+import type { PersistedRegistration } from "../repositories/registrationRepository";
 import type { OwnershipDraft, RegistrationDetailsViewModel, RegistrationDraft, RegistrationFilters, RegistrationListItem, RegistrationListResponse, RegistrationLoadMode, RegistrationSummary } from "../types/matricula";
 import { normalizeSearchText } from "./searchUtils";
 
-const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
-const clone = <T,>(value: T): T => structuredClone(value);
 const dateKey = (value?: string) => {
   if (!value) return "";
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) { const [day, month, year] = value.split("/"); return `${year}-${month}-${day}`; }
   return value.slice(0, 10);
 };
 
-const toListItem = (registration: Registration): RegistrationListItem => {
-  const farm = getFarmByRegistration(registration.id);
-  return {
-    ...registration,
-    farmName: farm?.name ?? "Fazenda não encontrada",
-    farmLocation: farm ? `${farm.municipality} / ${farm.state}` : "—",
-    ...getRegistrationRelationCounts(registration.id),
-  };
+const activePercentage = (links: PersistedOwnershipLink[], registrationId: string, excludeLinkId?: string) => links
+  .filter((link) => link.registrationId === registrationId && link.status === "active" && link.id !== excludeLinkId)
+  .reduce((sum, link) => sum + (link.percentage ?? 0), 0);
+
+const buildItems = async (registrations: PersistedRegistration[]): Promise<RegistrationListItem[]> => {
+  const farmIds = [...new Set(registrations.map((registration) => registration.farmId))];
+  const farms = await supabaseFarmRepository.getByIds(farmIds);
+  const farmById = new Map(farms.map((farm) => [farm.id, farm]));
+  const registrationIds = new Set(registrations.map((registration) => registration.id));
+  const links = (await supabaseOwnershipRepository.list()).filter((link) => registrationIds.has(link.registrationId));
+  return registrations.map((registration) => {
+    const farm = farmById.get(registration.farmId);
+    const registrationLinks = links.filter((link) => link.registrationId === registration.id);
+    return {
+      ...registration,
+      farmName: farm?.name ?? "Fazenda não encontrada",
+      farmLocation: farm ? `${farm.municipality} / ${farm.state}` : "—",
+      ownerCount: new Set(registrationLinks.filter((link) => link.status === "active").map((link) => link.ownerId)).size,
+      ownershipLinkCount: registrationLinks.length,
+      operationCount: 0,
+      guaranteeCount: 0,
+      documentCount: 0,
+      activePercentage: activePercentage(links, registration.id),
+    };
+  });
 };
 
-const summaryFrom = (registrations: Registration[]): RegistrationSummary => ({
-  total: registrations.length,
-  active: registrations.filter((registration) => registration.status === "active").length,
-  legalArea: registrations.reduce((sum, registration) => sum + (registration.legalArea ?? 0), 0),
-  withoutActiveOwner: registrations.filter((registration) => getOwnersByRegistration(registration.id).length === 0).length,
+const toInput = (draft: RegistrationDraft) => ({
+  farmId: draft.farmId,
+  number: draft.number.trim(),
+  previousNumber: draft.previousNumber.trim() || undefined,
+  legalArea: draft.legalArea,
+  certificateDate: draft.certificateDate || undefined,
+  status: draft.status,
+});
+
+const toOwnershipInput = (draft: OwnershipDraft) => ({
+  ownerId: draft.ownerId,
+  type: draft.type,
+  percentage: draft.percentage,
+  status: draft.status,
+  startDate: draft.startDate || undefined,
 });
 
 const relationMatch = (value: "all" | "with" | "without", count: number) => value === "all" || (value === "with" ? count > 0 : count === 0);
 
-const ensurePercentage = (registrationId: string, percentage: number | undefined, excludeLinkId?: string) => {
-  if (percentage === undefined) return;
-  const current = getActiveOwnershipPercentage(registrationId, undefined, excludeLinkId);
-  if (current + percentage > 100.00001) throw new Error("A soma dos percentuais ativos desta matrícula ultrapassaria 100%.");
-};
-
 export const registrationService = {
   async list(filters: RegistrationFilters, mode: RegistrationLoadMode = "success"): Promise<RegistrationListResponse> {
-    await delay(300);
     if (mode === "error") throw new Error("Não foi possível carregar as matrículas.");
-    const registrations = mode === "empty" ? [] : mockStore.getState().registrations;
+    const registrations = mode === "empty" ? [] : await supabaseRegistrationRepository.list();
+    const items = await buildItems(registrations);
     const query = normalizeSearchText(filters.query);
-    const filtered = registrations.map(toListItem)
-      .filter((registration) => !query || normalizeSearchText([registration.number, registration.previousNumber, registration.farmName, registration.farmLocation, registration.hp].filter(Boolean).join(" ")).includes(query))
+    const filtered = items
+      .filter((registration) => !query || normalizeSearchText([registration.number, registration.previousNumber, registration.farmName, registration.farmLocation].filter(Boolean).join(" ")).includes(query))
       .filter((registration) => !filters.farmId || registration.farmId === filters.farmId)
       .filter((registration) => filters.status === "all" || registration.status === filters.status)
       .filter((registration) => relationMatch(filters.ownerRelation, registration.ownerCount))
       .filter((registration) => relationMatch(filters.operationRelation, registration.operationCount))
       .filter((registration) => relationMatch(filters.guaranteeRelation, registration.guaranteeCount))
-      .filter((registration) => filters.hp === "all" || registration.hp === filters.hp)
+      .filter(() => filters.hp === "all")
       .filter((registration) => filters.areaRange === "all"
         || (filters.areaRange === "up-to-1000" && (registration.legalArea ?? 0) <= 1000)
         || (filters.areaRange === "1000-1800" && (registration.legalArea ?? 0) > 1000 && (registration.legalArea ?? 0) <= 1800)
@@ -70,73 +82,86 @@ export const registrationService = {
     const totalPages = Math.max(Math.ceil(filtered.length / filters.pageSize), 1);
     const page = Math.min(filters.page, totalPages);
     const start = (page - 1) * filters.pageSize;
-    return { records: clone(filtered.slice(start, start + filters.pageSize)), total: filtered.length, page, pageSize: filters.pageSize, totalPages, summary: summaryFrom(registrations) };
+    const summary: RegistrationSummary = {
+      total: items.length,
+      active: items.filter((registration) => registration.status === "active").length,
+      legalArea: items.reduce((sum, registration) => sum + (registration.legalArea ?? 0), 0),
+      withoutActiveOwner: items.filter((registration) => registration.ownerCount === 0).length,
+    };
+    return { records: filtered.slice(start, start + filters.pageSize), total: filtered.length, page, pageSize: filters.pageSize, totalPages, summary };
   },
 
   async getById(id: string): Promise<RegistrationListItem | undefined> {
-    await delay(100);
-    const registration = mockStore.getState().registrations.find((item) => item.id === id);
-    return registration ? clone(toListItem(registration)) : undefined;
+    const registration = await supabaseRegistrationRepository.getById(id);
+    if (!registration) return undefined;
+    return (await buildItems([registration]))[0];
   },
 
   async getDetails(id: string): Promise<RegistrationDetailsViewModel | undefined> {
-    await delay(140);
-    const db = mockStore.getState();
-    const registration = db.registrations.find((item) => item.id === id);
+    const registration = await supabaseRegistrationRepository.getById(id);
     if (!registration) return undefined;
-    const ownerships = getOwnershipLinksByRegistration(id, db).map((link) => ({ link, owner: db.owners.find((owner) => owner.id === link.ownerId) })).filter((item): item is { link: typeof item.link; owner: NonNullable<typeof item.owner> } => Boolean(item.owner));
-    const documents = getDocumentsByRegistration(id, db).map((document) => ({ ...document, validityStatus: getDocumentValidityStatus(document) }));
-    return clone({ registration: toListItem(registration), farm: getFarmByRegistration(id, db), ownerships, operations: getOperationsByRegistration(id, db), guarantees: getGuaranteesByRegistration(id, db), documents, activePercentage: getActiveOwnershipPercentage(id, db) });
+    const farm = await supabaseFarmRepository.getById(registration.farmId);
+    const links = await supabaseOwnershipRepository.listByRegistration(id);
+    const owners = await supabaseOwnerRepository.listAll();
+    const ownerById = new Map(owners.map((owner) => [owner.id, owner]));
+    const ownerships = links.flatMap((link) => {
+      const owner = ownerById.get(link.ownerId);
+      return owner ? [{ link, owner }] : [];
+    });
+    return {
+      registration: (await buildItems([registration]))[0],
+      farm,
+      ownerships,
+      operations: [],
+      guarantees: [],
+      documents: [],
+      activePercentage: activePercentage(links, id),
+    };
   },
 
   async create(draft: RegistrationDraft): Promise<RegistrationListItem> {
-    await delay(240);
-    if (mockStore.getState().registrations.some((registration) => registration.status === "active" && normalizeSearchText(registration.number) === normalizeSearchText(draft.number))) throw new Error("Já existe uma matrícula com este número.");
-    return toListItem(mockStore.createRegistration(draft));
+    const registration = await supabaseRegistrationRepository.create(toInput(draft));
+    return (await buildItems([registration]))[0];
   },
 
-  async update(id: string, draft: RegistrationDraft): Promise<RegistrationListItem> {
-    await delay(240);
-    if (mockStore.getState().registrations.some((registration) => registration.id !== id && registration.status === "active" && normalizeSearchText(registration.number) === normalizeSearchText(draft.number))) throw new Error("Já existe uma matrícula com este número.");
-    return toListItem(mockStore.updateRegistration(id, draft));
+  async update(id: string, expectedVersion: number, draft: RegistrationDraft): Promise<RegistrationListItem> {
+    const registration = await supabaseRegistrationRepository.update(id, expectedVersion, toInput(draft));
+    return (await buildItems([registration]))[0];
   },
 
-  async inactivate(id: string): Promise<RegistrationListItem> {
-    await delay(220);
-    return toListItem(mockStore.updateRegistration(id, { status: "inactive" }));
+  async inactivate(id: string, expectedVersion: number): Promise<RegistrationListItem> {
+    const registration = await supabaseRegistrationRepository.inactivate(id, expectedVersion);
+    return (await buildItems([registration]))[0];
   },
 
-  async delete(id: string): Promise<{ deleted: boolean; reason?: "linked" }> {
-    await delay(220);
-    const db = mockStore.getState();
-    const linked = getOwnershipLinksByRegistration(id, db).length || getOperationsByRegistration(id, db).length || getGuaranteesByRegistration(id, db).length || getDocumentsByRegistration(id, db).length;
-    if (linked) return { deleted: false, reason: "linked" };
-    mockStore.deleteRegistration(id);
-    return { deleted: true };
+  async delete(id: string, expectedVersion: number): Promise<{ deleted: boolean; reason?: "linked" }> {
+    if ((await supabaseOwnershipRepository.listByRegistration(id)).length) return { deleted: false, reason: "linked" };
+    try {
+      await supabaseRegistrationRepository.softDelete(id, expectedVersion);
+      return { deleted: true };
+    } catch (error) {
+      if (error instanceof Error && /vínculo|refer|propriet/i.test(error.message)) return { deleted: false, reason: "linked" };
+      throw error;
+    }
   },
 
   async createOwnershipLink(registrationId: string, draft: OwnershipDraft) {
-    await delay(180);
-    const duplicate = getOwnershipLinksByRegistration(registrationId).some((link) => link.ownerId === draft.ownerId && link.status === "active");
-    if (duplicate) throw new Error("Este proprietário já possui um vínculo ativo com a matrícula.");
-    if (draft.status === "active") ensurePercentage(registrationId, draft.percentage);
-    return clone(mockStore.createOwnershipLink({ ...draft, registrationId }));
+    const existing = await supabaseOwnershipRepository.listByRegistration(registrationId);
+    if (existing.some((link) => link.ownerId === draft.ownerId && link.status === "active")) throw new Error("Este proprietário já possui um vínculo ativo com a matrícula.");
+    return supabaseOwnershipRepository.create(registrationId, toOwnershipInput(draft));
   },
 
-  async updateOwnershipLink(id: string, draft: OwnershipDraft) {
-    await delay(180);
-    const current = mockStore.getState().ownershipLinks.find((link) => link.id === id);
+  async updateOwnershipLink(id: string, expectedVersion: number, draft: OwnershipDraft) {
+    const current = await supabaseOwnershipRepository.getById(id);
     if (!current) throw new Error("Vínculo não encontrado.");
-    const duplicate = getOwnershipLinksByRegistration(current.registrationId).some((link) => link.id !== id && link.ownerId === draft.ownerId && link.status === "active");
-    if (duplicate) throw new Error("Este proprietário já possui um vínculo ativo com a matrícula.");
-    if (draft.status === "active") ensurePercentage(current.registrationId, draft.percentage, id);
-    return clone(mockStore.updateOwnershipLink(id, draft));
+    const existing = await supabaseOwnershipRepository.listByRegistration(current.registrationId);
+    if (existing.some((link) => link.id !== id && link.ownerId === draft.ownerId && link.status === "active")) throw new Error("Este proprietário já possui um vínculo ativo com a matrícula.");
+    return supabaseOwnershipRepository.update(id, expectedVersion, toOwnershipInput(draft));
   },
 
-  async closeOwnershipLink(id: string) { await delay(160); return mockStore.closeOwnershipLink(id); },
-  async deleteOwnershipLink(id: string) { await delay(160); mockStore.deleteOwnershipLink(id); },
-  getFarmOptions() { return clone(mockStore.getState().farms.map((farm) => ({ id: farm.id, name: farm.name, label: `${farm.name} — ${farm.municipality}/${farm.state}` }))); },
-  getOwnerOptions() { return clone(mockStore.getState().owners.filter((owner) => owner.status === "active").map((owner) => ({ id: owner.id, name: owner.name, document: owner.document, type: owner.type, label: `${owner.name} — ${owner.type === "individual" ? "CPF" : "CNPJ"} ${owner.document}` }))); },
-  getActivePercentage(registrationId: string, excludeLinkId?: string) { return getActiveOwnershipPercentage(registrationId, undefined, excludeLinkId); },
-  validateIntegrity() { return clone(mockStore.validate()); },
+  async closeOwnershipLink(id: string, expectedVersion: number) { return supabaseOwnershipRepository.close(id, expectedVersion); },
+  async deleteOwnershipLink(id: string, expectedVersion: number) { return supabaseOwnershipRepository.softDelete(id, expectedVersion); },
+  async getFarmOptions() { return (await supabaseFarmRepository.list()).map((farm) => ({ id: farm.id, name: farm.name, label: `${farm.name} — ${farm.municipality}/${farm.state}` })); },
+  async getOwnerOptions() { return (await supabaseOwnerRepository.listAll()).filter((owner) => owner.status === "active").map((owner) => ({ id: owner.id, name: owner.name, document: owner.document, type: owner.type, label: `${owner.name} — ${owner.type === "individual" ? "CPF" : "CNPJ"} ${owner.document}` })); },
+  async getActivePercentage(registrationId: string, excludeLinkId?: string) { return activePercentage(await supabaseOwnershipRepository.listByRegistration(registrationId), registrationId, excludeLinkId); },
 };

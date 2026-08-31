@@ -1,39 +1,61 @@
-import { mockStore } from "../data/mock/mockStore";
-import {
-  getCarsByFarm,
-  getDocumentsByFarm,
-  getDocumentValidityStatus,
-  getFarmRelationCounts,
-  getOperationsByFarm,
-  getOwnersByFarm,
-  getRegistrationsByFarm,
-} from "../data/mock/selectors";
-import type { Farm } from "../types/domain";
+import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
+import { supabaseOwnerRepository } from "../repositories/supabaseOwnerRepository";
+import { supabaseOwnershipRepository } from "../repositories/supabaseOwnershipRepository";
+import { supabaseRegistrationRepository } from "../repositories/supabaseRegistrationRepository";
+import type { PersistedFarm } from "../repositories/farmRepository";
 import type { FarmDetailsViewModel, FarmDraft, FarmFilters, FarmListItem, FarmListResponse, FarmLoadMode, FarmSummary } from "../types/fazenda";
 import { normalizeSearchText } from "./searchUtils";
 
-const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
-const clone = <T,>(value: T): T => structuredClone(value);
-const toListItem = (farm: Farm): FarmListItem => ({ ...farm, ...getFarmRelationCounts(farm.id) });
+const relationMatch = (value: "all" | "yes" | "no", count: number) => value === "all" || (value === "yes" ? count > 0 : count === 0);
 
-const summaryFrom = (farms: Farm[]): FarmSummary => ({
+const toInput = (draft: FarmDraft) => ({
+  name: draft.name.trim(),
+  municipality: draft.municipality.trim(),
+  state: draft.state.trim().toUpperCase(),
+  location: draft.location.trim() || undefined,
+  totalArea: draft.totalArea,
+  reserveArea: draft.reserveArea,
+  consolidatedArea: draft.consolidatedArea,
+  status: draft.status,
+  notes: draft.notes.trim() || undefined,
+});
+
+const summaryFrom = (farms: FarmListItem[]): FarmSummary => ({
   total: farms.length,
   active: farms.filter((farm) => farm.status === "active").length,
   totalArea: farms.reduce((sum, farm) => sum + farm.totalArea, 0),
-  registrations: farms.reduce((sum, farm) => sum + getRegistrationsByFarm(farm.id).length, 0),
+  registrations: farms.reduce((sum, farm) => sum + farm.registrationCount, 0),
 });
 
-const farmSearchText = (farm: Farm) => normalizeSearchText([farm.name, farm.municipality, farm.state, farm.location, farm.notes].filter(Boolean).join(" "));
-const hasRelation = (value: "all" | "yes" | "no", count: number) => value === "all" || (value === "yes" ? count > 0 : count === 0);
+const buildItems = async (farms: PersistedFarm[]): Promise<FarmListItem[]> => {
+  const registrations = await supabaseRegistrationRepository.list();
+  const registrationIds = new Set(registrations.map((registration) => registration.id));
+  const links = (await supabaseOwnershipRepository.list()).filter((link) => registrationIds.has(link.registrationId));
+
+  return farms.map((farm) => {
+    const farmRegistrations = registrations.filter((registration) => registration.farmId === farm.id);
+    const farmRegistrationIds = new Set(farmRegistrations.map((registration) => registration.id));
+    const ownerIds = new Set(links.filter((link) => link.status === "active" && farmRegistrationIds.has(link.registrationId)).map((link) => link.ownerId));
+    return {
+      ...farm,
+      registrationCount: farmRegistrations.length,
+      ownerCount: ownerIds.size,
+      activeOperationCount: 0,
+      operationCount: 0,
+      documentCount: 0,
+      carCount: 0,
+    };
+  });
+};
 
 export const farmService = {
   async list(filters: FarmFilters, mode: FarmLoadMode = "success"): Promise<FarmListResponse> {
-    await delay(300);
     if (mode === "error") throw new Error("Não foi possível carregar as fazendas.");
-    const allFarms = mode === "empty" ? [] : mockStore.getState().farms;
+    const farms = mode === "empty" ? [] : await supabaseFarmRepository.list();
+    const items = await buildItems(farms);
     const query = normalizeSearchText(filters.query);
-    const filtered = allFarms.map(toListItem)
-      .filter((farm) => !query || farmSearchText(farm).includes(query))
+    const filtered = items
+      .filter((farm) => !query || normalizeSearchText([farm.name, farm.municipality, farm.state, farm.location, farm.notes].filter(Boolean).join(" ")).includes(query))
       .filter((farm) => filters.status === "all" || farm.status === filters.status)
       .filter((farm) => !filters.state || farm.state === filters.state)
       .filter((farm) => !filters.municipality || farm.municipality === filters.municipality)
@@ -41,77 +63,76 @@ export const farmService = {
         || (filters.areaRange === "up-to-2000" && farm.totalArea <= 2000)
         || (filters.areaRange === "2000-3500" && farm.totalArea > 2000 && farm.totalArea <= 3500)
         || (filters.areaRange === "above-3500" && farm.totalArea > 3500))
-      .filter((farm) => hasRelation(filters.hasRegistration, farm.registrationCount))
-      .filter((farm) => hasRelation(filters.hasActiveOperation, farm.activeOperationCount))
-      .filter((farm) => hasRelation(filters.hasCar, farm.carCount))
+      .filter((farm) => relationMatch(filters.hasRegistration, farm.registrationCount))
+      .filter((farm) => relationMatch(filters.hasActiveOperation, farm.activeOperationCount))
+      .filter((farm) => relationMatch(filters.hasCar, farm.carCount))
       .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
     const totalPages = Math.max(Math.ceil(filtered.length / filters.pageSize), 1);
     const page = Math.min(filters.page, totalPages);
     const start = (page - 1) * filters.pageSize;
-    const states = [...new Set(allFarms.map((farm) => farm.state))].sort();
-    const municipalities = [...new Set(allFarms.filter((farm) => !filters.state || farm.state === filters.state).map((farm) => farm.municipality))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     return {
-      records: clone(filtered.slice(start, start + filters.pageSize)),
+      records: filtered.slice(start, start + filters.pageSize),
       total: filtered.length,
       page,
       pageSize: filters.pageSize,
       totalPages,
-      summary: summaryFrom(allFarms),
-      states,
-      municipalities,
+      summary: summaryFrom(items),
+      states: [...new Set(farms.map((farm) => farm.state))].sort(),
+      municipalities: [...new Set(farms.filter((farm) => !filters.state || farm.state === filters.state).map((farm) => farm.municipality))].sort((a, b) => a.localeCompare(b, "pt-BR")),
     };
   },
 
   async getById(id: string): Promise<FarmListItem | undefined> {
-    await delay(100);
-    const farm = mockStore.getState().farms.find((item) => item.id === id);
-    return farm ? clone(toListItem(farm)) : undefined;
+    const farm = await supabaseFarmRepository.getById(id);
+    if (!farm) return undefined;
+    return (await buildItems([farm]))[0];
   },
 
   async getDetails(id: string): Promise<FarmDetailsViewModel | undefined> {
-    await delay(140);
-    const farm = mockStore.getState().farms.find((item) => item.id === id);
+    const farm = await supabaseFarmRepository.getById(id);
     if (!farm) return undefined;
-    return clone({
-      farm: toListItem(farm),
-      registrations: getRegistrationsByFarm(id),
-      owners: getOwnersByFarm(id),
-      operations: getOperationsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-      documents: getDocumentsByFarm(id).map((document) => ({ ...document, validityStatus: getDocumentValidityStatus(document) })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-      cars: getCarsByFarm(id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    });
+    const registrations = await supabaseRegistrationRepository.listByFarm(id);
+    const registrationIds = new Set(registrations.map((registration) => registration.id));
+    const links = (await supabaseOwnershipRepository.list()).filter((link) => link.status === "active" && registrationIds.has(link.registrationId));
+    const ownerIds = new Set(links.map((link) => link.ownerId));
+    const owners = (await supabaseOwnerRepository.listAll()).filter((owner) => ownerIds.has(owner.id));
+    return {
+      farm: (await buildItems([farm]))[0],
+      registrations,
+      owners,
+      operations: [],
+      documents: [],
+      cars: [],
+    };
   },
 
   async create(draft: FarmDraft): Promise<FarmListItem> {
-    await delay(240);
-    const duplicate = mockStore.getState().farms.some((farm) => normalizeSearchText(farm.name) === normalizeSearchText(draft.name) && normalizeSearchText(farm.municipality) === normalizeSearchText(draft.municipality));
-    if (duplicate) throw new Error("Já existe uma fazenda com este nome no município informado.");
-    return toListItem(mockStore.createFarm(draft));
+    const farm = await supabaseFarmRepository.create(toInput(draft));
+    return (await buildItems([farm]))[0];
   },
 
-  async update(id: string, draft: FarmDraft): Promise<FarmListItem> {
-    await delay(240);
-    const duplicate = mockStore.getState().farms.some((farm) => farm.id !== id && normalizeSearchText(farm.name) === normalizeSearchText(draft.name) && normalizeSearchText(farm.municipality) === normalizeSearchText(draft.municipality));
-    if (duplicate) throw new Error("Já existe outra fazenda com este nome no município informado.");
-    return toListItem(mockStore.updateFarm(id, draft));
+  async update(id: string, expectedVersion: number, draft: FarmDraft): Promise<FarmListItem> {
+    const farm = await supabaseFarmRepository.update(id, expectedVersion, toInput(draft));
+    return (await buildItems([farm]))[0];
   },
 
-  async inactivate(id: string): Promise<FarmListItem> {
-    await delay(220);
-    return toListItem(mockStore.updateFarm(id, { status: "inactive" }));
+  async inactivate(id: string, expectedVersion: number): Promise<FarmListItem> {
+    const farm = await supabaseFarmRepository.inactivate(id, expectedVersion);
+    return (await buildItems([farm]))[0];
   },
 
-  async delete(id: string): Promise<{ deleted: boolean; reason?: "linked" }> {
-    await delay(220);
-    const farm = mockStore.getState().farms.find((item) => item.id === id);
-    if (!farm) return { deleted: true };
-    const counts = getFarmRelationCounts(id);
-    if (counts.registrationCount || counts.operationCount || counts.documentCount || counts.carCount) return { deleted: false, reason: "linked" };
-    mockStore.deleteFarm(id);
-    return { deleted: true };
+  async delete(id: string, expectedVersion: number): Promise<{ deleted: boolean; reason?: "linked" }> {
+    if ((await supabaseRegistrationRepository.listByFarm(id)).length) return { deleted: false, reason: "linked" };
+    try {
+      await supabaseFarmRepository.softDelete(id, expectedVersion);
+      return { deleted: true };
+    } catch (error) {
+      if (error instanceof Error && /vínculo|refer|matrícula/i.test(error.message)) return { deleted: false, reason: "linked" };
+      throw error;
+    }
   },
 
-  validateIntegrity() {
-    return clone(mockStore.validate());
+  async getOptions() {
+    return (await supabaseFarmRepository.list()).map((farm) => ({ id: farm.id, name: farm.name, label: `${farm.name} — ${farm.municipality}/${farm.state}` }));
   },
 };
