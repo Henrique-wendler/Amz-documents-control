@@ -2,6 +2,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { PersistedRegistration, RegistrationRepository, RegistrationRepositoryInput } from "./registrationRepository";
 import { RegistrationConcurrencyError } from "./registrationRepository";
+import { toPostgresDate } from "./civilDate";
 
 interface RegistrationRow {
   id: string;
@@ -35,7 +36,7 @@ const mapInput = (input: RegistrationRepositoryInput) => ({
   number: input.number,
   previous_number: input.previousNumber || null,
   legal_area: input.legalArea ?? null,
-  certificate_date: input.certificateDate || null,
+  certificate_date: toPostgresDate(input.certificateDate),
   status: input.status,
 });
 const friendlyError = (error: PostgrestError, fallback: string) => {
@@ -111,4 +112,3 @@ export const supabaseRegistrationRepository: RegistrationRepository = {
     if (data !== 1) throw new RegistrationConcurrencyError();
   },
 };
-

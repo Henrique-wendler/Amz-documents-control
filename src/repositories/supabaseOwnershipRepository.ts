@@ -2,6 +2,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { OwnershipRepository, OwnershipRepositoryInput, PersistedOwnershipLink } from "./ownershipRepository";
 import { OwnershipConcurrencyError } from "./ownershipRepository";
+import { toPostgresDate } from "./civilDate";
 
 interface OwnershipRow {
   id: string;
@@ -34,8 +35,8 @@ const mapInput = (input: OwnershipRepositoryInput) => ({
   p_ownership_type: typeToDatabase[input.type],
   p_percentage: input.percentage ?? null,
   p_status: input.status,
-  p_start_date: input.startDate || null,
-  p_end_date: input.endDate || null,
+  p_start_date: toPostgresDate(input.startDate),
+  p_end_date: toPostgresDate(input.endDate),
 });
 const friendlyError = (error: PostgrestError, fallback: string) => {
   if (error.code === "23514") return new Error("A soma dos percentuais ativos desta matrícula ultrapassaria 100%.");
@@ -101,4 +102,3 @@ export const supabaseOwnershipRepository: OwnershipRepository = {
     if (data !== 1) throw new OwnershipConcurrencyError();
   },
 };
-
