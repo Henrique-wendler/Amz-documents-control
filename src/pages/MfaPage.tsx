@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Field, Input, MessageBar, MessageBarBody, Spinner } from "@fluentui/react-components";
-import { Key20Regular, LockClosed20Regular, ShieldKeyhole20Regular } from "@fluentui/react-icons";
+import { Checkmark20Regular, Copy20Regular, Key20Regular, LockClosed20Regular, ShieldKeyhole20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../contexts/AuthContext";
 
 const normalizeCode = (value: string) => value.replace(/\D/g, "").slice(0, 6);
@@ -17,6 +17,7 @@ export function MfaPage() {
   } = useAuth();
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<string>();
+  const [copyMessage, setCopyMessage] = useState<string>();
   const enrollment = stage === "mfa_enrollment";
 
   const startEnrollment = async () => {
@@ -34,6 +35,16 @@ export function MfaPage() {
     if (!result.success) {
       setMessage(result.error);
       setCode("");
+    }
+  };
+
+  const copySecret = async () => {
+    if (!mfaEnrollment?.secret) return;
+    try {
+      await navigator.clipboard.writeText(mfaEnrollment.secret);
+      setCopyMessage("Chave copiada.");
+    } catch {
+      setCopyMessage("Não foi possível copiar. Selecione a chave manualmente.");
     }
   };
 
@@ -69,14 +80,26 @@ export function MfaPage() {
             <form className="login-form" onSubmit={(event) => void verify(event)}>
               {enrollment && mfaEnrollment ? (
                 <div className="mfa-enrollment">
-                  <img src={mfaEnrollment.qrCode} alt="QR Code para configurar o aplicativo autenticador" />
-                  <div>
+                  <div className="mfa-enrollment__qr">
+                    <img src={mfaEnrollment.qrCode} width="250" height="250" alt="QR Code para configurar o aplicativo autenticador" />
+                  </div>
+                  <div className="mfa-enrollment__instructions">
                     <strong>1. Leia o QR Code</strong>
                     <span>Use Google Authenticator, Microsoft Authenticator ou aplicativo compatível.</span>
                   </div>
-                  <Field label="Chave manual" hint="Use somente se não puder ler o QR Code.">
-                    <Input className="mfa-secret" aria-label="Chave manual do autenticador" type="text" readOnly value={mfaEnrollment.secret} contentBefore={<Key20Regular />} />
-                  </Field>
+                  <div className="mfa-enrollment__manual">
+                    <strong>Não conseguiu escanear o QR Code?</strong>
+                    <span>Use a chave TOTP abaixo para configurar o autenticador manualmente.</span>
+                    <Field label="Chave manual">
+                      <div className="mfa-enrollment__copy-row">
+                        <Input className="mfa-secret" aria-label="Chave manual do autenticador" type="text" readOnly value={mfaEnrollment.secret} contentBefore={<Key20Regular />} />
+                        <Button type="button" appearance="secondary" icon={copyMessage === "Chave copiada." ? <Checkmark20Regular /> : <Copy20Regular />} onClick={() => void copySecret()}>
+                          Copiar chave
+                        </Button>
+                      </div>
+                    </Field>
+                    {copyMessage ? <span className="mfa-enrollment__copy-status" role="status">{copyMessage}</span> : null}
+                  </div>
                 </div>
               ) : null}
               <Field label="Código de 6 dígitos" required>

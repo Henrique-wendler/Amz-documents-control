@@ -113,7 +113,7 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
     setFormError(undefined);
     try {
       if (formOwner) {
-        await proprietarioService.update(formOwner.id, draft);
+        await proprietarioService.update(formOwner.id, formOwner.version, draft);
         notify("Proprietário atualizado com sucesso.");
       } else {
         await proprietarioService.create(draft);
@@ -135,24 +135,34 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
 
   const confirmInactivate = async () => {
     if (dialog.kind !== "inactivate") return;
-    const updated = await proprietarioService.inactivate(dialog.owner.id);
-    setDialog({ kind: "none" });
-    if (details?.owner.id === updated.id) setDetails(await proprietarioService.getById(updated.id));
-    notify("Proprietário inativado.");
-    await load(filters);
+    try {
+      const updated = await proprietarioService.inactivate(dialog.owner.id, dialog.owner.version);
+      setDialog({ kind: "none" });
+      if (details?.owner.id === updated.id) setDetails(await proprietarioService.getById(updated.id));
+      notify("Proprietário inativado.");
+      await load(filters);
+    } catch (reason) {
+      setDialog({ kind: "none" });
+      notify(reason instanceof Error ? reason.message : "Não foi possível inativar o proprietário.", "error");
+    }
   };
 
   const confirmDelete = async () => {
     if (dialog.kind !== "delete") return;
-    const result = await proprietarioService.delete(dialog.owner.id);
-    if (!result.deleted) {
-      setDialog({ kind: "blocked", owner: dialog.owner });
-      return;
+    try {
+      const result = await proprietarioService.delete(dialog.owner.id, dialog.owner.version);
+      if (!result.deleted) {
+        setDialog({ kind: "blocked", owner: dialog.owner });
+        return;
+      }
+      setDialog({ kind: "none" });
+      setDetailsOpen(false);
+      notify("Proprietário excluído.");
+      await load(filters);
+    } catch (reason) {
+      setDialog({ kind: "none" });
+      notify(reason instanceof Error ? reason.message : "Não foi possível excluir o proprietário.", "error");
     }
-    setDialog({ kind: "none" });
-    setDetailsOpen(false);
-    notify("Proprietário excluído.");
-    await load(filters);
   };
 
   const dialogConfig = dialog.kind === "inactivate" ? {
@@ -163,7 +173,7 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
     onConfirm: () => void confirmInactivate(),
   } : dialog.kind === "delete" ? {
     title: "Excluir proprietário?",
-    message: `O cadastro de ${dialog.owner.name} será removido definitivamente. Deseja continuar?`,
+    message: `O cadastro de ${dialog.owner.name} será removido das consultas, preservando o histórico de auditoria. Deseja continuar?`,
     confirmLabel: "Excluir",
     danger: true,
     onConfirm: () => void confirmDelete(),
@@ -196,7 +206,7 @@ export function ProprietariosPage({ onNavigate }: ProprietariosPageProps) {
       </div>
 
       <OwnerDetailsDrawer record={details} open={detailsOpen} canEdit={canWrite} onClose={() => setDetailsOpen(false)} onEdit={() => { if (details) openEdit(details.owner); }} onRelation={(message) => notify(`${message}. O módulo de Fazendas será conectado em uma próxima etapa.`, "info")} />
-      <OwnerFormDrawer open={formOpen} owner={formOwner} saving={saving} serviceError={formError} onClose={() => { if (!saving) setFormOpen(false); }} onSave={(draft) => void saveOwner(draft)} />
+      <OwnerFormDrawer open={formOpen} owner={formOwner} saving={saving} canInactivate={canInactivate} serviceError={formError} onClose={() => { if (!saving) setFormOpen(false); }} onSave={(draft) => void saveOwner(draft)} />
       <Toaster toasterId={toasterId} position="top-end" />
       {dialogConfig ? <ConfirmDialog open title={dialogConfig.title} message={dialogConfig.message} confirmLabel={dialogConfig.confirmLabel} danger={dialogConfig.danger} onCancel={() => setDialog({ kind: "none" })} onConfirm={dialogConfig.onConfirm} /> : null}
     </div>

@@ -7,6 +7,7 @@ interface OwnerFormDrawerProps {
   open: boolean;
   owner?: OwnerListItem;
   saving: boolean;
+  canInactivate: boolean;
   serviceError?: string;
   onClose: () => void;
   onSave: (draft: OwnerDraft) => void;
@@ -27,7 +28,7 @@ const formatPhone = (value: string) => {
   return raw.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d{4})$/, "$1-$2");
 };
 
-export function OwnerFormDrawer({ open, owner, saving, serviceError, onClose, onSave }: OwnerFormDrawerProps) {
+export function OwnerFormDrawer({ open, owner, saving, canInactivate, serviceError, onClose, onSave }: OwnerFormDrawerProps) {
   const [draft, setDraft] = useState<OwnerDraft>(emptyDraft);
   const [submitted, setSubmitted] = useState(false);
 
@@ -67,7 +68,7 @@ export function OwnerFormDrawer({ open, owner, saving, serviceError, onClose, on
               </Dropdown>
             </Field>
             <Field label="Situação" required>
-              <Dropdown value={draft.status === "active" ? "Ativo" : "Inativo"} selectedOptions={[draft.status]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, status: data.optionValue as OwnerDraft["status"] }))}>
+              <Dropdown disabled={!canInactivate} value={draft.status === "active" ? "Ativo" : "Inativo"} selectedOptions={[draft.status]} onOptionSelect={(_, data) => setDraft((current) => ({ ...current, status: data.optionValue as OwnerDraft["status"] }))}>
                 <Option value="active">Ativo</Option><Option value="inactive">Inativo</Option>
               </Dropdown>
             </Field>

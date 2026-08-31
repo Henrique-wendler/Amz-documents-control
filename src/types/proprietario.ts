@@ -12,6 +12,7 @@ export interface OwnerFarmLink {
 }
 
 export interface OwnerListItem extends Owner {
+  version: number;
   farmCount: number;
   registrationCount: number;
   operationCount: number;
@@ -50,4 +51,3 @@ export interface OwnerListResponse {
 export type OwnerLoadMode = "success" | "empty" | "error";
 export type OwnerDraft = Required<Pick<Owner, "type" | "name" | "document" | "phone" | "email" | "status" | "notes">>;
 export type { Owner } from "./domain";
-
