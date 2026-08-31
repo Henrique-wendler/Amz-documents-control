@@ -1,82 +1,36 @@
-import { mockStore } from "../data/mock/mockStore";
-import { getCarById, getFarmsByOwner } from "../data/mock/selectors";
-import type { CarRecord } from "../types/domain";
+import { supabaseCarRepository } from "../repositories/supabaseCarRepository";
+import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
+import { supabaseRegistrationRepository } from "../repositories/supabaseRegistrationRepository";
+import type { PersistedCarRecord } from "../repositories/carRepository";
 import type { CarDetailsViewModel, CarDraft, CarFilters, CarListItem, CarListResponse, CarLoadMode } from "../types/car";
 import { normalizeSearchText } from "./searchUtils";
 
-const clone = <T,>(value: T): T => structuredClone(value);
-const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
-
-const toListItem = (car: CarRecord): CarListItem => {
-  const db = mockStore.getState();
-  const farm = db.farms.find((item) => item.id === car.farmId);
-  const registration = car.registrationId ? db.registrations.find((item) => item.id === car.registrationId) : undefined;
-  const owner = car.ownerId ? db.owners.find((item) => item.id === car.ownerId) : undefined;
-  return {
-    ...car,
-    farmName: farm?.name ?? "Fazenda não encontrada",
-    farmLocation: farm ? `${farm.municipality} / ${farm.state}` : "—",
-    registrationNumber: registration?.number,
-    ownerName: owner?.name,
-  };
+const toInput = (draft: CarDraft) => ({ farmId: draft.farmId, registrationId: draft.registrationId, carNumber: draft.number.trim(), receiptNumber: draft.receiptNumber?.trim() || undefined, declaredOwnerName: draft.declaredOwnerName?.trim() || undefined, status: draft.status, notes: draft.notes?.trim() || undefined });
+const buildItems = async (cars: PersistedCarRecord[]): Promise<CarListItem[]> => {
+  const [farms, registrations] = await Promise.all([supabaseFarmRepository.getByIds([...new Set(cars.map((car) => car.farmId))]), supabaseRegistrationRepository.getByIds([...new Set(cars.flatMap((car) => car.registrationId ? [car.registrationId] : []))])]);
+  const farmById = new Map(farms.map((farm) => [farm.id, farm])); const registrationById = new Map(registrations.map((registration) => [registration.id, registration]));
+  return cars.map((car) => { const farm = farmById.get(car.farmId); return { ...car, farmName: farm?.name ?? "Fazenda não encontrada", farmLocation: farm ? `${farm.municipality} / ${farm.state}` : "—", registrationNumber: car.registrationId ? registrationById.get(car.registrationId)?.number : undefined, ownerName: car.declaredOwnerName }; });
 };
-
-const validateDraft = (draft: CarDraft, currentId?: string) => {
-  const db = mockStore.getState();
-  if (!draft.farmId || !db.farms.some((farm) => farm.id === draft.farmId)) throw new Error("Selecione a fazenda vinculada.");
+const validateDraft = async (draft: CarDraft) => {
   if (!draft.number.trim()) throw new Error("Informe o número do CAR.");
-  if (db.carRecords.some((car) => car.id !== currentId && normalizeSearchText(car.number) === normalizeSearchText(draft.number))) throw new Error("Já existe um CAR com este número.");
-  if (draft.registrationId) {
-    const registration = db.registrations.find((item) => item.id === draft.registrationId);
-    if (!registration || registration.farmId !== draft.farmId) throw new Error("A matrícula selecionada não pertence à fazenda informada.");
-  }
-  if (draft.ownerId && !db.owners.some((owner) => owner.id === draft.ownerId)) throw new Error("O proprietário informado não foi encontrado.");
+  const farm = await supabaseFarmRepository.getById(draft.farmId); if (!farm) throw new Error("Selecione a Fazenda vinculada.");
+  if (draft.registrationId) { const registration = await supabaseRegistrationRepository.getById(draft.registrationId); if (!registration || registration.farmId !== draft.farmId) throw new Error("A Matrícula selecionada não pertence à Fazenda informada."); }
 };
-
-const allItems = () => mockStore.getState().carRecords.map(toListItem);
-const summary = (records: CarListItem[]) => ({
-  total: records.length,
-  active: records.filter((item) => item.status === "active").length,
-  pending: records.filter((item) => item.status === "pending").length,
-  inactive: records.filter((item) => item.status === "inactive").length,
-});
+const summary = (records: CarListItem[]) => ({ total: records.length, active: records.filter((item) => item.status === "active").length, pending: records.filter((item) => item.status === "pending").length, inactive: records.filter((item) => item.status === "inactive").length });
 
 export const carService = {
   async list(filters: CarFilters, mode: CarLoadMode = "success"): Promise<CarListResponse> {
-    await delay(300);
     if (mode === "error") throw new Error("Não foi possível carregar os cadastros ambientais rurais.");
-    const source = mode === "empty" ? [] : allItems();
-    const query = normalizeSearchText(filters.query);
-    const filtered = source
-      .filter((item) => !query || [item.number, item.receiptNumber, item.farmName, item.registrationNumber, item.ownerName].some((value) => normalizeSearchText(value ?? "").includes(query)))
-      .filter((item) => !filters.farmId || item.farmId === filters.farmId)
-      .filter((item) => filters.status === "all" || item.status === filters.status)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.number.localeCompare(b.number, "pt-BR"));
-    const totalPages = Math.max(1, Math.ceil(filtered.length / filters.pageSize));
-    const page = Math.min(filters.page, totalPages);
-    const start = (page - 1) * filters.pageSize;
-    return clone({ records: filtered.slice(start, start + filters.pageSize), total: filtered.length, page, pageSize: filters.pageSize, totalPages, summary: summary(source) });
+    const source = mode === "empty" ? [] : await buildItems(await supabaseCarRepository.list()); const query = normalizeSearchText(filters.query);
+    const filtered = source.filter((item) => !query || [item.number, item.receiptNumber, item.farmName, item.registrationNumber, item.ownerName].some((value) => normalizeSearchText(value ?? "").includes(query))).filter((item) => !filters.farmId || item.farmId === filters.farmId).filter((item) => filters.status === "all" || item.status === filters.status).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.number.localeCompare(b.number, "pt-BR"));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / filters.pageSize)); const page = Math.min(filters.page, totalPages); const start = (page - 1) * filters.pageSize;
+    return { records: filtered.slice(start, start + filters.pageSize), total: filtered.length, page, pageSize: filters.pageSize, totalPages, summary: summary(source) };
   },
-
-  async getDetails(id: string): Promise<CarDetailsViewModel> {
-    await delay(120);
-    const db = mockStore.getState();
-    const car = getCarById(id, db);
-    if (!car) throw new Error("CAR não encontrado.");
-    return clone({
-      car: toListItem(car),
-      farm: db.farms.find((item) => item.id === car.farmId),
-      registration: car.registrationId ? db.registrations.find((item) => item.id === car.registrationId) : undefined,
-      owner: car.ownerId ? db.owners.find((item) => item.id === car.ownerId) : undefined,
-    });
-  },
-
-  async create(draft: CarDraft) { validateDraft(draft); await delay(160); return clone(mockStore.createCarRecord({ ...draft, number: draft.number.trim(), receiptNumber: draft.receiptNumber?.trim() || undefined })); },
-  async update(id: string, draft: CarDraft) { validateDraft(draft, id); await delay(160); return clone(mockStore.updateCarRecord(id, { ...draft, number: draft.number.trim(), receiptNumber: draft.receiptNumber?.trim() || undefined })); },
-  async inactivate(id: string) { await delay(100); return clone(mockStore.updateCarRecord(id, { status: "inactive" })); },
-  async delete(id: string) { await delay(100); mockStore.deleteCarRecord(id); return { deleted: true as const }; },
-  getFarmOptions() { return mockStore.getState().farms.filter((farm) => farm.status === "active").map((farm) => ({ id: farm.id, label: farm.name })); },
-  getRegistrationOptions() { return mockStore.getState().registrations.filter((registration) => registration.status === "active").map((registration) => ({ id: registration.id, label: `Matrícula ${registration.number}`, farmId: registration.farmId })); },
-  getOwnerOptions() { return mockStore.getState().owners.filter((owner) => owner.status === "active").map((owner) => ({ id: owner.id, label: owner.name, farmIds: getFarmsByOwner(owner.id).map((farm) => farm.id) })); },
-  validateIntegrity() { return clone(mockStore.validate()); },
+  async getDetails(id: string): Promise<CarDetailsViewModel> { const car = await supabaseCarRepository.getById(id); if (!car) throw new Error("CAR não encontrado."); const [item] = await buildItems([car]); const [farm, registration] = await Promise.all([supabaseFarmRepository.getById(car.farmId), car.registrationId ? supabaseRegistrationRepository.getById(car.registrationId) : Promise.resolve(undefined)]); return { car: item, farm, registration }; },
+  async create(draft: CarDraft) { await validateDraft(draft); return supabaseCarRepository.create(toInput(draft)); },
+  async update(id: string, expectedVersion: number, draft: CarDraft) { await validateDraft(draft); return supabaseCarRepository.update(id, expectedVersion, toInput(draft)); },
+  async inactivate(id: string, expectedVersion: number) { return supabaseCarRepository.inactivate(id, expectedVersion); },
+  async delete(id: string, expectedVersion: number) { await supabaseCarRepository.softDelete(id, expectedVersion); return { deleted: true as const }; },
+  async getFarmOptions() { return (await supabaseFarmRepository.list()).filter((farm) => farm.status === "active").map((farm) => ({ id: farm.id, label: farm.name })); },
+  async getRegistrationOptions() { return (await supabaseRegistrationRepository.list()).filter((registration) => registration.status === "active").map((registration) => ({ id: registration.id, label: `Matrícula ${registration.number}`, farmId: registration.farmId })); },
 };

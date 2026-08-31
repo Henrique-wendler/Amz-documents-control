@@ -1,4 +1,4 @@
-import type { CarRecord, Farm, Owner, Registration } from "./domain";
+import type { CarRecord, Farm, Registration } from "./domain";
 
 export type CarLoadMode = "success" | "empty" | "error";
 
@@ -11,6 +11,7 @@ export interface CarFilters {
 }
 
 export interface CarListItem extends CarRecord {
+  version: number;
   farmName: string;
   farmLocation: string;
   registrationNumber?: string;
@@ -19,15 +20,16 @@ export interface CarListItem extends CarRecord {
 
 export interface CarSummaryViewModel { total: number; active: number; pending: number; inactive: number; }
 export interface CarListResponse { records: CarListItem[]; total: number; page: number; pageSize: number; totalPages: number; summary: CarSummaryViewModel; }
-export interface CarDetailsViewModel { car: CarListItem; farm?: Farm; registration?: Registration; owner?: Owner; }
+export interface CarDetailsViewModel { car: CarListItem; farm?: Farm; registration?: Registration; }
 export interface CarOption { id: string; label: string; farmId?: string; }
 export interface CarOwnerOption { id: string; label: string; farmIds: string[]; }
 
 export interface CarDraft {
   farmId: string;
   registrationId?: string;
-  ownerId?: string;
+  declaredOwnerName?: string;
   number: string;
   receiptNumber?: string;
   status: CarRecord["status"];
+  notes?: string;
 }

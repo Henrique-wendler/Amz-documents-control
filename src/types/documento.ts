@@ -18,6 +18,8 @@ export interface DocumentFilters {
 }
 
 export interface DocumentListItem extends RuralDocument {
+  documentTypeId: string;
+  version: number;
   farmName: string;
   farmLocation: string;
   registrationNumber?: string;
@@ -30,10 +32,12 @@ export interface DocumentSummaryViewModel { total: number; active: number; expir
 export interface DocumentListResponse { records: DocumentListItem[]; total: number; page: number; pageSize: number; totalPages: number; summary: DocumentSummaryViewModel; }
 export interface DocumentDetailsViewModel { document: DocumentListItem; farm?: Farm; registration?: Registration; attachments: DocumentAttachment[]; }
 export interface DocumentOption { id: string; label: string; farmId?: string; }
+export interface DocumentTypeOption { id: string; label: string; requiresExpiration?: boolean; }
 
 export interface DocumentDraft {
   farmId: string;
   registrationId?: string;
+  documentTypeId: string;
   type: string;
   number?: string;
   exercise?: string;
@@ -47,5 +51,4 @@ export interface DocumentDraft {
   notes?: string;
 }
 
-export interface AttachmentDraft { fileName: string; filePath: string; fileType?: string; fileSize?: number; }
-
+export interface AttachmentDraft { fileName: string; filePath: string; storageType: "network_share" | "supabase_storage" | "external"; fileType?: string; fileSize?: number; }

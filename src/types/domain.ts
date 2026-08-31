@@ -98,6 +98,7 @@ export interface GuaranteeItem {
 
 export interface RuralDocument {
   id: string;
+  documentTypeId?: string;
   farmId: string;
   registrationId?: string;
   type: string;
@@ -124,6 +125,9 @@ export interface DocumentAttachment {
   filePath: string;
   fileType?: string;
   fileSize?: number;
+  storageType?: "network_share" | "supabase_storage" | "external";
+  status?: "active" | "inactive";
+  version?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,9 +137,11 @@ export interface CarRecord {
   farmId: string;
   registrationId?: string;
   ownerId?: string;
+  declaredOwnerName?: string;
   number: string;
   receiptNumber?: string;
   status: "active" | "pending" | "inactive";
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
