@@ -4,11 +4,12 @@ import { LockClosed20Regular, Mail20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../contexts/AuthContext";
 
 export function LoginPage() {
-  const { signIn, loading, error: authError } = useAuth();
+  const { signIn, requestPasswordReset, loading, error: authError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string>();
   const [informational, setInformational] = useState(false);
+  const [mode, setMode] = useState<"login" | "recovery" | "recovery-sent">("login");
 
   useEffect(() => {
     if (authError) {
@@ -25,6 +26,13 @@ export function LoginPage() {
     if (!result.success) setMessage(result.error);
   };
 
+  const requestRecovery = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setMessage(undefined);
+    await requestPasswordReset(email);
+    setMode("recovery-sent");
+  };
+
   return (
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
@@ -34,9 +42,15 @@ export function LoginPage() {
         </div>
         <div className="login-panel__content">
           <header>
-            <span className="login-panel__eyebrow">Acesso seguro</span>
-            <h1 id="login-title">Entrar no sistema</h1>
-            <p>Informe suas credenciais para acessar o ambiente de gestão.</p>
+            <span className="login-panel__eyebrow">{mode === "login" ? "Acesso seguro" : "Recuperação de acesso"}</span>
+            <h1 id="login-title">{mode === "login" ? "Entrar no sistema" : mode === "recovery" ? "Recuperar senha" : "Verifique seu e-mail"}</h1>
+            <p>
+              {mode === "login"
+                ? "Informe suas credenciais para acessar o ambiente de gestão."
+                : mode === "recovery"
+                  ? "Informe seu e-mail para receber as instruções de redefinição."
+                  : "Se houver uma conta correspondente, enviaremos um link seguro de redefinição."}
+            </p>
           </header>
 
           {message ? (
@@ -45,39 +59,53 @@ export function LoginPage() {
             </MessageBar>
           ) : null}
 
-          <form className="login-form" onSubmit={(event) => void submit(event)}>
-            <Field label="E-mail" required>
-              <Input
-                type="email"
-                autoComplete="email"
-                contentBefore={<Mail20Regular />}
-                value={email}
-                onChange={(_, data) => setEmail(data.value)}
-              />
-            </Field>
-            <Field label="Senha" required>
-              <Input
-                type="password"
-                autoComplete="current-password"
-                contentBefore={<LockClosed20Regular />}
-                value={password}
-                onChange={(_, data) => setPassword(data.value)}
-              />
-            </Field>
-            <Button type="submit" appearance="primary" size="large" disabled={loading || !email.trim() || !password}>
-              {loading ? <Spinner size="tiny" label="Entrando" /> : "Entrar"}
-            </Button>
-            <Button
-              type="button"
-              appearance="subtle"
-              onClick={() => {
-                setInformational(true);
-                setMessage("A recuperação de senha será habilitada após a configuração do serviço de e-mail.");
-              }}
-            >
-              Esqueci minha senha
-            </Button>
-          </form>
+          {mode === "recovery-sent" ? (
+            <div className="password-reset-success">
+              <MessageBar intent="success">
+                <MessageBarBody>Confira sua caixa de entrada e siga o link enviado.</MessageBarBody>
+              </MessageBar>
+              <Button appearance="primary" size="large" onClick={() => { setMode("login"); setMessage(undefined); }}>
+                Voltar ao login
+              </Button>
+            </div>
+          ) : (
+            <form className="login-form" onSubmit={(event) => void (mode === "login" ? submit(event) : requestRecovery(event))}>
+              <Field label="E-mail" required>
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  contentBefore={<Mail20Regular />}
+                  value={email}
+                  onChange={(_, data) => setEmail(data.value)}
+                />
+              </Field>
+              {mode === "login" ? (
+                <Field label="Senha" required>
+                  <Input
+                    type="password"
+                    autoComplete="current-password"
+                    contentBefore={<LockClosed20Regular />}
+                    value={password}
+                    onChange={(_, data) => setPassword(data.value)}
+                  />
+                </Field>
+              ) : null}
+              <Button type="submit" appearance="primary" size="large" disabled={loading || !email.trim() || (mode === "login" && !password)}>
+                {loading ? <Spinner size="tiny" label={mode === "login" ? "Entrando" : "Enviando"} /> : mode === "login" ? "Entrar" : "Enviar link de recuperação"}
+              </Button>
+              <Button
+                type="button"
+                appearance="subtle"
+                onClick={() => {
+                  setMessage(undefined);
+                  setInformational(false);
+                  setMode(mode === "login" ? "recovery" : "login");
+                }}
+              >
+                {mode === "login" ? "Esqueci minha senha" : "Voltar ao login"}
+              </Button>
+            </form>
+          )}
         </div>
         <footer>Autenticação protegida pelo ambiente Supabase configurado.</footer>
       </section>

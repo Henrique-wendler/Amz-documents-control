@@ -27,6 +27,8 @@ import { DocumentosPage } from "./pages/DocumentosPage";
 import { CarPage } from "./pages/CarPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MfaPage } from "./pages/MfaPage";
+import { PasswordResetPage } from "./pages/PasswordResetPage";
 import { useAuth } from "./contexts/AuthContext";
 
 type DialogState =
@@ -75,7 +77,7 @@ const emptyItem: GuaranteeItemFormModel = {
 };
 
 export default function App() {
-  const { session, profile, loading: authLoading } = useAuth();
+  const { session, profile, stage: authStage, loading: authLoading } = useAuth();
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname.replace(/\/+$/, "") || "/");
   const [data, setData] = useState<AppData>();
   const [operation, setOperation] = useState<OperationFormModel>(emptyOperation);
@@ -122,16 +124,19 @@ export default function App() {
 
   useEffect(() => {
     if (authLoading) return;
-    const authenticated = Boolean(session && profile);
-    const nextPath = authenticated
-      ? currentPath === "/login" ? "/dashboard" : currentPath
-      : "/login";
+    const nextPath = authStage === "authenticated"
+      ? ["/login", "/mfa", "/redefinir-senha"].includes(currentPath) ? "/dashboard" : currentPath
+      : authStage === "mfa_enrollment" || authStage === "mfa_challenge"
+        ? "/mfa"
+        : authStage === "password_recovery"
+          ? "/redefinir-senha"
+          : "/login";
 
     if (nextPath !== currentPath) {
       window.history.replaceState({}, "", nextPath);
       setCurrentPath(nextPath);
     }
-  }, [authLoading, currentPath, profile, session]);
+  }, [authLoading, authStage, currentPath]);
 
   const navigate = (path: string) => {
     const targetPath = new URL(path, window.location.origin).pathname.replace(/\/+$/, "") || "/";
@@ -146,16 +151,24 @@ export default function App() {
     [data],
   );
 
-  if (authLoading) {
+  if (authStage === "initializing") {
     return <div className="loading-screen"><Spinner label="Validando acesso…" /></div>;
   }
 
-  if (!session || !profile) {
+  if (authStage === "signed_out") {
     return <LoginPage />;
   }
 
-  if (currentPath === "/login") {
-    return <div className="loading-screen"><Spinner label="Abrindo o sistema…" /></div>;
+  if (authStage === "mfa_enrollment" || authStage === "mfa_challenge") {
+    return <MfaPage />;
+  }
+
+  if (authStage === "password_recovery") {
+    return <PasswordResetPage />;
+  }
+
+  if (authStage !== "authenticated" || !session || !profile || ["/login", "/mfa", "/redefinir-senha"].includes(currentPath)) {
+    return <div className="loading-screen"><Spinner label="Validando acesso…" /></div>;
   }
 
   if (currentPath === "/dashboard") {
