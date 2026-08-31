@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import type { DocumentValidityStatus } from "../types/domain";
 import type { DocumentRepository, DocumentRepositoryInput, PersistedDocument } from "./documentRepository";
 import { DocumentConcurrencyError } from "./documentRepository";
+import { toPostgresDate } from "./civilDate";
 
 interface DocumentRow {
   id: string; farm_id: string; registration_id: string | null; document_type_id: string; document_number: string | null;
@@ -21,7 +22,7 @@ const mapRow = (row: DocumentRow, documentTypeName = "Tipo não encontrado"): Pe
   status: row.status, notes: row.notes ?? undefined, createdAt: formatTimestamp(row.created_at), updatedAt: formatTimestamp(row.updated_at),
   version: row.version, validityStatus: row.validity_status,
 });
-const mapInput = (input: DocumentRepositoryInput) => ({ farm_id: input.farmId, registration_id: input.registrationId ?? null, document_type_id: input.documentTypeId, document_number: input.documentNumber || null, exercise_year: input.exerciseYear ?? null, issue_date: input.issueDate || null, expiration_date: input.expirationDate || null, purpose: input.purpose || null, licensed_area: input.licensedArea ?? null, sigam_status: input.sigamStatus || null, status: input.status, notes: input.notes || null });
+const mapInput = (input: DocumentRepositoryInput) => ({ farm_id: input.farmId, registration_id: input.registrationId ?? null, document_type_id: input.documentTypeId, document_number: input.documentNumber || null, exercise_year: input.exerciseYear ?? null, issue_date: toPostgresDate(input.issueDate), expiration_date: toPostgresDate(input.expirationDate), purpose: input.purpose || null, licensed_area: input.licensedArea ?? null, sigam_status: input.sigamStatus || null, status: input.status, notes: input.notes || null });
 const friendlyError = (error: PostgrestError, fallback: string) => {
   if (error.code === "23503") return new Error("A Fazenda, Matrícula ou tipo documental informado não está disponível para esta organização.");
   if (error.code === "23514") return new Error("Revise as datas e áreas informadas para o documento.");

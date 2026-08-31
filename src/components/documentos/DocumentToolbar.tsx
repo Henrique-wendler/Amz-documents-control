@@ -4,10 +4,10 @@ import { Add20Regular, Filter20Regular, Search20Regular } from "@fluentui/react-
 import type { DocumentFilters, DocumentOption } from "../../types/documento";
 import { documentValidityLabels } from "../../services/statusLabels";
 
-interface Props { query: string; value: DocumentFilters; types: string[]; farms: DocumentOption[]; registrations: DocumentOption[]; hasActiveFilters: boolean; onQueryChange: (value: string) => void; onChange: React.Dispatch<React.SetStateAction<DocumentFilters>>; onClear: () => void; onNew: () => void; }
+interface Props { query: string; value: DocumentFilters; types: string[]; farms: DocumentOption[]; registrations: DocumentOption[]; hasActiveFilters: boolean; canCreate: boolean; onQueryChange: (value: string) => void; onChange: React.Dispatch<React.SetStateAction<DocumentFilters>>; onClear: () => void; onNew: () => void; }
 const labelFor = (options: DocumentOption[], id: string, fallback: string) => options.find((item) => item.id === id)?.label ?? fallback;
 
-export function DocumentToolbar({ query, value, types, farms, registrations, hasActiveFilters, onQueryChange, onChange, onClear, onNew }: Props) {
+export function DocumentToolbar({ query, value, types, farms, registrations, hasActiveFilters, canCreate, onQueryChange, onChange, onClear, onNew }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const set = <K extends keyof DocumentFilters>(key: K, next: DocumentFilters[K]) => onChange((current) => ({ ...current, [key]: next, page: 1 }));
   return <div className="document-toolbar">
@@ -22,6 +22,6 @@ export function DocumentToolbar({ query, value, types, farms, registrations, has
       <Field label="Arquivos"><Dropdown value={{ all: "Todos", with: "Com arquivo", without: "Sem arquivo" }[value.attachmentRelation]} selectedOptions={[value.attachmentRelation]} onOptionSelect={(_, data) => set("attachmentRelation", (data.optionValue ?? "all") as DocumentFilters["attachmentRelation"])}><Option value="all">Todos</Option><Option value="with">Com arquivo</Option><Option value="without">Sem arquivo</Option></Dropdown></Field>
       <Field label="Vencimento"><Dropdown value={value.expirationWindow === "all" ? "Qualquer data" : `Próximos ${value.expirationWindow} dias`} selectedOptions={[value.expirationWindow]} onOptionSelect={(_, data) => set("expirationWindow", (data.optionValue ?? "all") as DocumentFilters["expirationWindow"])}><Option value="all">Qualquer data</Option><Option value="30">Próximos 30 dias</Option><Option value="60">Próximos 60 dias</Option><Option value="90">Próximos 90 dias</Option></Dropdown></Field>
     </div><Button appearance="subtle" disabled={!hasActiveFilters} onClick={() => { onClear(); setAdvancedOpen(false); }}>Limpar todos os filtros</Button></PopoverSurface></Popover>
-    <Button className="document-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Novo documento</Button>
+    {canCreate ? <Button className="document-toolbar__new" appearance="primary" icon={<Add20Regular />} onClick={onNew}>Novo documento</Button> : null}
   </div>;
 }

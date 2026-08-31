@@ -2,6 +2,8 @@ import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
 import { supabaseOwnerRepository } from "../repositories/supabaseOwnerRepository";
 import { supabaseOwnershipRepository } from "../repositories/supabaseOwnershipRepository";
 import { supabaseRegistrationRepository } from "../repositories/supabaseRegistrationRepository";
+import { supabaseDocumentRepository } from "../repositories/supabaseDocumentRepository";
+import { supabaseCarRepository } from "../repositories/supabaseCarRepository";
 import type { PersistedFarm } from "../repositories/farmRepository";
 import type { FarmDetailsViewModel, FarmDraft, FarmFilters, FarmListItem, FarmListResponse, FarmLoadMode, FarmSummary } from "../types/fazenda";
 import { normalizeSearchText } from "./searchUtils";
@@ -28,7 +30,7 @@ const summaryFrom = (farms: FarmListItem[]): FarmSummary => ({
 });
 
 const buildItems = async (farms: PersistedFarm[]): Promise<FarmListItem[]> => {
-  const registrations = await supabaseRegistrationRepository.list();
+  const [registrations, documents, cars] = await Promise.all([supabaseRegistrationRepository.list(), supabaseDocumentRepository.list(), supabaseCarRepository.list()]);
   const registrationIds = new Set(registrations.map((registration) => registration.id));
   const links = (await supabaseOwnershipRepository.list()).filter((link) => registrationIds.has(link.registrationId));
 
@@ -42,8 +44,8 @@ const buildItems = async (farms: PersistedFarm[]): Promise<FarmListItem[]> => {
       ownerCount: ownerIds.size,
       activeOperationCount: 0,
       operationCount: 0,
-      documentCount: 0,
-      carCount: 0,
+      documentCount: documents.filter((document) => document.farmId === farm.id).length,
+      carCount: cars.filter((car) => car.farmId === farm.id).length,
     };
   });
 };
@@ -91,7 +93,7 @@ export const farmService = {
   async getDetails(id: string): Promise<FarmDetailsViewModel | undefined> {
     const farm = await supabaseFarmRepository.getById(id);
     if (!farm) return undefined;
-    const registrations = await supabaseRegistrationRepository.listByFarm(id);
+    const [registrations, documents, cars] = await Promise.all([supabaseRegistrationRepository.listByFarm(id), supabaseDocumentRepository.listByFarm(id), supabaseCarRepository.listByFarm(id)]);
     const registrationIds = new Set(registrations.map((registration) => registration.id));
     const links = (await supabaseOwnershipRepository.list()).filter((link) => link.status === "active" && registrationIds.has(link.registrationId));
     const ownerIds = new Set(links.map((link) => link.ownerId));
@@ -101,8 +103,8 @@ export const farmService = {
       registrations,
       owners,
       operations: [],
-      documents: [],
-      cars: [],
+      documents,
+      cars,
     };
   },
 

@@ -2082,6 +2082,7 @@ textarea {
 
 .registration-farm-card,
 .registration-detail-list > div,
+.registration-detail-list > button,
 .registration-ownership-list > div {
   display: flex;
   min-width: 0;
@@ -2102,8 +2103,17 @@ button.registration-farm-card {
   cursor: pointer;
 }
 
+.registration-detail-list > button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .registration-farm-card > span,
 .registration-detail-list > div > span:first-child,
+.registration-detail-list > button > span:first-child,
 .registration-ownership-list > div > span:first-child,
 .registration-ownership-list > div > button:first-child {
   display: grid;
@@ -2130,6 +2140,21 @@ button.registration-farm-card {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.drawer-inline-link {
+  padding: 0;
+  color: #185c37;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.drawer-inline-link:hover {
+  text-decoration: underline;
 }
 
 .registration-farm-card strong,

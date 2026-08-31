@@ -6,7 +6,11 @@ import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
 import { supabaseOwnerRepository } from "../repositories/supabaseOwnerRepository";
 import { supabaseOwnershipRepository } from "../repositories/supabaseOwnershipRepository";
 import { supabaseRegistrationRepository } from "../repositories/supabaseRegistrationRepository";
-import { formatArea } from "./searchUtils";
+import { supabaseDocumentRepository } from "../repositories/supabaseDocumentRepository";
+import { supabaseDocumentAttachmentRepository } from "../repositories/supabaseDocumentAttachmentRepository";
+import { supabaseCarRepository } from "../repositories/supabaseCarRepository";
+import { formatArea, formatIsoDate } from "./searchUtils";
+import { carStatusLabels, documentValidityLabels } from "./statusLabels";
 
 export { normalizeSearchText } from "./searchUtils";
 
@@ -40,11 +44,14 @@ const sortRecords = (records: SearchRecord[], sort: SearchFilters["sort"]) => [.
 });
 
 const coreRecords = async (): Promise<SearchRecord[]> => {
-  const [owners, farms, registrations, links] = await Promise.all([
+  const [owners, farms, registrations, links, documents, cars, attachments] = await Promise.all([
     supabaseOwnerRepository.listAll(),
     supabaseFarmRepository.list(),
     supabaseRegistrationRepository.list(),
     supabaseOwnershipRepository.list(),
+    supabaseDocumentRepository.list(),
+    supabaseCarRepository.list(),
+    supabaseDocumentAttachmentRepository.list().catch(() => []),
   ]);
   const farmById = new Map(farms.map((farm) => [farm.id, farm]));
   const registrationsByFarm = new Map<string, typeof registrations>();
@@ -76,11 +83,22 @@ const coreRecords = async (): Promise<SearchRecord[]> => {
     const ownerIds = new Set((linksByRegistration.get(registration.id) ?? []).filter((link) => link.status === "active").map((link) => link.ownerId));
     return { id: registration.id, entityType: "registration", title: registration.number, reference: farm?.name ?? "—", details: `Área legal: ${formatArea(registration.legalArea ?? 0)}`, status: registration.status === "active" ? "Ativa" : "Inativa", updatedAt: registration.updatedAt, farmId: farm?.id, farmName: farm?.name, attributes: { farm: farm?.name ?? "—", legalArea: formatArea(registration.legalArea ?? 0), hp: "Pendente de definição", certificateDate: registration.certificateDate ?? "—" }, relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Proprietários", value: String(ownerIds.size) }], openPath: `/matriculas?open=${registration.id}` };
   });
-  return [...ownerRecords, ...farmRecords, ...registrationRecords];
+  const documentRecords: SearchRecord[] = documents.map((document) => {
+    const farm = farmById.get(document.farmId);
+    const registration = document.registrationId ? registrations.find((item) => item.id === document.registrationId) : undefined;
+    const attachmentCount = attachments.filter((attachment) => attachment.documentId === document.id).length;
+    return { id: document.id, entityType: "document", title: document.type, reference: farm?.name ?? "—", details: document.expirationDate ? `Vencimento ${formatIsoDate(document.expirationDate)}` : "Sem validade informada", status: documentValidityLabels[document.validityStatus], updatedAt: document.updatedAt, farmId: farm?.id, farmName: farm?.name, attributes: { number: document.number ?? "—", farm: farm?.name ?? "—", issuedAt: formatIsoDate(document.issueDate), validUntil: formatIsoDate(document.expirationDate), documentType: document.type }, relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Arquivos", value: attachmentCount === 0 ? "Nenhum arquivo" : `${attachmentCount} ${attachmentCount === 1 ? "arquivo" : "arquivos"}` }], openPath: `/documentos?open=${document.id}` };
+  });
+  const carRecords: SearchRecord[] = cars.map((car) => {
+    const farm = farmById.get(car.farmId);
+    const registration = car.registrationId ? registrations.find((item) => item.id === car.registrationId) : undefined;
+    return { id: car.id, entityType: "car", title: car.number, reference: farm?.name ?? "—", details: `Recibo ${car.receiptNumber ?? "—"}`, status: carStatusLabels[car.status], updatedAt: car.updatedAt, farmId: farm?.id, farmName: farm?.name, attributes: { farm: farm?.name ?? "—", registration: registration?.number ?? "—", owner: car.declaredOwnerName ?? "—", receipt: car.receiptNumber ?? "—" }, relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Proprietário declarado", value: car.declaredOwnerName ?? "—" }], openPath: `/car?open=${car.id}` };
+  });
+  return [...ownerRecords, ...farmRecords, ...registrationRecords, ...documentRecords, ...carRecords];
 };
 
 const records = async () => {
-  const mockRecords = buildSearchRecords(mockStore.getState()).filter((record) => !["owner", "farm", "registration"].includes(record.entityType));
+  const mockRecords = buildSearchRecords(mockStore.getState()).filter((record) => !["owner", "farm", "registration", "document", "car"].includes(record.entityType));
   return [...await coreRecords(), ...mockRecords];
 };
 

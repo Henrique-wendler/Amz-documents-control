@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas e OwnershipLinks. Os demais módulos permanecem temporariamente no MockStore.
+> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos e CAR. Os demais módulos permanecem temporariamente no MockStore.
 
 ## Visão geral
 
@@ -14,10 +14,10 @@ Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Se
 
 | Fonte atual | Escopo |
 |---|---|
-| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas e OwnershipLinks |
-| MockStore | Documentos, CAR, Operações, Garantias, Relatórios e partes dependentes de Consulta Geral/Dashboard |
+| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos e CAR |
+| MockStore | Operações, Garantias, Relatórios e partes dependentes de Consulta Geral/Dashboard |
 
-Não existe dual-write. Consulta Geral e Dashboard só consomem dados Supabase nas partes imobiliárias cuja integração já é segura; dependências dos módulos restantes continuam no MockStore até sua migração explícita.
+Não existe dual-write. Consulta Geral consome do Supabase as categorias imobiliárias, Documentos e CAR; Operações e Garantias continuam no MockStore. O Dashboard permanece híbrido enquanto suas demais fontes não forem migradas.
 
 ## Migrations e dependências
 
@@ -132,7 +132,7 @@ Triggers gravam INSERT/UPDATE/INACTIVATE/CLOSE/CANCEL/SOFT_DELETE/RESTORE em `au
 
 ## Navegação por IDs
 
-Os módulos imobiliários migrados usam deep links por UUID (`/fazendas?open=<uuid>`, `/matriculas?open=<uuid>` e `/proprietarios?open=<uuid>`). Deep links dos demais módulos serão consolidados durante suas respectivas migrações. Conhecer o UUID não concede acesso: RLS continua obrigatório.
+Os módulos migrados usam deep links por UUID (`/fazendas?open=<uuid>`, `/matriculas?open=<uuid>`, `/proprietarios?open=<uuid>`, `/documentos?open=<uuid>` e `/car?open=<uuid>`). Deep links dos demais módulos serão consolidados durante suas respectivas migrações. Conhecer o UUID não concede acesso: RLS continua obrigatório.
 
 ## Ambientes e recuperação
 

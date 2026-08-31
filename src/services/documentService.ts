@@ -41,9 +41,9 @@ export const documentService = {
     const totalPages = Math.max(1, Math.ceil(filtered.length / filters.pageSize)); const page = Math.min(filters.page, totalPages); const start = (page - 1) * filters.pageSize;
     return { records: filtered.slice(start, start + filters.pageSize), total: filtered.length, page, pageSize: filters.pageSize, totalPages, summary: buildSummary(source) };
   },
-  async getDetails(id: string): Promise<DocumentDetailsViewModel> {
+  async getDetails(id: string, includeAttachments = true): Promise<DocumentDetailsViewModel> {
     const document = await supabaseDocumentRepository.getById(id); if (!document) throw new Error("Documento não encontrado.");
-    const [farm, registration, attachments] = await Promise.all([supabaseFarmRepository.getById(document.farmId), document.registrationId ? supabaseRegistrationRepository.getById(document.registrationId) : Promise.resolve(undefined), supabaseDocumentAttachmentRepository.listByDocument(id)]);
+    const [farm, registration, attachments] = await Promise.all([supabaseFarmRepository.getById(document.farmId), document.registrationId ? supabaseRegistrationRepository.getById(document.registrationId) : Promise.resolve(undefined), includeAttachments ? supabaseDocumentAttachmentRepository.listByDocument(id) : Promise.resolve([])]);
     return { document: toListItem(document, farm?.name ?? "Fazenda não encontrada", farm ? `${farm.municipality} / ${farm.state}` : "—", registration?.number, attachments.length), farm, registration, attachments };
   },
   async create(draft: DocumentDraft) { await validateDraft(draft); return supabaseDocumentRepository.create(toInput(draft)); },
