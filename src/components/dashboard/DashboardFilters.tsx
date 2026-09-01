@@ -38,12 +38,12 @@ export function DashboardFilters({ value, onChange, farms }: DashboardFiltersPro
       <Field label="Fazenda">
         <Dropdown
           size="small"
-          value={value.farm}
+          value={value.farm === "all" ? "Todas as fazendas" : farms.find((farm) => farm.id === value.farm)?.name ?? "Todas as fazendas"}
           selectedOptions={[value.farm]}
           onOptionSelect={(_, data) => onChange({ ...value, farm: data.optionValue ?? value.farm })}
         >
-          <Option value="Todas as fazendas">Todas as fazendas</Option>
-          {farms.map((farm) => <Option key={farm.id} value={farm.name}>{farm.name}</Option>)}
+          <Option value="all">Todas as fazendas</Option>
+          {farms.map((farm) => <Option key={farm.id} value={farm.id}>{farm.name}</Option>)}
         </Dropdown>
       </Field>
     </section>

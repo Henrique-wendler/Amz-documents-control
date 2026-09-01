@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias e itens de garantia. Dashboard e Relatórios permanecem temporariamente no MockStore.
+> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral e Dashboard. Relatórios permanece temporariamente no MockStore.
 
 ## Visão geral
 
@@ -14,10 +14,10 @@ Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Se
 
 | Fonte atual | Escopo |
 |---|---|
-| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias e itens de garantia |
-| MockStore | Dashboard e Relatórios |
+| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral e Dashboard |
+| MockStore | Relatórios |
 
-Não existe dual-write. Consulta Geral e os Drawers imobiliários consomem também as relações reais de Operações e Garantias. Dashboard e Relatórios continuam isolados no MockStore até suas migrações específicas.
+Não existe dual-write. Consulta Geral, Dashboard e os Drawers imobiliários consomem as entidades e relações reais. O Dashboard deriva seus KPIs em uma camada agregadora de repositories com consultas paralelas; valores financeiros só são consultados quando `financial.read` está presente. Relatórios continua isolado no MockStore até sua migração específica.
 
 ## Migrations e dependências
 
@@ -135,7 +135,7 @@ Triggers gravam INSERT/UPDATE/INACTIVATE/CLOSE/CANCEL/SOFT_DELETE/RESTORE em `au
 
 ## Navegação por IDs
 
-Os módulos migrados usam deep links por UUID (`/fazendas?open=<uuid>`, `/matriculas?open=<uuid>`, `/proprietarios?open=<uuid>`, `/documentos?open=<uuid>` e `/car?open=<uuid>`). Deep links dos demais módulos serão consolidados durante suas respectivas migrações. Conhecer o UUID não concede acesso: RLS continua obrigatório.
+Os módulos migrados usam deep links por UUID (`/fazendas?open=<uuid>`, `/matriculas?open=<uuid>`, `/proprietarios?open=<uuid>`, `/documentos?open=<uuid>`, `/car?open=<uuid>` e Operações/Garantias pelos parâmetros `id`/`garantia`). Conhecer o UUID não concede acesso: RLS continua obrigatório.
 
 ## Ambientes e recuperação
 

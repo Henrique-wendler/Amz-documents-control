@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
   Toast,
@@ -20,6 +20,7 @@ import { RecentActivity } from "../components/dashboard/RecentActivity";
 import { DashboardLoadingState, DashboardMessageState } from "../components/dashboard/DashboardState";
 import { dashboardService } from "../services/dashboardService";
 import type { DashboardData, DashboardFilters as DashboardFiltersValue, DashboardLoadMode } from "../types/dashboard";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface DashboardPageProps {
   onNavigate: (path: string) => void;
@@ -28,7 +29,7 @@ interface DashboardPageProps {
 const initialFilters: DashboardFiltersValue = {
   period: "Últimos 30 dias",
   status: "Todas",
-  farm: "Todas as fazendas",
+  farm: "all",
 };
 
 const getLoadMode = (): DashboardLoadMode => {
@@ -37,11 +38,15 @@ const getLoadMode = (): DashboardLoadMode => {
 };
 
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const { hasPermission } = usePermissions();
+  const canReadFinancial = hasPermission("financial.read");
+  const canReadAudit = hasPermission("audit.read");
   const [data, setData] = useState<DashboardData>();
   const [filters, setFilters] = useState(initialFilters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [farms, setFarms] = useState<Array<{ id: string; name: string }>>([]);
+  const requestId = useRef(0);
   const toasterId = "dashboard-feedback";
   const { dispatchToast } = useToastController(toasterId);
 
@@ -50,24 +55,30 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   }, [dispatchToast]);
 
   const loadDashboard = useCallback(async (showFeedback = false) => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError(false);
     try {
-      const loaded = await dashboardService.getSummary(getLoadMode());
+      const loaded = await dashboardService.getSummary(filters, { readFinancial: canReadFinancial, readAudit: canReadAudit }, getLoadMode());
+      if (currentRequest !== requestId.current) return;
       setData(loaded);
       if (showFeedback) notify("Dados atualizados.");
     } catch {
+      if (currentRequest !== requestId.current) return;
       setError(true);
       setData(undefined);
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
-  }, [notify]);
+  }, [canReadAudit, canReadFinancial, filters, notify]);
 
   useEffect(() => {
     void loadDashboard();
-    void dashboardService.getFarmOptions().then(setFarms);
   }, [loadDashboard]);
+
+  useEffect(() => {
+    void dashboardService.getFarmOptions().then(setFarms).catch(() => setFarms([]));
+  }, []);
 
   const isEmpty = data ? data.kpis.length === 0 : false;
 
@@ -111,7 +122,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                       appearance="subtle"
                       size="small"
                       icon={<DocumentBulletList20Regular />}
-                      onClick={() => notify("A consulta de documentos será aberta nesta área.")}
+                      onClick={() => onNavigate("/documentos")}
                     >
                       Ver documentos
                     </Button>

@@ -1,6 +1,6 @@
 import { Button, Dropdown, Field, Option } from "@fluentui/react-components";
 import { Dismiss20Regular } from "@fluentui/react-icons";
-import type { SearchCategory, SearchFilters as SearchFiltersValue } from "../../types/consulta";
+import type { SearchCategory, SearchFilterOptions, SearchFilters as SearchFiltersValue } from "../../types/consulta";
 import { searchStatusLabels } from "../../services/statusLabels";
 import { AdvancedFilters } from "./AdvancedFilters";
 
@@ -12,7 +12,7 @@ interface SearchFiltersProps {
   onChange: (value: SearchFiltersValue) => void;
   onClear: () => void;
   onClearAdvanced: () => void;
-  farms: Array<{ id: string; label: string }>;
+  options: SearchFilterOptions;
 }
 
 export function SearchFilters({
@@ -23,7 +23,7 @@ export function SearchFilters({
   onChange,
   onClear,
   onClearAdvanced,
-  farms,
+  options,
 }: SearchFiltersProps) {
   const showFarm = category !== "owner";
   return (
@@ -43,12 +43,12 @@ export function SearchFilters({
         <Field className="consulta-filters__farm" label="Fazenda">
           <Dropdown
             size="small"
-            value={value.farmId ? farms.find((farm) => farm.id === value.farmId)?.label : "Todas as fazendas"}
+            value={value.farmId ? options.farms.find((farm) => farm.id === value.farmId)?.label : "Todas as fazendas"}
             selectedOptions={value.farmId ? [value.farmId] : []}
             onOptionSelect={(_, data) => onChange({ ...value, farmId: data.optionValue === "all" ? "" : (data.optionValue ?? ""), page: 1 })}
           >
             <Option value="all">Todas as fazendas</Option>
-            {farms.map((farm) => <Option value={farm.id} key={farm.id}>{farm.label}</Option>)}
+            {options.farms.map((farm) => <Option value={farm.id} key={farm.id}>{farm.label}</Option>)}
           </Dropdown>
         </Field>
       ) : null}
@@ -57,6 +57,7 @@ export function SearchFilters({
         category={category}
         filters={value}
         activeCount={advancedCount}
+        options={options}
         onApply={(filters) => onChange({ ...filters, page: 1 })}
         onClear={onClearAdvanced}
       />

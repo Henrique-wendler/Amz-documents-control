@@ -13,6 +13,7 @@ import { consultaService } from "../services/consultaService";
 import type {
   SearchCategory,
   SearchCounts,
+  SearchFilterOptions,
   SearchFilters as SearchFiltersValue,
   SearchLoadMode,
   SearchRecord,
@@ -53,6 +54,10 @@ const advancedKeys: Array<keyof SearchFiltersValue> = [
   "expiration",
 ];
 
+const emptyFilterOptions: SearchFilterOptions = {
+  farms: [], municipalities: [], states: [], banks: [], guaranteeTypes: [], documentTypes: [], valueRanges: [],
+};
+
 const getLoadMode = (): SearchLoadMode => new URLSearchParams(window.location.search).get("state") === "error" ? "error" : "success";
 
 export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
@@ -62,7 +67,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
   const [filters, setFilters] = useState(initialFilters);
   const [response, setResponse] = useState<SearchResponse>();
   const [counts, setCounts] = useState<SearchCounts>();
-  const [farms, setFarms] = useState<Array<{ id: string; label: string }>>([]);
+  const [filterOptions, setFilterOptions] = useState<SearchFilterOptions>(emptyFilterOptions);
   const [selectedRecord, setSelectedRecord] = useState<SearchRecord>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -74,16 +79,16 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
     dispatchToast(<Toast><ToastTitle>{message}</ToastTitle></Toast>, { intent: "success", timeout: 2800 });
   }, [dispatchToast]);
 
-  const loadCounts = useCallback(async () => setCounts(await consultaService.getCounts(canReadFinancial)), [canReadFinancial]);
-
   const search = useCallback(async (nextFilters: SearchFiltersValue, showFeedback = false) => {
     const currentRequest = ++requestId.current;
     setLoading(true);
     setError(false);
     try {
-      const nextResponse = await consultaService.search(nextFilters, getLoadMode(), canReadFinancial);
+      const loaded = await consultaService.load(nextFilters, getLoadMode(), canReadFinancial);
       if (currentRequest !== requestId.current) return;
-      setResponse(nextResponse);
+      setResponse(loaded.response);
+      setCounts(loaded.counts);
+      setFilterOptions(loaded.options);
       if (showFeedback) notify("Dados atualizados.");
     } catch {
       if (currentRequest !== requestId.current) return;
@@ -93,11 +98,6 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
       if (currentRequest === requestId.current) setLoading(false);
     }
   }, [canReadFinancial, notify]);
-
-  useEffect(() => {
-    void loadCounts();
-    void consultaService.getFarmOptions().then(setFarms);
-  }, [loadCounts]);
 
   useEffect(() => {
     void search(filters);
@@ -186,7 +186,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
           title="Consulta Geral"
           subtitle="Localize rapidamente informações em todos os cadastros"
           refreshing={loading}
-          onRefresh={() => { void loadCounts(); void search(filters, true); }}
+          onRefresh={() => void search(filters, true)}
         />
         <main className="main-content consulta-content">
           <section className="section-card consulta-search-panel" aria-label="Pesquisa e filtros">
@@ -196,7 +196,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
               <SearchFilters
                 category={filters.category}
                 value={filters}
-                farms={farms}
+                options={filterOptions}
                 hasActiveFilters={hasActiveFilters}
                 advancedCount={advancedCount}
                 onChange={setFilters}
@@ -241,7 +241,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
         open={Boolean(selectedRecord)}
         onClose={() => setSelectedRecord(undefined)}
         onOpenRecord={openRecord}
-        onRelation={(message) => notify(`${message}. A navegação será conectada em uma próxima etapa.`)}
+        onRelation={notify}
       />
       <Toaster toasterId={toasterId} position="top-end" />
     </div>

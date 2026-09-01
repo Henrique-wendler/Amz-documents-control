@@ -1,4 +1,4 @@
-import type { SearchCategory, SearchCounts, SearchFilters, SearchLoadMode, SearchRecord, SearchResponse } from "../types/consulta";
+import type { SearchCategory, SearchCounts, SearchFilterOptions, SearchFilters, SearchLoadMode, SearchLoadResult, SearchRecord, SearchResponse } from "../types/consulta";
 import { normalizeSearchText } from "./searchUtils";
 import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
 import { supabaseOwnerRepository } from "../repositories/supabaseOwnerRepository";
@@ -13,10 +13,9 @@ import { operationService } from "./operationService";
 
 export { normalizeSearchText } from "./searchUtils";
 
-const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
-
 const matchesValueRange = (record: SearchRecord, valueRange: string) => {
-  if (!valueRange || !record.attributes.value) return true;
+  if (!valueRange) return true;
+  if (!record.attributes.value) return false;
   const value = Number(record.attributes.value.replace(/[^\d,]/g, "").replace(",", "."));
   if (valueRange === "Até R$ 300 mil") return value <= 300000;
   if (valueRange === "R$ 300 mil a R$ 700 mil") return value > 300000 && value <= 700000;
@@ -27,7 +26,7 @@ const matchesExpiration = (record: SearchRecord, expiration: string) => {
   if (!expiration) return true;
   if (expiration === "A vencer") return record.status === "A vencer";
   if (expiration === "Vencidos") return record.status === "Vencido";
-  return record.status === "Ativa" || record.status === "Ativo";
+  return record.status === "Ativa" || record.status === "Ativo" || record.status === "Vigente";
 };
 
 const recordSearchText = (record: SearchRecord) => normalizeSearchText([
@@ -53,14 +52,17 @@ const coreRecords = async (): Promise<SearchRecord[]> => {
     supabaseDocumentAttachmentRepository.list().catch(() => []),
   ]);
   const farmById = new Map(farms.map((farm) => [farm.id, farm]));
+  const registrationById = new Map(registrations.map((registration) => [registration.id, registration]));
   const registrationsByFarm = new Map<string, typeof registrations>();
   registrations.forEach((registration) => registrationsByFarm.set(registration.farmId, [...(registrationsByFarm.get(registration.farmId) ?? []), registration]));
   const linksByRegistration = new Map<string, typeof links>();
   links.forEach((link) => linksByRegistration.set(link.registrationId, [...(linksByRegistration.get(link.registrationId) ?? []), link]));
   const ownerById = new Map(owners.map((owner) => [owner.id, owner]));
   const ownerRelations = new Map<string, { farmIds: Set<string>; registrationIds: Set<string> }>();
+  const attachmentCountByDocument = new Map<string, number>();
+  attachments.forEach((attachment) => attachmentCountByDocument.set(attachment.documentId, (attachmentCountByDocument.get(attachment.documentId) ?? 0) + 1));
   links.filter((link) => link.status === "active").forEach((link) => {
-    const registration = registrations.find((item) => item.id === link.registrationId);
+    const registration = registrationById.get(link.registrationId);
     if (!registration) return;
     const value = ownerRelations.get(link.ownerId) ?? { farmIds: new Set<string>(), registrationIds: new Set<string>() };
     value.farmIds.add(registration.farmId); value.registrationIds.add(registration.id); ownerRelations.set(link.ownerId, value);
@@ -84,13 +86,13 @@ const coreRecords = async (): Promise<SearchRecord[]> => {
   });
   const documentRecords: SearchRecord[] = documents.map((document) => {
     const farm = farmById.get(document.farmId);
-    const registration = document.registrationId ? registrations.find((item) => item.id === document.registrationId) : undefined;
-    const attachmentCount = attachments.filter((attachment) => attachment.documentId === document.id).length;
+    const registration = document.registrationId ? registrationById.get(document.registrationId) : undefined;
+    const attachmentCount = attachmentCountByDocument.get(document.id) ?? 0;
     return { id: document.id, entityType: "document", title: document.type, reference: farm?.name ?? "—", details: document.expirationDate ? `Vencimento ${formatIsoDate(document.expirationDate)}` : "Sem validade informada", status: documentValidityLabels[document.validityStatus], updatedAt: document.updatedAt, farmId: farm?.id, farmName: farm?.name, attributes: { number: document.number ?? "—", farm: farm?.name ?? "—", issuedAt: formatIsoDate(document.issueDate), validUntil: formatIsoDate(document.expirationDate), documentType: document.type }, relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Arquivos", value: attachmentCount === 0 ? "Nenhum arquivo" : `${attachmentCount} ${attachmentCount === 1 ? "arquivo" : "arquivos"}` }], openPath: `/documentos?open=${document.id}` };
   });
   const carRecords: SearchRecord[] = cars.map((car) => {
     const farm = farmById.get(car.farmId);
-    const registration = car.registrationId ? registrations.find((item) => item.id === car.registrationId) : undefined;
+    const registration = car.registrationId ? registrationById.get(car.registrationId) : undefined;
     return { id: car.id, entityType: "car", title: car.number, reference: farm?.name ?? "—", details: `Recibo ${car.receiptNumber ?? "—"}`, status: carStatusLabels[car.status], updatedAt: car.updatedAt, farmId: farm?.id, farmName: farm?.name, attributes: { farm: farm?.name ?? "—", registration: registration?.number ?? "—", owner: car.declaredOwnerName ?? "—", receipt: car.receiptNumber ?? "—" }, relations: [{ label: "Fazenda", value: farm?.name ?? "—" }, { label: "Matrícula", value: registration?.number ?? "Sem vínculo" }, { label: "Proprietário declarado", value: car.declaredOwnerName ?? "—" }], openPath: `/car?open=${car.id}` };
   });
   return [...ownerRecords, ...farmRecords, ...registrationRecords, ...documentRecords, ...carRecords];
@@ -102,6 +104,10 @@ const operationRecords = async (includeFinancial = false): Promise<SearchRecord[
   const registrationById = new Map(data.registrations.map((item) => [item.id, item]));
   const operationById = new Map(data.operations.map((item) => [item.id, item]));
   const typeById = new Map(data.guaranteeTypes.map((item) => [item.id, item]));
+  const guaranteeCountByOperation = new Map<string, number>();
+  data.guarantees.forEach((guarantee) => guaranteeCountByOperation.set(guarantee.operationId, (guaranteeCountByOperation.get(guarantee.operationId) ?? 0) + 1));
+  const itemCountByGuarantee = new Map<string, number>();
+  data.items.forEach((item) => itemCountByGuarantee.set(item.guaranteeId, (itemCountByGuarantee.get(item.guaranteeId) ?? 0) + 1));
   const operations: SearchRecord[] = data.operations.map((operation) => {
     const primaryRegistrationId = operation.registrations.find((item) => item.isPrimary)?.registrationId ?? operation.registrations[0]?.registrationId;
     const primaryRegistration = primaryRegistrationId ? registrationById.get(primaryRegistrationId) : undefined;
@@ -115,16 +121,19 @@ const operationRecords = async (includeFinancial = false): Promise<SearchRecord[
       status: operationStatusLabels[operation.status],
       updatedAt: operation.updatedAt,
       farmId: primaryRegistration?.farmId,
+      farmIds: [...new Set(operation.registrations.map((link) => registrationById.get(link.registrationId)?.farmId).filter((id): id is string => Boolean(id)))],
       farmName: primaryRegistration?.farmName,
       attributes: {
         bank: institution?.name ?? "—",
         farm: primaryRegistration?.farmName ?? "—",
         registration: primaryRegistration?.number ?? "—",
+        purpose: operation.purpose ?? "—",
+        startDate: formatIsoDate(operation.startDate),
         value: operation.amount === undefined ? "" : formatCurrency(operation.amount),
       },
       relations: [
         { label: "Matrículas", value: String(operation.registrations.length) },
-        { label: "Garantias", value: String(data.guarantees.filter((guarantee) => guarantee.operationId === operation.id).length) },
+        { label: "Garantias", value: String(guaranteeCountByOperation.get(operation.id) ?? 0) },
       ],
       openPath: `/?id=${operation.id}`,
     };
@@ -145,17 +154,20 @@ const operationRecords = async (includeFinancial = false): Promise<SearchRecord[
       status: guarantee.status === "active" ? "Ativa" as const : guarantee.status === "closed" ? "Encerrada" as const : "Cancelada" as const,
       updatedAt: guarantee.updatedAt,
       farmId: primaryRegistration?.farmId,
+      farmIds: [...new Set(guarantee.registrationIds.map((id) => registrationById.get(id)?.farmId).filter((id): id is string => Boolean(id)))],
       farmName: primaryRegistration?.farmName,
       attributes: {
         bank: institution?.name ?? "—",
         farm: primaryRegistration?.farmName ?? "—",
+        registration: primaryRegistration?.number ?? "—",
         operation: operation.operationNumber,
+        expiresAt: formatIsoDate(guarantee.endDate),
         value: guarantee.amount === undefined ? "" : formatCurrency(guarantee.amount),
       },
       relations: [
         { label: "Tipos", value: String(guarantee.types.length) },
         { label: "Matrículas", value: String(guarantee.registrationIds.length) },
-        { label: "Itens", value: String(data.items.filter((item) => item.guaranteeId === guarantee.id).length) },
+        { label: "Itens", value: String(itemCountByGuarantee.get(guarantee.id) ?? 0) },
       ],
       openPath: `/?id=${operation.id}&garantia=${guarantee.id}`,
     }];
@@ -168,47 +180,66 @@ const records = async (includeFinancial = false) => {
   return [...core, ...operations];
 };
 
+const buildCounts = (data: SearchRecord[]): SearchCounts => {
+  const categories: SearchCategory[] = ["owner", "farm", "registration", "operation", "guarantee", "document", "car"];
+  const counts = Object.fromEntries(categories.map((category) => [category, data.filter((item) => item.entityType === category).length]));
+  return { all: data.length, ...counts } as SearchCounts;
+};
+
+const unique = (values: Array<string | undefined>) => [...new Set(values.filter((value): value is string => Boolean(value) && value !== "—"))]
+  .sort((left, right) => left.localeCompare(right, "pt-BR"));
+
+const buildFilterOptions = (data: SearchRecord[], includeFinancial: boolean): SearchFilterOptions => ({
+  farms: data.filter((record) => record.entityType === "farm").map((record) => ({ id: record.id, label: record.title })).sort((left, right) => left.label.localeCompare(right.label, "pt-BR")),
+  municipalities: unique(data.filter((record) => record.entityType === "farm").map((record) => record.attributes.municipality)),
+  states: unique(data.filter((record) => record.entityType === "farm").map((record) => record.attributes.state)),
+  banks: unique(data.filter((record) => record.entityType === "operation" || record.entityType === "guarantee").map((record) => record.attributes.bank)),
+  guaranteeTypes: unique(data.filter((record) => record.entityType === "guarantee").map((record) => record.title)),
+  documentTypes: unique(data.filter((record) => record.entityType === "document").map((record) => record.attributes.documentType)),
+  valueRanges: includeFinancial ? ["Até R$ 300 mil", "R$ 300 mil a R$ 700 mil", "Acima de R$ 700 mil"] : [],
+});
+
+const buildResponse = (data: SearchRecord[], filters: SearchFilters): SearchResponse => {
+  const query = normalizeSearchText(filters.query);
+  const filtered = data.filter((record) => {
+    if (filters.category !== "all" && record.entityType !== filters.category) return false;
+    if (filters.status && record.status !== filters.status) return false;
+    if (filters.farmId && !(record.farmIds ?? (record.farmId ? [record.farmId] : [])).includes(filters.farmId)) return false;
+    if (filters.ownerType && record.attributes.ownerType !== filters.ownerType) return false;
+    if (filters.municipality && record.attributes.municipality !== filters.municipality) return false;
+    if (filters.state && record.attributes.state !== filters.state) return false;
+    if (filters.bank && record.attributes.bank !== filters.bank) return false;
+    if (filters.guaranteeType && record.title !== filters.guaranteeType) return false;
+    if (filters.documentType && record.attributes.documentType !== filters.documentType) return false;
+    if (!matchesValueRange(record, filters.valueRange)) return false;
+    if (!matchesExpiration(record, filters.expiration)) return false;
+    return !query || recordSearchText(record).includes(query);
+  });
+  const sorted = sortRecords(filtered, filters.sort);
+  const totalPages = Math.max(Math.ceil(sorted.length / filters.pageSize), 1);
+  const page = Math.min(filters.page, totalPages);
+  const start = (page - 1) * filters.pageSize;
+  return { records: structuredClone(sorted.slice(start, start + filters.pageSize)), total: sorted.length, page, pageSize: filters.pageSize, totalPages };
+};
+
 export const consultaService = {
-  async search(filters: SearchFilters, mode: SearchLoadMode = "success", includeFinancial = false): Promise<SearchResponse> {
-    await delay(260);
+  async load(filters: SearchFilters, mode: SearchLoadMode = "success", includeFinancial = false): Promise<SearchLoadResult> {
     if (mode === "error") throw new Error("Não foi possível carregar os registros.");
-    const query = normalizeSearchText(filters.query);
-    const filtered = (await records(includeFinancial)).filter((record) => {
-      if (filters.category !== "all" && record.entityType !== filters.category) return false;
-      if (filters.status && record.status !== filters.status) return false;
-      if (filters.farmId && record.farmId !== filters.farmId) return false;
-      if (filters.ownerType && record.attributes.ownerType !== filters.ownerType) return false;
-      if (filters.municipality && record.attributes.municipality !== filters.municipality) return false;
-      if (filters.state && record.attributes.state !== filters.state) return false;
-      if (filters.bank && record.attributes.bank !== filters.bank) return false;
-      if (filters.guaranteeType && record.title !== filters.guaranteeType) return false;
-      if (filters.documentType && record.attributes.documentType !== filters.documentType) return false;
-      if (!matchesValueRange(record, filters.valueRange)) return false;
-      if (!matchesExpiration(record, filters.expiration)) return false;
-      return !query || recordSearchText(record).includes(query);
-    });
-    const sorted = sortRecords(filtered, filters.sort);
-    const totalPages = Math.max(Math.ceil(sorted.length / filters.pageSize), 1);
-    const page = Math.min(filters.page, totalPages);
-    const start = (page - 1) * filters.pageSize;
-    return { records: structuredClone(sorted.slice(start, start + filters.pageSize)), total: sorted.length, page, pageSize: filters.pageSize, totalPages };
+    const data = await records(includeFinancial);
+    return { response: buildResponse(data, filters), counts: buildCounts(data), options: buildFilterOptions(data, includeFinancial) };
+  },
+
+  async search(filters: SearchFilters, mode: SearchLoadMode = "success", includeFinancial = false): Promise<SearchResponse> {
+    if (mode === "error") throw new Error("Não foi possível carregar os registros.");
+    return buildResponse(await records(includeFinancial), filters);
   },
 
   async getById(type: SearchRecord["entityType"], id: string, includeFinancial = false): Promise<SearchRecord | undefined> {
-    await delay(120);
     const record = (await records(includeFinancial)).find((item) => item.entityType === type && item.id === id);
     return record ? structuredClone(record) : undefined;
   },
 
   async getCounts(includeFinancial = false): Promise<SearchCounts> {
-    await delay(120);
-    const data = await records(includeFinancial);
-    const categories: SearchCategory[] = ["owner", "farm", "registration", "operation", "guarantee", "document", "car"];
-    const counts = Object.fromEntries(categories.map((category) => [category, data.filter((item) => item.entityType === category).length]));
-    return { all: data.length, ...counts } as SearchCounts;
-  },
-
-  async getFarmOptions() {
-    return (await supabaseFarmRepository.list()).map((farm) => ({ id: farm.id, label: farm.name }));
+    return buildCounts(await records(includeFinancial));
   },
 };

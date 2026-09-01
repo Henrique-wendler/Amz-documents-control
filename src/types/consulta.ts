@@ -39,6 +39,7 @@ export interface SearchRecord {
   status: SearchStatus;
   updatedAt: string;
   farmId?: string;
+  farmIds?: string[];
   farmName?: string;
   attributes: Record<string, string>;
   relations: SearchRelation[];
@@ -71,6 +72,22 @@ export interface SearchResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+export interface SearchFilterOptions {
+  farms: Array<{ id: string; label: string }>;
+  municipalities: string[];
+  states: string[];
+  banks: string[];
+  guaranteeTypes: string[];
+  documentTypes: string[];
+  valueRanges: string[];
+}
+
+export interface SearchLoadResult {
+  response: SearchResponse;
+  counts: SearchCounts;
+  options: SearchFilterOptions;
 }
 
 export type SearchLoadMode = "success" | "error";

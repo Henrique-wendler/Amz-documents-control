@@ -9,12 +9,13 @@ import {
   PopoverTrigger,
 } from "@fluentui/react-components";
 import { Filter20Regular } from "@fluentui/react-icons";
-import type { SearchCategory, SearchFilters } from "../../types/consulta";
+import type { SearchCategory, SearchFilterOptions, SearchFilters } from "../../types/consulta";
 
 interface AdvancedFiltersProps {
   category: SearchCategory;
   filters: SearchFilters;
   activeCount: number;
+  options: SearchFilterOptions;
   onApply: (filters: SearchFilters) => void;
   onClear: () => void;
 }
@@ -42,7 +43,7 @@ function FilterField({ label, value, options, onChange }: FilterFieldProps) {
   );
 }
 
-export function AdvancedFilters({ category, filters, activeCount, onApply, onClear }: AdvancedFiltersProps) {
+export function AdvancedFilters({ category, filters, activeCount, options, onApply, onClear }: AdvancedFiltersProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(filters);
 
@@ -55,10 +56,10 @@ export function AdvancedFilters({ category, filters, activeCount, onApply, onCle
 
   const fields = (() => {
     if (category === "owner") return <FilterField label="Tipo de pessoa" value={draft.ownerType} options={["Pessoa Física", "Pessoa Jurídica"]} onChange={(value) => set("ownerType", value)} />;
-    if (category === "farm") return <><FilterField label="Município" value={draft.municipality} options={["Palmas", "Porto Nacional", "Gurupi", "Paraíso do Tocantins", "Araguaína", "Dianópolis"]} onChange={(value) => set("municipality", value)} /><FilterField label="Estado" value={draft.state} options={["TO"]} onChange={(value) => set("state", value)} /></>;
-    if (category === "operation") return <><FilterField label="Banco" value={draft.bank} options={["Banco do Brasil", "Banco da Amazônia", "Sicredi", "Bradesco", "Caixa Econômica"]} onChange={(value) => set("bank", value)} /><FilterField label="Faixa de valor" value={draft.valueRange} options={["Até R$ 300 mil", "R$ 300 mil a R$ 700 mil", "Acima de R$ 700 mil"]} onChange={(value) => set("valueRange", value)} /></>;
-    if (category === "guarantee") return <><FilterField label="Tipo de garantia" value={draft.guaranteeType} options={["Penhor pecuário", "Hipoteca", "Penhor agrícola", "Alienação fiduciária", "Aval de terceiros"]} onChange={(value) => set("guaranteeType", value)} /><FilterField label="Banco" value={draft.bank} options={["Banco do Brasil", "Banco da Amazônia", "Sicredi", "Bradesco", "Caixa Econômica"]} onChange={(value) => set("bank", value)} /></>;
-    if (category === "document") return <><FilterField label="Tipo de documento" value={draft.documentType} options={["Licença", "Certidão", "ITR", "CCIR"]} onChange={(value) => set("documentType", value)} /><FilterField label="Vencimento" value={draft.expiration} options={["A vencer", "Vencidos", "Vigentes"]} onChange={(value) => set("expiration", value)} /></>;
+    if (category === "farm") return <><FilterField label="Município" value={draft.municipality} options={options.municipalities} onChange={(value) => set("municipality", value)} /><FilterField label="Estado" value={draft.state} options={options.states} onChange={(value) => set("state", value)} /></>;
+    if (category === "operation") return <><FilterField label="Banco" value={draft.bank} options={options.banks} onChange={(value) => set("bank", value)} />{options.valueRanges.length ? <FilterField label="Faixa de valor" value={draft.valueRange} options={options.valueRanges} onChange={(value) => set("valueRange", value)} /> : null}</>;
+    if (category === "guarantee") return <><FilterField label="Tipo de garantia" value={draft.guaranteeType} options={options.guaranteeTypes} onChange={(value) => set("guaranteeType", value)} /><FilterField label="Banco" value={draft.bank} options={options.banks} onChange={(value) => set("bank", value)} /></>;
+    if (category === "document") return <><FilterField label="Tipo de documento" value={draft.documentType} options={options.documentTypes} onChange={(value) => set("documentType", value)} /><FilterField label="Vencimento" value={draft.expiration} options={["A vencer", "Vencidos", "Vigentes"]} onChange={(value) => set("expiration", value)} /></>;
     return <p className="advanced-filters__message">Os filtros principais disponíveis já são suficientes para esta categoria.</p>;
   })();
 
