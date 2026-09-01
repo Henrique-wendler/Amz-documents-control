@@ -49,15 +49,20 @@ const currentOrganizationId = async () => {
   return data.organization_id as string;
 };
 
-const mapInput = (input: GuaranteeInput) => ({
-  operation_id: input.operationId,
-  description: input.description?.trim() || null,
-  degree: input.degree?.trim() || null,
-  evaluation_year: input.evaluationYear ?? null,
-  status: input.status,
-  start_date: toPostgresDate(input.startDate),
-  end_date: toPostgresDate(input.endDate),
-  notes: input.notes?.trim() || null,
+const transactionalArguments = (input: GuaranteeInput, canWriteFinancial: boolean) => ({
+  p_operation_id: input.operationId,
+  p_description: input.description?.trim() || null,
+  p_degree: input.degree?.trim() || null,
+  p_evaluation_year: input.evaluationYear ?? null,
+  p_status: input.status,
+  p_start_date: toPostgresDate(input.startDate),
+  p_end_date: toPostgresDate(input.endDate),
+  p_notes: input.notes?.trim() || null,
+  p_guarantee_type_ids: [...new Set(input.guaranteeTypeIds)],
+  p_primary_guarantee_type_id: input.primaryGuaranteeTypeId,
+  p_registration_ids: [...new Set(input.registrationIds)],
+  p_amount: canWriteFinancial ? input.amount ?? null : null,
+  p_expected_financial_version: canWriteFinancial ? input.expectedFinancialVersion ?? null : null,
 });
 
 const mapItemInput = (input: GuaranteeItemInput) => ({
@@ -153,54 +158,6 @@ const validateInput = (input: GuaranteeInput) => {
   return { typeIds, registrationIds };
 };
 
-const syncTypes = async (organizationId: string, guaranteeId: string, input: GuaranteeInput) => {
-  const { typeIds } = validateInput(input);
-  const { data: existing, error: existingError } = await supabase.from("guarantee_type_links").select("guarantee_type_id").eq("guarantee_id", guaranteeId);
-  if (existingError) throw friendlyError(existingError, "Não foi possível validar os tipos da garantia.");
-  const { error: clearError } = await supabase.from("guarantee_type_links").update({ is_primary: false }).eq("guarantee_id", guaranteeId);
-  if (clearError) throw friendlyError(clearError, "Não foi possível atualizar o tipo principal.");
-  const { error: upsertError } = await supabase.from("guarantee_type_links").upsert(
-    typeIds.map((guaranteeTypeId) => ({ organization_id: organizationId, guarantee_id: guaranteeId, guarantee_type_id: guaranteeTypeId, is_primary: false })),
-    { onConflict: "organization_id,guarantee_id,guarantee_type_id" },
-  );
-  if (upsertError) throw friendlyError(upsertError, "Não foi possível vincular os tipos à garantia.");
-  const extras = (existing ?? []).map((item) => item.guarantee_type_id as string).filter((id) => !typeIds.includes(id));
-  for (const guaranteeTypeId of extras) {
-    const { error } = await supabase.from("guarantee_type_links").delete().eq("guarantee_id", guaranteeId).eq("guarantee_type_id", guaranteeTypeId);
-    if (error) throw friendlyError(error, "Não foi possível remover um tipo da garantia.");
-  }
-  const { error: primaryError } = await supabase.from("guarantee_type_links").update({ is_primary: true }).eq("guarantee_id", guaranteeId).eq("guarantee_type_id", input.primaryGuaranteeTypeId);
-  if (primaryError) throw friendlyError(primaryError, "Não foi possível definir o tipo principal.");
-};
-
-const syncRegistrations = async (organizationId: string, guaranteeId: string, input: GuaranteeInput) => {
-  const { registrationIds } = validateInput(input);
-  const { data: existing, error: existingError } = await supabase.from("guarantee_registrations").select("registration_id").eq("guarantee_id", guaranteeId);
-  if (existingError) throw friendlyError(existingError, "Não foi possível validar as matrículas da garantia.");
-  const { error: upsertError } = await supabase.from("guarantee_registrations").upsert(
-    registrationIds.map((registrationId) => ({ organization_id: organizationId, guarantee_id: guaranteeId, registration_id: registrationId })),
-    { onConflict: "organization_id,guarantee_id,registration_id" },
-  );
-  if (upsertError) throw friendlyError(upsertError, "Não foi possível vincular as matrículas à garantia.");
-  const extras = (existing ?? []).map((item) => item.registration_id as string).filter((id) => !registrationIds.includes(id));
-  for (const registrationId of extras) {
-    const { error } = await supabase.from("guarantee_registrations").delete().eq("guarantee_id", guaranteeId).eq("registration_id", registrationId);
-    if (error) throw friendlyError(error, "Não foi possível remover uma matrícula da garantia.");
-  }
-};
-
-const writeFinancial = async (organizationId: string, guaranteeId: string, input: GuaranteeInput) => {
-  if (input.amount === undefined) return;
-  if (input.expectedFinancialVersion === undefined) {
-    const { error } = await supabase.from("guarantee_financials").insert({ organization_id: organizationId, guarantee_id: guaranteeId, amount: input.amount });
-    if (error) throw friendlyError(error, "Não foi possível cadastrar o valor da garantia.");
-    return;
-  }
-  const { data, error } = await supabase.from("guarantee_financials").update({ amount: input.amount }).eq("guarantee_id", guaranteeId).eq("version", input.expectedFinancialVersion).select("guarantee_id").maybeSingle();
-  if (error) throw friendlyError(error, "Não foi possível atualizar o valor da garantia.");
-  if (!data) throw new GuaranteeConcurrencyError();
-};
-
 const queryGuarantees = async (filter?: { id?: string; operationId?: string }) => {
   let query = supabase.from("guarantees").select(guaranteeSelection).is("deleted_at", null).order("updated_at", { ascending: false });
   if (filter?.id) query = query.eq("id", filter.id);
@@ -221,28 +178,29 @@ export const supabaseGuaranteeRepository: GuaranteeRepository = {
     return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string }));
   },
   async create(input, canWriteFinancial) {
-    const organizationId = await currentOrganizationId();
     validateInput(input);
-    const { data, error } = await supabase.from("guarantees").insert({ organization_id: organizationId, ...mapInput(input) }).select(guaranteeSelection).single();
+    const { data, error } = await supabase.rpc("save_guarantee_transactional", {
+      p_id: null,
+      p_expected_version: null,
+      ...transactionalArguments(input, canWriteFinancial),
+    });
     if (error) throw friendlyError(error, "Não foi possível cadastrar a garantia.");
-    const row = data as unknown as GuaranteeRow;
-    await syncTypes(organizationId, row.id, input);
-    await syncRegistrations(organizationId, row.id, input);
-    if (canWriteFinancial) await writeFinancial(organizationId, row.id, input);
-    const created = await this.getById(row.id, canWriteFinancial);
+    const guaranteeId = data as string;
+    const created = await this.getById(guaranteeId, canWriteFinancial);
     if (!created) throw new Error("Garantia cadastrada, mas não foi possível recarregá-la.");
     return created;
   },
   async update(id, expectedVersion, input, canWriteFinancial) {
-    const organizationId = await currentOrganizationId();
     validateInput(input);
-    const { data, error } = await supabase.from("guarantees").update(mapInput(input)).eq("id", id).eq("version", expectedVersion).is("deleted_at", null).select(guaranteeSelection).maybeSingle();
+    const { data, error } = await supabase.rpc("save_guarantee_transactional", {
+      p_id: id,
+      p_expected_version: expectedVersion,
+      ...transactionalArguments(input, canWriteFinancial),
+    });
     if (error) throw friendlyError(error, "Não foi possível atualizar a garantia.");
-    if (!data) throw new GuaranteeConcurrencyError();
-    await syncTypes(organizationId, id, input);
-    await syncRegistrations(organizationId, id, input);
-    if (canWriteFinancial) await writeFinancial(organizationId, id, input);
-    const updated = await this.getById(id, canWriteFinancial);
+    const guaranteeId = data as string;
+    if (!guaranteeId) throw new GuaranteeConcurrencyError();
+    const updated = await this.getById(guaranteeId, canWriteFinancial);
     if (!updated) throw new GuaranteeConcurrencyError();
     return updated;
   },

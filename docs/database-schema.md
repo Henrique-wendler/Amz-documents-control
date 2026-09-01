@@ -32,6 +32,7 @@ Não existe dual-write. Consulta Geral e os Drawers imobiliários consomem tamb�
 | 7 | `202608280007_allow_attachment_path_validation.sql` | ajuste da validação de referências de arquivo |
 | 8 | `202608280008_harden_authenticated_table_grants.sql` | endurecimento dos grants para usuários autenticados |
 | 9 | `202608280009_expose_current_user_permissions.sql` | função segura para carregar permissions do usuário atual |
+| 10 | `202609010010_transactional_operations_guarantees.sql` | RPCs atômicos para Operações, Garantias, relações N:N e financeiro |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -116,7 +117,9 @@ O papel `authenticated` não possui `INSERT` em `organizations`. Nenhum fluxo Re
 
 ## Concorrência, soft delete e auditoria
 
-Triggers atualizam `updated_at`, `updated_by` e incrementam `version`. Repositórios futuros devem executar updates com `WHERE id = :id AND version = :expected_version`; zero linhas significa conflito, nunca sobrescrita silenciosa. Os RPCs de titularidade já aplicam essa regra.
+Triggers atualizam `updated_at`, `updated_by` e incrementam `version`. Updates usam `WHERE id = :id AND version = :expected_version`; zero linhas significa conflito, nunca sobrescrita silenciosa. Os RPCs de titularidade e os RPCs transacionais `save_operation_transactional`/`save_guarantee_transactional` aplicam essa regra.
+
+Criação e atualização de Operações e Garantias são fronteiras transacionais únicas no PostgreSQL. Entidade principal, valores financeiros e relações N:N são confirmados ou revertidos juntos. As funções usam `SECURITY INVOKER`, portanto grants, RLS, permissions, triggers de auditoria e regras cross-tenant continuam aplicáveis dentro da transação; exceções também revertem os eventos de auditoria produzidos pela tentativa.
 
 Queries normais/RLS ignoram `deleted_at IS NOT NULL`. Remoção e restauração controladas usam `soft_delete_record` e `restore_soft_deleted_record`, com whitelist de tabelas, organization, permission e versão esperada. Restauração da própria organização fica reservada ao bootstrap/operador privilegiado, pois inativá-la ou removê-la bloqueia corretamente os profiles do tenant. `status = inactive` continua independente.
 

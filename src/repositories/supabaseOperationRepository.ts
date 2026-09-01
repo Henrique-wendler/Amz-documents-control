@@ -34,22 +34,18 @@ const friendlyError = (error: PostgrestError, fallback: string) => {
   return new Error(fallback);
 };
 
-const currentOrganizationId = async () => {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) throw new Error("Sua sessão não pôde ser validada. Entre novamente.");
-  const { data, error } = await supabase.from("profiles").select("organization_id").eq("id", authData.user.id).eq("status", "active").maybeSingle();
-  if (error || !data?.organization_id) throw new Error("Seu usuário não possui um perfil ativo para acessar o sistema.");
-  return data.organization_id as string;
-};
-
-const mapInput = (input: OperationInput) => ({
-  operation_number: input.operationNumber.trim(),
-  institution_id: input.institutionId,
-  purpose: input.purpose?.trim() || null,
-  status: input.status,
-  start_date: toPostgresDate(input.startDate),
-  end_date: toPostgresDate(input.endDate),
-  notes: input.notes?.trim() || null,
+const transactionalArguments = (input: OperationInput, canWriteFinancial: boolean) => ({
+  p_operation_number: input.operationNumber.trim(),
+  p_institution_id: input.institutionId,
+  p_purpose: input.purpose?.trim() || null,
+  p_status: input.status,
+  p_start_date: toPostgresDate(input.startDate),
+  p_end_date: toPostgresDate(input.endDate),
+  p_notes: input.notes?.trim() || null,
+  p_registration_ids: [...new Set(input.registrationIds)],
+  p_primary_registration_id: input.primaryRegistrationId,
+  p_amount: canWriteFinancial ? input.amount ?? null : null,
+  p_expected_financial_version: canWriteFinancial ? input.expectedFinancialVersion ?? null : null,
 });
 
 const mapRows = (
@@ -114,58 +110,6 @@ const validateRegistrations = (input: OperationInput) => {
   return uniqueIds;
 };
 
-const syncRegistrations = async (organizationId: string, operationId: string, input: OperationInput) => {
-  const registrationIds = validateRegistrations(input);
-  const { data: existing, error: existingError } = await supabase
-    .from("operation_registrations")
-    .select("registration_id")
-    .eq("operation_id", operationId);
-  if (existingError) throw friendlyError(existingError, "Não foi possível validar as matrículas da operação.");
-
-  const { error: clearPrimaryError } = await supabase
-    .from("operation_registrations")
-    .update({ is_primary: false })
-    .eq("operation_id", operationId);
-  if (clearPrimaryError) throw friendlyError(clearPrimaryError, "Não foi possível atualizar a matrícula principal.");
-
-  const { error: upsertError } = await supabase.from("operation_registrations").upsert(
-    registrationIds.map((registrationId) => ({ organization_id: organizationId, operation_id: operationId, registration_id: registrationId, is_primary: false })),
-    { onConflict: "organization_id,operation_id,registration_id" },
-  );
-  if (upsertError) throw friendlyError(upsertError, "Não foi possível vincular as matrículas à operação.");
-
-  const extras = (existing ?? []).map((item) => item.registration_id as string).filter((id) => !registrationIds.includes(id));
-  for (const registrationId of extras) {
-    const { error } = await supabase.from("operation_registrations").delete().eq("operation_id", operationId).eq("registration_id", registrationId);
-    if (error) throw friendlyError(error, "Não foi possível remover uma matrícula da operação porque ela ainda é usada por uma garantia.");
-  }
-
-  const { error: primaryError } = await supabase
-    .from("operation_registrations")
-    .update({ is_primary: true })
-    .eq("operation_id", operationId)
-    .eq("registration_id", input.primaryRegistrationId);
-  if (primaryError) throw friendlyError(primaryError, "Não foi possível definir a matrícula principal.");
-};
-
-const writeFinancial = async (organizationId: string, operationId: string, input: OperationInput) => {
-  if (input.amount === undefined) return;
-  if (input.expectedFinancialVersion === undefined) {
-    const { error } = await supabase.from("operation_financials").insert({ organization_id: organizationId, operation_id: operationId, amount: input.amount });
-    if (error) throw friendlyError(error, "Não foi possível cadastrar o valor da operação.");
-    return;
-  }
-  const { data, error } = await supabase
-    .from("operation_financials")
-    .update({ amount: input.amount })
-    .eq("operation_id", operationId)
-    .eq("version", input.expectedFinancialVersion)
-    .select("operation_id")
-    .maybeSingle();
-  if (error) throw friendlyError(error, "Não foi possível atualizar o valor da operação.");
-  if (!data) throw new OperationConcurrencyError();
-};
-
 const queryOperations = async (id?: string) => {
   let query = supabase.from("operations").select(operationSelection).is("deleted_at", null).order("updated_at", { ascending: false });
   if (id) query = query.eq("id", id);
@@ -193,37 +137,29 @@ export const supabaseOperationRepository: OperationRepository = {
     return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string, shortName: (row.short_name as string | null) ?? undefined }));
   },
   async create(input, canWriteFinancial) {
-    const organizationId = await currentOrganizationId();
     validateRegistrations(input);
-    const { data, error } = await supabase
-      .from("operations")
-      .insert({ organization_id: organizationId, ...mapInput(input) })
-      .select(operationSelection)
-      .single();
+    const { data, error } = await supabase.rpc("save_operation_transactional", {
+      p_id: null,
+      p_expected_version: null,
+      ...transactionalArguments(input, canWriteFinancial),
+    });
     if (error) throw friendlyError(error, "Não foi possível cadastrar a operação.");
-    const row = data as unknown as OperationRow;
-    await syncRegistrations(organizationId, row.id, input);
-    if (canWriteFinancial) await writeFinancial(organizationId, row.id, input);
-    const created = await this.getById(row.id, canWriteFinancial);
+    const operationId = data as string;
+    const created = await this.getById(operationId, canWriteFinancial);
     if (!created) throw new Error("Operação cadastrada, mas não foi possível recarregá-la.");
     return created;
   },
   async update(id, expectedVersion, input, canWriteFinancial) {
-    const organizationId = await currentOrganizationId();
     validateRegistrations(input);
-    const { data, error } = await supabase
-      .from("operations")
-      .update(mapInput(input))
-      .eq("id", id)
-      .eq("version", expectedVersion)
-      .is("deleted_at", null)
-      .select(operationSelection)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc("save_operation_transactional", {
+      p_id: id,
+      p_expected_version: expectedVersion,
+      ...transactionalArguments(input, canWriteFinancial),
+    });
     if (error) throw friendlyError(error, "Não foi possível atualizar a operação.");
-    if (!data) throw new OperationConcurrencyError();
-    await syncRegistrations(organizationId, id, input);
-    if (canWriteFinancial) await writeFinancial(organizationId, id, input);
-    const updated = await this.getById(id, canWriteFinancial);
+    const operationId = data as string;
+    if (!operationId) throw new OperationConcurrencyError();
+    const updated = await this.getById(operationId, canWriteFinancial);
     if (!updated) throw new OperationConcurrencyError();
     return updated;
   },

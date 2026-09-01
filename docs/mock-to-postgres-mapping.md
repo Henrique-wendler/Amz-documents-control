@@ -40,6 +40,7 @@ Consulta Geral usa Supabase também para Operações e Garantias. Os Drawers imo
 - Contadores e ViewModels continuam derivados; não há colunas para totais de proprietários, matrículas, operações ou anexos.
 - Status internos permanecem em inglês; a tradução para português continua sendo responsabilidade de apresentação.
 - Os repositories Supabase mantêm a cadeia aprovada `Component → Service → Repository → Supabase`, sem componentes consultando tabelas diretamente.
+- Escritas compostas de Operações e Garantias usam RPCs PostgreSQL transacionais; entidade, financeiro e vínculos N:N não são persistidos parcialmente.
 
 ## Próximas etapas da migração
 
