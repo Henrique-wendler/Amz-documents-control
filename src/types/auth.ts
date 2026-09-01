@@ -21,6 +21,8 @@ export interface AuthActionResult {
 
 export type SignInResult = AuthActionResult;
 
+export type PasswordRecoveryStatus = "idle" | "processing" | "ready" | "invalid";
+
 export interface MfaEnrollment {
   factorId: string;
   qrCode: string;

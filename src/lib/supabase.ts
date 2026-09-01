@@ -10,7 +10,8 @@ if (!supabaseUrl || !supabasePublishableKey) {
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // Recovery callbacks are processed exactly once by AuthProvider.
+    detectSessionInUrl: false,
     persistSession: true,
   },
 });

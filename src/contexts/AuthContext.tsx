@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type {
   AuthActionResult,
   AuthProfile,
   AuthStage,
   MfaEnrollment,
+  PasswordRecoveryStatus,
   SignInResult,
 } from "../types/auth";
 
@@ -19,6 +20,9 @@ interface AuthContextValue {
   mfaEnrollment?: MfaEnrollment;
   loading: boolean;
   error?: string;
+  passwordRecoveryStatus: PasswordRecoveryStatus;
+  passwordRecoveryError?: string;
+  passwordRecoveryMfaRequired: boolean;
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<boolean>;
@@ -28,7 +32,8 @@ interface AuthContextValue {
   cancelMfa: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<AuthActionResult>;
   updatePassword: (password: string) => Promise<AuthActionResult>;
-  finishPasswordRecovery: () => Promise<void>;
+  verifyPasswordRecoveryMfa: (code: string) => Promise<AuthActionResult>;
+  finishPasswordRecovery: (requestNewLink?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -37,6 +42,21 @@ const invalidProfileMessage = "Seu usuário não possui um perfil ativo para ace
 const invalidSessionMessage = "Sua sessão não pôde ser validada. Entre novamente.";
 const invalidMfaCodeMessage = "Código inválido ou expirado. Verifique o autenticador e tente novamente.";
 const recoveryStorageKey = "auth.password-recovery-active";
+const invalidRecoveryMessage = "Este link de redefinição expirou ou já foi utilizado. Solicite um novo link para continuar.";
+
+const getRecoveryUrlState = () => {
+  const isRecoveryRoute = window.location.pathname.replace(/\/+$/, "") === "/redefinir-senha";
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return {
+    isRecoveryRoute,
+    code: search.get("code"),
+    accessToken: hash.get("access_token"),
+    refreshToken: hash.get("refresh_token"),
+    hasCallback: search.has("code") || (hash.has("access_token") && hash.get("type") === "recovery"),
+    hasError: search.has("error") || hash.has("error") || search.has("error_code") || hash.has("error_code"),
+  };
+};
 
 // V1 requires enrollment for every active profile. This single policy boundary can
 // later be replaced by an organization setting without changing the MFA screens.
@@ -52,7 +72,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [mfaFactorId, setMfaFactorId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [passwordRecoveryStatus, setPasswordRecoveryStatus] = useState<PasswordRecoveryStatus>("idle");
+  const [passwordRecoveryError, setPasswordRecoveryError] = useState<string>();
+  const [passwordRecoveryMfaRequired, setPasswordRecoveryMfaRequired] = useState(false);
+  const [passwordRecoveryMfaFactorId, setPasswordRecoveryMfaFactorId] = useState<string>();
   const requestId = useRef(0);
+  const recoveryStatusRef = useRef<PasswordRecoveryStatus>("idle");
+  const recoveryTimeoutRef = useRef<number | undefined>(undefined);
+  const suppressSessionEventsRef = useRef(false);
+  const callbackProcessingRef = useRef(false);
+  const recoveryInitializedRef = useRef(false);
 
   const clearIdentity = useCallback(() => {
     setSession(null);
@@ -61,9 +90,85 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissions([]);
     setMfaEnrollment(undefined);
     setMfaFactorId(undefined);
+    setPasswordRecoveryMfaRequired(false);
+    setPasswordRecoveryMfaFactorId(undefined);
   }, []);
 
-  const reconcileSession = useCallback(async (nextSession: Session | null, event?: AuthChangeEvent) => {
+  const clearRecoveryTimeout = useCallback(() => {
+    if (recoveryTimeoutRef.current !== undefined) {
+      window.clearTimeout(recoveryTimeoutRef.current);
+      recoveryTimeoutRef.current = undefined;
+    }
+  }, []);
+
+  const setRecoveryState = useCallback((status: PasswordRecoveryStatus, recoveryError?: string) => {
+    recoveryStatusRef.current = status;
+    setPasswordRecoveryStatus(status);
+    setPasswordRecoveryError(recoveryError);
+  }, []);
+
+  const invalidatePasswordRecovery = useCallback(() => {
+    clearRecoveryTimeout();
+    requestId.current += 1;
+    window.sessionStorage.removeItem(recoveryStorageKey);
+    callbackProcessingRef.current = false;
+    recoveryInitializedRef.current = false;
+    clearIdentity();
+    setRecoveryState("invalid", invalidRecoveryMessage);
+    setError(undefined);
+    setStage("password_recovery");
+    setLoading(false);
+    void supabase.auth.signOut({ scope: "local" });
+  }, [clearIdentity, clearRecoveryTimeout, setRecoveryState]);
+
+  const beginPasswordRecovery = useCallback((nextSession: Session | null) => {
+    if (!nextSession) {
+      invalidatePasswordRecovery();
+      return false;
+    }
+
+    clearRecoveryTimeout();
+    window.sessionStorage.setItem(recoveryStorageKey, "1");
+    window.history.replaceState({}, "", "/redefinir-senha");
+    setSession(nextSession);
+    setUser(nextSession.user);
+    setProfile(null);
+    setPermissions([]);
+    setMfaEnrollment(undefined);
+    setMfaFactorId(undefined);
+    setError(undefined);
+    setStage("password_recovery");
+
+    if (recoveryInitializedRef.current) {
+      setLoading(false);
+      return true;
+    }
+
+    recoveryInitializedRef.current = true;
+    const currentRequest = ++requestId.current;
+    setRecoveryState("processing");
+    setLoading(true);
+    void Promise.all([
+      supabase.auth.mfa.listFactors(),
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    ]).then(([factorsResult, assuranceResult]) => {
+      if (currentRequest !== requestId.current || recoveryStatusRef.current !== "processing") return;
+      if (factorsResult.error || assuranceResult.error) {
+        invalidatePasswordRecovery();
+        return;
+      }
+
+      const verifiedFactor = factorsResult.data.totp.find((factor) => factor.status === "verified");
+      const requiresRecoveryMfa = Boolean(verifiedFactor) && assuranceResult.data.currentLevel !== "aal2";
+      setPasswordRecoveryMfaFactorId(verifiedFactor?.id);
+      setPasswordRecoveryMfaRequired(requiresRecoveryMfa);
+      setRecoveryState("ready");
+      setLoading(false);
+    }).catch(() => invalidatePasswordRecovery());
+    return true;
+  }, [clearRecoveryTimeout, invalidatePasswordRecovery, setRecoveryState]);
+
+  const reconcileSession = useCallback(async (nextSession: Session | null) => {
     const currentRequest = ++requestId.current;
     setLoading(true);
 
@@ -78,20 +183,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(nextSession.user);
     setProfile(null);
     setPermissions([]);
-
-    const recoveryFromUrl = window.location.pathname === "/redefinir-senha"
-      && (window.location.hash.includes("type=recovery") || window.location.search.includes("code="));
-    const recoveringPassword = event === "PASSWORD_RECOVERY"
-      || recoveryFromUrl
-      || window.sessionStorage.getItem(recoveryStorageKey) === "1";
-
-    if (recoveringPassword) {
-      window.sessionStorage.setItem(recoveryStorageKey, "1");
-      setStage("password_recovery");
-      setError(undefined);
-      setLoading(false);
-      return true;
-    }
 
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
@@ -180,22 +271,97 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const initialRecoveryUrl = getRecoveryUrlState();
+    const shouldProcessCallback = initialRecoveryUrl.isRecoveryRoute && initialRecoveryUrl.hasCallback;
+    const shouldStartCallback = shouldProcessCallback && !callbackProcessingRef.current;
 
-    void supabase.auth.getSession().then(({ data }) => {
-      if (mounted) void reconcileSession(data.session);
-    });
+    if (initialRecoveryUrl.isRecoveryRoute) {
+      setRecoveryState("processing");
+      setStage("password_recovery");
+      setLoading(true);
+    }
+    if (shouldStartCallback) callbackProcessingRef.current = true;
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       window.setTimeout(() => {
-        if (mounted) void reconcileSession(nextSession, event);
+        if (!mounted) return;
+
+        if (suppressSessionEventsRef.current) {
+          if (event === "SIGNED_OUT") suppressSessionEventsRef.current = false;
+          return;
+        }
+
+        if (callbackProcessingRef.current) return;
+
+        if (event === "PASSWORD_RECOVERY") {
+          beginPasswordRecovery(nextSession);
+          return;
+        }
+
+        const recoveryUrl = getRecoveryUrlState();
+        const storedRecovery = window.sessionStorage.getItem(recoveryStorageKey) === "1";
+
+        if (recoveryStatusRef.current === "invalid") return;
+
+        if (recoveryStatusRef.current === "ready" || storedRecovery) {
+          if (event === "SIGNED_OUT" || !nextSession) {
+            invalidatePasswordRecovery();
+            return;
+          }
+          beginPasswordRecovery(nextSession);
+          return;
+        }
+
+        if (recoveryUrl.isRecoveryRoute) {
+          invalidatePasswordRecovery();
+          return;
+        }
+
+        void reconcileSession(nextSession);
       }, 0);
     });
 
+    if (initialRecoveryUrl.isRecoveryRoute && initialRecoveryUrl.hasError) {
+      invalidatePasswordRecovery();
+    } else if (shouldStartCallback) {
+      void (async () => {
+        let callbackSession: Session | null = null;
+        let callbackError = false;
+
+        try {
+          if (initialRecoveryUrl.code) {
+            const result = await supabase.auth.exchangeCodeForSession(initialRecoveryUrl.code);
+            callbackSession = result.data.session;
+            callbackError = Boolean(result.error);
+          } else if (initialRecoveryUrl.accessToken && initialRecoveryUrl.refreshToken) {
+            const result = await supabase.auth.setSession({
+              access_token: initialRecoveryUrl.accessToken,
+              refresh_token: initialRecoveryUrl.refreshToken,
+            });
+            callbackSession = result.data.session;
+            callbackError = Boolean(result.error);
+          } else {
+            callbackError = true;
+          }
+        } catch {
+          callbackError = true;
+        }
+
+        callbackProcessingRef.current = false;
+        if (callbackError || !callbackSession) {
+          invalidatePasswordRecovery();
+          return;
+        }
+        beginPasswordRecovery(callbackSession);
+      })();
+    }
+
     return () => {
       mounted = false;
+      clearRecoveryTimeout();
       authListener.subscription.unsubscribe();
     };
-  }, [reconcileSession]);
+  }, [beginPasswordRecovery, clearRecoveryTimeout, invalidatePasswordRecovery, reconcileSession, setRecoveryState]);
 
   const signIn = useCallback(async (email: string, password: string): Promise<SignInResult> => {
     setError(undefined);
@@ -209,9 +375,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: message };
     }
 
-    await reconcileSession(data.session);
+    // SIGNED_IN is reconciled once by the centralized auth-state listener.
     return { success: true };
-  }, [reconcileSession]);
+  }, []);
 
   const signOut = useCallback(async () => {
     setError(undefined);
@@ -221,10 +387,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     await supabase.auth.signOut({ scope: "local" });
     window.sessionStorage.removeItem(recoveryStorageKey);
+    recoveryInitializedRef.current = false;
+    setRecoveryState("idle");
     clearIdentity();
     setStage("signed_out");
     setLoading(false);
-  }, [clearIdentity, mfaEnrollment?.factorId]);
+  }, [clearIdentity, mfaEnrollment?.factorId, setRecoveryState]);
 
   const refreshProfile = useCallback(async () => {
     if (!session) return false;
@@ -301,22 +469,104 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestPasswordReset = useCallback(async (email: string): Promise<AuthActionResult> => {
     const redirectTo = `${window.location.origin}/redefinir-senha`;
-    await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
-    return { success: true };
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (resetError) return { success: false, error: "Não foi possível enviar o link agora. Tente novamente em instantes." };
+      return { success: true };
+    } catch {
+      return { success: false, error: "Não foi possível enviar o link agora. Tente novamente em instantes." };
+    }
   }, []);
 
   const updatePassword = useCallback(async (password: string): Promise<AuthActionResult> => {
-    if (stage !== "password_recovery" || !session) return { success: false, error: "O link de redefinição não é mais válido." };
+    if (stage !== "password_recovery" || passwordRecoveryStatus !== "ready" || !session) {
+      return { success: false, error: invalidRecoveryMessage };
+    }
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setError(undefined);
+    let updateError: { code?: string; message: string } | null = null;
+    try {
+      const result = await supabase.auth.updateUser({ password });
+      updateError = result.error;
+    } catch {
+      setLoading(false);
+      return { success: false, error: "Não foi possível redefinir a senha. Solicite um novo link e tente novamente." };
+    }
     setLoading(false);
-    if (updateError) return { success: false, error: "Não foi possível redefinir a senha. Solicite um novo link." };
+    if (updateError) {
+      const normalizedMessage = updateError.message.toLocaleLowerCase();
+      if (updateError.code === "insufficient_aal") {
+        return { success: false, error: "Confirme o código do aplicativo autenticador antes de redefinir a senha." };
+      }
+      if (normalizedMessage.includes("same password")) {
+        return { success: false, error: "A nova senha deve ser diferente da senha atual." };
+      }
+      if (normalizedMessage.includes("weak") || normalizedMessage.includes("password should")) {
+        return { success: false, error: "A nova senha não atende aos requisitos de segurança." };
+      }
+      if (normalizedMessage.includes("expired") || normalizedMessage.includes("session")) {
+        invalidatePasswordRecovery();
+        return { success: false, error: invalidRecoveryMessage };
+      }
+      return { success: false, error: "Não foi possível redefinir a senha. Solicite um novo link e tente novamente." };
+    }
     return { success: true };
-  }, [session, stage]);
+  }, [invalidatePasswordRecovery, passwordRecoveryStatus, session, stage]);
 
-  const finishPasswordRecovery = useCallback(async () => {
-    await signOut();
-  }, [signOut]);
+  const verifyPasswordRecoveryMfa = useCallback(async (code: string): Promise<AuthActionResult> => {
+    if (
+      stage !== "password_recovery"
+      || passwordRecoveryStatus !== "ready"
+      || !session
+      || !passwordRecoveryMfaRequired
+      || !passwordRecoveryMfaFactorId
+    ) {
+      return { success: false, error: invalidSessionMessage };
+    }
+
+    setLoading(true);
+    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
+      factorId: passwordRecoveryMfaFactorId,
+      code,
+    });
+    setLoading(false);
+    if (verifyError) return { success: false, error: invalidMfaCodeMessage };
+
+    const { data: refreshedSession } = await supabase.auth.getSession();
+    if (refreshedSession.session) {
+      setSession(refreshedSession.session);
+      setUser(refreshedSession.session.user);
+    }
+    setPasswordRecoveryMfaRequired(false);
+    return { success: true };
+  }, [passwordRecoveryMfaFactorId, passwordRecoveryMfaRequired, passwordRecoveryStatus, session, stage]);
+
+  const finishPasswordRecovery = useCallback(async (requestNewLink = false) => {
+    if (suppressSessionEventsRef.current) return;
+    suppressSessionEventsRef.current = true;
+    const target = requestNewLink ? "/login?recovery=1" : "/login";
+    window.history.replaceState({}, "", target);
+    clearRecoveryTimeout();
+    requestId.current += 1;
+    window.sessionStorage.removeItem(recoveryStorageKey);
+    recoveryInitializedRef.current = false;
+    setRecoveryState("idle");
+    setError(undefined);
+    clearIdentity();
+    setStage("signed_out");
+    setLoading(false);
+
+    // Recovery sessions are temporary. Logout/navigation failures must never
+    // be reported as a failed password update.
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch {
+      // Local recovery state is still cleared below.
+    } finally {
+      suppressSessionEventsRef.current = false;
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+  }, [clearIdentity, clearRecoveryTimeout, setRecoveryState]);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
@@ -327,6 +577,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mfaEnrollment,
     loading,
     error,
+    passwordRecoveryStatus,
+    passwordRecoveryError,
+    passwordRecoveryMfaRequired,
     signIn,
     signOut,
     refreshProfile,
@@ -336,8 +589,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cancelMfa,
     requestPasswordReset,
     updatePassword,
+    verifyPasswordRecoveryMfa,
     finishPasswordRecovery,
-  }), [cancelMfa, error, finishPasswordRecovery, loading, mfaEnrollment, permissions, profile, refreshProfile, requestPasswordReset, session, signIn, signOut, stage, startMfaEnrollment, updatePassword, user, verifyMfaChallenge, verifyMfaEnrollment]);
+  }), [cancelMfa, error, finishPasswordRecovery, loading, mfaEnrollment, passwordRecoveryError, passwordRecoveryMfaRequired, passwordRecoveryStatus, permissions, profile, refreshProfile, requestPasswordReset, session, signIn, signOut, stage, startMfaEnrollment, updatePassword, user, verifyMfaChallenge, verifyMfaEnrollment, verifyPasswordRecoveryMfa]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

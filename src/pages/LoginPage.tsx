@@ -9,7 +9,9 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string>();
   const [informational, setInformational] = useState(false);
-  const [mode, setMode] = useState<"login" | "recovery" | "recovery-sent">("login");
+  const [mode, setMode] = useState<"login" | "recovery" | "recovery-sent">(() => (
+    new URLSearchParams(window.location.search).get("recovery") === "1" ? "recovery" : "login"
+  ));
 
   useEffect(() => {
     if (authError) {
@@ -29,7 +31,11 @@ export function LoginPage() {
   const requestRecovery = async (event: React.FormEvent) => {
     event.preventDefault();
     setMessage(undefined);
-    await requestPasswordReset(email);
+    const result = await requestPasswordReset(email);
+    if (!result.success) {
+      setMessage(result.error);
+      return;
+    }
     setMode("recovery-sent");
   };
 
