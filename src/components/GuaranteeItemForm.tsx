@@ -17,6 +17,8 @@ import type { GuaranteeItemFormModel } from "../types/models";
 interface GuaranteeItemFormProps {
   value: GuaranteeItemFormModel;
   hasSelection: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
   onChange: (value: GuaranteeItemFormModel) => void;
   onCreate: () => void;
   onUpdate: () => void;
@@ -29,6 +31,8 @@ interface GuaranteeItemFormProps {
 export function GuaranteeItemForm({
   value,
   hasSelection,
+  canWrite,
+  canDelete,
   onChange,
   onCreate,
   onUpdate,
@@ -46,6 +50,7 @@ export function GuaranteeItemForm({
       <div className="form-grid form-grid--item">
         <Field label="Categoria" required>
           <Dropdown
+            disabled={!canWrite}
             value={value.categoria}
             selectedOptions={[value.categoria]}
             onOptionSelect={(_, data) => data.optionValue && update("categoria", data.optionValue)}
@@ -56,12 +61,13 @@ export function GuaranteeItemForm({
           </Dropdown>
         </Field>
         <Field label="Descrição" required>
-          <Input value={value.descricao} onChange={(_, data) => update("descricao", data.value)} />
+          <Input disabled={!canWrite} value={value.descricao} onChange={(_, data) => update("descricao", data.value)} />
         </Field>
         <div className="field-grid field-grid--two">
           <Field label="Quantidade" required>
             <Input
               type="number"
+              disabled={!canWrite}
               min={0}
               value={String(value.quantidade)}
               onChange={(_, data) => update("quantidade", Number(data.value))}
@@ -69,6 +75,7 @@ export function GuaranteeItemForm({
           </Field>
           <Field label="Unidade" required>
             <Dropdown
+              disabled={!canWrite}
               value={value.unidade}
               selectedOptions={[value.unidade]}
               onOptionSelect={(_, data) => data.optionValue && update("unidade", data.optionValue)}
@@ -80,13 +87,13 @@ export function GuaranteeItemForm({
           </Field>
         </div>
         <Field label="Observações">
-          <Textarea resize="vertical" value={value.observacoes} onChange={(_, data) => update("observacoes", data.value)} />
+          <Textarea disabled={!canWrite} resize="vertical" value={value.observacoes} onChange={(_, data) => update("observacoes", data.value)} />
         </Field>
       </div>
       <div className="card-actions">
-        <Button appearance="primary" icon={<Add20Regular />} onClick={onCreate}>Cadastrar</Button>
-        <Button icon={<Edit20Regular />} disabled={!hasSelection} onClick={onUpdate}>Atualizar</Button>
-        <Button className="danger-button--outline" icon={<Delete20Regular />} disabled={!hasSelection} onClick={onDelete}>
+        <Button appearance="primary" icon={<Add20Regular />} disabled={!canWrite} onClick={onCreate}>Cadastrar</Button>
+        <Button icon={<Edit20Regular />} disabled={!canWrite || !hasSelection} onClick={onUpdate}>Atualizar</Button>
+        <Button className="danger-button--outline" icon={<Delete20Regular />} disabled={!canDelete || !hasSelection} onClick={onDelete}>
           Excluir
         </Button>
         <Menu>

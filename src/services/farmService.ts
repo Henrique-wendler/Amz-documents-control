@@ -7,6 +7,7 @@ import { supabaseCarRepository } from "../repositories/supabaseCarRepository";
 import type { PersistedFarm } from "../repositories/farmRepository";
 import type { FarmDetailsViewModel, FarmDraft, FarmFilters, FarmListItem, FarmListResponse, FarmLoadMode, FarmSummary } from "../types/fazenda";
 import { normalizeSearchText } from "./searchUtils";
+import { operationService } from "./operationService";
 
 const relationMatch = (value: "all" | "yes" | "no", count: number) => value === "all" || (value === "yes" ? count > 0 : count === 0);
 
@@ -30,7 +31,7 @@ const summaryFrom = (farms: FarmListItem[]): FarmSummary => ({
 });
 
 const buildItems = async (farms: PersistedFarm[]): Promise<FarmListItem[]> => {
-  const [registrations, documents, cars] = await Promise.all([supabaseRegistrationRepository.list(), supabaseDocumentRepository.list(), supabaseCarRepository.list()]);
+  const [registrations, documents, cars, related] = await Promise.all([supabaseRegistrationRepository.list(), supabaseDocumentRepository.list(), supabaseCarRepository.list(), operationService.listRelatedViews()]);
   const registrationIds = new Set(registrations.map((registration) => registration.id));
   const links = (await supabaseOwnershipRepository.list()).filter((link) => registrationIds.has(link.registrationId));
 
@@ -38,12 +39,13 @@ const buildItems = async (farms: PersistedFarm[]): Promise<FarmListItem[]> => {
     const farmRegistrations = registrations.filter((registration) => registration.farmId === farm.id);
     const farmRegistrationIds = new Set(farmRegistrations.map((registration) => registration.id));
     const ownerIds = new Set(links.filter((link) => link.status === "active" && farmRegistrationIds.has(link.registrationId)).map((link) => link.ownerId));
+    const operations = related.operations.filter((operation) => operation.registrationIds.some((id) => farmRegistrationIds.has(id)));
     return {
       ...farm,
       registrationCount: farmRegistrations.length,
       ownerCount: ownerIds.size,
-      activeOperationCount: 0,
-      operationCount: 0,
+      activeOperationCount: operations.filter((operation) => operation.status === "active").length,
+      operationCount: operations.length,
       documentCount: documents.filter((document) => document.farmId === farm.id).length,
       carCount: cars.filter((car) => car.farmId === farm.id).length,
     };
@@ -93,7 +95,7 @@ export const farmService = {
   async getDetails(id: string): Promise<FarmDetailsViewModel | undefined> {
     const farm = await supabaseFarmRepository.getById(id);
     if (!farm) return undefined;
-    const [registrations, documents, cars] = await Promise.all([supabaseRegistrationRepository.listByFarm(id), supabaseDocumentRepository.listByFarm(id), supabaseCarRepository.listByFarm(id)]);
+    const [registrations, documents, cars, related] = await Promise.all([supabaseRegistrationRepository.listByFarm(id), supabaseDocumentRepository.listByFarm(id), supabaseCarRepository.listByFarm(id), operationService.listRelatedViews()]);
     const registrationIds = new Set(registrations.map((registration) => registration.id));
     const links = (await supabaseOwnershipRepository.list()).filter((link) => link.status === "active" && registrationIds.has(link.registrationId));
     const ownerIds = new Set(links.map((link) => link.ownerId));
@@ -102,7 +104,7 @@ export const farmService = {
       farm: (await buildItems([farm]))[0],
       registrations,
       owners,
-      operations: [],
+      operations: related.operations.filter((operation) => operation.registrationIds.some((registrationId) => registrationIds.has(registrationId))),
       documents,
       cars,
     };

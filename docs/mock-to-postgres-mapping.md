@@ -10,10 +10,10 @@ Componentes não acessam o Supabase diretamente. Services mantêm as regras de a
 
 | Fonte | Módulos |
 |---|---|
-| Supabase local | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos e CAR |
-| MockStore | Operações, Garantias, Relatórios e partes dependentes de Dashboard/Consulta Geral |
+| Supabase local | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias e itens de garantia |
+| MockStore | Relatórios e Dashboard |
 
-Consulta Geral usa Supabase para Proprietários, Fazendas, Matrículas, Documentos e CAR; Operações e Garantias permanecem no MockStore. O Dashboard continua híbrido. Não há dual-write.
+Consulta Geral usa Supabase também para Operações e Garantias. Os Drawers imobiliários resolvem seus vínculos por UUID a partir dos repositories reais. Dashboard e Relatórios permanecem no MockStore nesta etapa. Não há dual-write.
 
 | MockStore | PostgreSQL | Divergência relevante |
 |---|---|---|
@@ -43,12 +43,11 @@ Consulta Geral usa Supabase para Proprietários, Fazendas, Matrículas, Document
 
 ## Próximas etapas da migração
 
-1. Manter Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos e CAR exclusivamente no Supabase.
-2. Migrar Operações e Garantias antes de conectar suas relações aos Drawers imobiliários.
-3. Atualizar o Dashboard somente quando suas fontes restantes estiverem estabilizadas.
-4. Migrar Relatórios somente após as fontes necessárias estarem estabilizadas.
-5. Reconciliar IDs, FKs, status, datas e duplicidades antes de importar qualquer dado real.
-6. Não criar dual-write nem novos mocks paralelos durante a transição.
+1. Manter os módulos já migrados exclusivamente no Supabase, sem fallback ou dual-write no MockStore.
+2. Atualizar o Dashboard somente quando suas fontes restantes estiverem estabilizadas.
+3. Migrar Relatórios somente após as fontes necessárias estarem estabilizadas.
+4. Reconciliar IDs, FKs, status, datas e duplicidades antes de importar qualquer dado real.
+5. Não criar dual-write nem novos mocks paralelos durante a transição.
 
 ## Pendências e ambiente local
 

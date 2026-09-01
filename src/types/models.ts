@@ -1,8 +1,15 @@
+import type { FinancialInstitutionOption, GuaranteeTypeOption, OperationRegistrationOption } from "./operacao";
+
 export type OperationFormStatus = "Em análise" | "Ativa" | "Concluída" | "Cancelada";
-export type GuaranteeFormStatus = "Ativa" | "Encerrada" | "Em análise" | "Cancelada";
+export type GuaranteeFormStatus = "Ativa" | "Encerrada" | "Cancelada";
 
 export interface OperationFormModel {
   id: string;
+  version: number;
+  financialVersion?: number;
+  institutionId: string;
+  registrationIds: string[];
+  primaryRegistrationId: string;
   matricula: string;
   banco: string;
   numero: string;
@@ -10,10 +17,18 @@ export interface OperationFormModel {
   valor: string;
   situacao: OperationFormStatus;
   dataInicio: string;
+  dataFim: string;
+  observacoes: string;
 }
 
 export interface GuaranteeFormModel {
   id: string;
+  version: number;
+  financialVersion?: number;
+  operationId: string;
+  guaranteeTypeIds: string[];
+  primaryGuaranteeTypeId: string;
+  registrationIds: string[];
   numeroOperacao: string;
   matricula: string;
   fazenda: string;
@@ -31,6 +46,7 @@ export interface GuaranteeFormModel {
 
 export interface GuaranteeItemFormModel {
   id: string;
+  version: number;
   guaranteeId: string;
   categoria: string;
   descricao: string;
@@ -39,9 +55,14 @@ export interface GuaranteeItemFormModel {
   observacoes: string;
 }
 
+export interface OperationOption { id: string; label: string; }
+
 export interface AppData {
   operation: OperationFormModel;
+  operations: OperationOption[];
   guarantees: GuaranteeFormModel[];
   items: GuaranteeItemFormModel[];
+  institutions: FinancialInstitutionOption[];
+  registrations: OperationRegistrationOption[];
+  guaranteeTypes: GuaranteeTypeOption[];
 }
-

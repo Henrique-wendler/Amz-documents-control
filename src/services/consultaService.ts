@@ -1,6 +1,4 @@
-import { mockStore } from "../data/mock/mockStore";
 import type { SearchCategory, SearchCounts, SearchFilters, SearchLoadMode, SearchRecord, SearchResponse } from "../types/consulta";
-import { buildSearchRecords } from "./consultaRecordMapper";
 import { normalizeSearchText } from "./searchUtils";
 import { supabaseFarmRepository } from "../repositories/supabaseFarmRepository";
 import { supabaseOwnerRepository } from "../repositories/supabaseOwnerRepository";
@@ -9,8 +7,9 @@ import { supabaseRegistrationRepository } from "../repositories/supabaseRegistra
 import { supabaseDocumentRepository } from "../repositories/supabaseDocumentRepository";
 import { supabaseDocumentAttachmentRepository } from "../repositories/supabaseDocumentAttachmentRepository";
 import { supabaseCarRepository } from "../repositories/supabaseCarRepository";
-import { formatArea, formatIsoDate } from "./searchUtils";
-import { carStatusLabels, documentValidityLabels } from "./statusLabels";
+import { formatArea, formatCurrency, formatIsoDate } from "./searchUtils";
+import { carStatusLabels, documentValidityLabels, operationStatusLabels } from "./statusLabels";
+import { operationService } from "./operationService";
 
 export { normalizeSearchText } from "./searchUtils";
 
@@ -97,17 +96,84 @@ const coreRecords = async (): Promise<SearchRecord[]> => {
   return [...ownerRecords, ...farmRecords, ...registrationRecords, ...documentRecords, ...carRecords];
 };
 
-const records = async () => {
-  const mockRecords = buildSearchRecords(mockStore.getState()).filter((record) => !["owner", "farm", "registration", "document", "car"].includes(record.entityType));
-  return [...await coreRecords(), ...mockRecords];
+const operationRecords = async (includeFinancial = false): Promise<SearchRecord[]> => {
+  const data = await operationService.listRecords(includeFinancial);
+  const institutionById = new Map(data.institutions.map((item) => [item.id, item]));
+  const registrationById = new Map(data.registrations.map((item) => [item.id, item]));
+  const operationById = new Map(data.operations.map((item) => [item.id, item]));
+  const typeById = new Map(data.guaranteeTypes.map((item) => [item.id, item]));
+  const operations: SearchRecord[] = data.operations.map((operation) => {
+    const primaryRegistrationId = operation.registrations.find((item) => item.isPrimary)?.registrationId ?? operation.registrations[0]?.registrationId;
+    const primaryRegistration = primaryRegistrationId ? registrationById.get(primaryRegistrationId) : undefined;
+    const institution = institutionById.get(operation.institutionId);
+    return {
+      id: operation.id,
+      entityType: "operation",
+      title: operation.operationNumber,
+      reference: institution?.name ?? "Instituição não encontrada",
+      details: operation.purpose || "Sem finalidade informada",
+      status: operationStatusLabels[operation.status],
+      updatedAt: operation.updatedAt,
+      farmId: primaryRegistration?.farmId,
+      farmName: primaryRegistration?.farmName,
+      attributes: {
+        bank: institution?.name ?? "—",
+        farm: primaryRegistration?.farmName ?? "—",
+        registration: primaryRegistration?.number ?? "—",
+        value: operation.amount === undefined ? "" : formatCurrency(operation.amount),
+      },
+      relations: [
+        { label: "Matrículas", value: String(operation.registrations.length) },
+        { label: "Garantias", value: String(data.guarantees.filter((guarantee) => guarantee.operationId === operation.id).length) },
+      ],
+      openPath: `/?id=${operation.id}`,
+    };
+  });
+  const guarantees: SearchRecord[] = data.guarantees.flatMap((guarantee) => {
+    const operation = operationById.get(guarantee.operationId);
+    if (!operation) return [];
+    const institution = institutionById.get(operation.institutionId);
+    const primaryRegistration = registrationById.get(guarantee.registrationIds[0] ?? operation.registrations[0]?.registrationId);
+    const primaryTypeId = guarantee.types.find((item) => item.isPrimary)?.guaranteeTypeId ?? guarantee.types[0]?.guaranteeTypeId;
+    const typeName = primaryTypeId ? typeById.get(primaryTypeId)?.name : undefined;
+    return [{
+      id: guarantee.id,
+      entityType: "guarantee" as const,
+      title: typeName ?? "Garantia sem tipo",
+      reference: operation.operationNumber,
+      details: guarantee.description || "Sem descrição informada",
+      status: guarantee.status === "active" ? "Ativa" as const : guarantee.status === "closed" ? "Encerrada" as const : "Cancelada" as const,
+      updatedAt: guarantee.updatedAt,
+      farmId: primaryRegistration?.farmId,
+      farmName: primaryRegistration?.farmName,
+      attributes: {
+        bank: institution?.name ?? "—",
+        farm: primaryRegistration?.farmName ?? "—",
+        operation: operation.operationNumber,
+        value: guarantee.amount === undefined ? "" : formatCurrency(guarantee.amount),
+      },
+      relations: [
+        { label: "Tipos", value: String(guarantee.types.length) },
+        { label: "Matrículas", value: String(guarantee.registrationIds.length) },
+        { label: "Itens", value: String(data.items.filter((item) => item.guaranteeId === guarantee.id).length) },
+      ],
+      openPath: `/?id=${operation.id}&garantia=${guarantee.id}`,
+    }];
+  });
+  return [...operations, ...guarantees];
+};
+
+const records = async (includeFinancial = false) => {
+  const [core, operations] = await Promise.all([coreRecords(), operationRecords(includeFinancial)]);
+  return [...core, ...operations];
 };
 
 export const consultaService = {
-  async search(filters: SearchFilters, mode: SearchLoadMode = "success"): Promise<SearchResponse> {
+  async search(filters: SearchFilters, mode: SearchLoadMode = "success", includeFinancial = false): Promise<SearchResponse> {
     await delay(260);
     if (mode === "error") throw new Error("Não foi possível carregar os registros.");
     const query = normalizeSearchText(filters.query);
-    const filtered = (await records()).filter((record) => {
+    const filtered = (await records(includeFinancial)).filter((record) => {
       if (filters.category !== "all" && record.entityType !== filters.category) return false;
       if (filters.status && record.status !== filters.status) return false;
       if (filters.farmId && record.farmId !== filters.farmId) return false;
@@ -128,15 +194,15 @@ export const consultaService = {
     return { records: structuredClone(sorted.slice(start, start + filters.pageSize)), total: sorted.length, page, pageSize: filters.pageSize, totalPages };
   },
 
-  async getById(type: SearchRecord["entityType"], id: string): Promise<SearchRecord | undefined> {
+  async getById(type: SearchRecord["entityType"], id: string, includeFinancial = false): Promise<SearchRecord | undefined> {
     await delay(120);
-    const record = (await records()).find((item) => item.entityType === type && item.id === id);
+    const record = (await records(includeFinancial)).find((item) => item.entityType === type && item.id === id);
     return record ? structuredClone(record) : undefined;
   },
 
-  async getCounts(): Promise<SearchCounts> {
+  async getCounts(includeFinancial = false): Promise<SearchCounts> {
     await delay(120);
-    const data = await records();
+    const data = await records(includeFinancial);
     const categories: SearchCategory[] = ["owner", "farm", "registration", "operation", "guarantee", "document", "car"];
     const counts = Object.fromEntries(categories.map((category) => [category, data.filter((item) => item.entityType === category).length]));
     return { all: data.length, ...counts } as SearchCounts;

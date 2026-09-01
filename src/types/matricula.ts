@@ -1,4 +1,5 @@
-import type { CarRecord, DocumentValidityStatus, EntityStatus, Farm, Guarantee, Operation, Owner, OwnershipLink, Registration, RuralDocument } from "./domain";
+import type { CarRecord, DocumentValidityStatus, EntityStatus, Farm, Owner, OwnershipLink, Registration, RuralDocument } from "./domain";
+import type { RelatedGuaranteeView, RelatedOperationView } from "./operacao";
 
 export interface RegistrationListItem extends Registration {
   version: number;
@@ -47,8 +48,8 @@ export interface RegistrationDetailsViewModel {
   registration: RegistrationListItem;
   farm?: Farm;
   ownerships: RegistrationOwnershipView[];
-  operations: Operation[];
-  guarantees: Guarantee[];
+  operations: RelatedOperationView[];
+  guarantees: RelatedGuaranteeView[];
   documents: Array<RuralDocument & { validityStatus: DocumentValidityStatus }>;
   cars: CarRecord[];
   activePercentage: number;

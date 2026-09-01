@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos e CAR. Os demais módulos permanecem temporariamente no MockStore.
+> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias e itens de garantia. Dashboard e Relatórios permanecem temporariamente no MockStore.
 
 ## Visão geral
 
@@ -14,10 +14,10 @@ Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Se
 
 | Fonte atual | Escopo |
 |---|---|
-| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos e CAR |
-| MockStore | Operações, Garantias, Relatórios e partes dependentes de Consulta Geral/Dashboard |
+| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias e itens de garantia |
+| MockStore | Dashboard e Relatórios |
 
-Não existe dual-write. Consulta Geral consome do Supabase as categorias imobiliárias, Documentos e CAR; Operações e Garantias continuam no MockStore. O Dashboard permanece híbrido enquanto suas demais fontes não forem migradas.
+Não existe dual-write. Consulta Geral e os Drawers imobiliários consomem também as relações reais de Operações e Garantias. Dashboard e Relatórios continuam isolados no MockStore até suas migrações específicas.
 
 ## Migrations e dependências
 

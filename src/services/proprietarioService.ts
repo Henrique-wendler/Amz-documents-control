@@ -5,14 +5,15 @@ import { supabaseRegistrationRepository } from "../repositories/supabaseRegistra
 import type { PersistedOwner } from "../repositories/ownerRepository";
 import type { OwnerDraft, OwnerFilters, OwnerListItem, OwnerListResponse, OwnerLoadMode, OwnerWithRelations } from "../types/proprietario";
 import { formatArea } from "./searchUtils";
+import { operationService } from "./operationService";
 
-interface OwnerRelations { farmIds: Set<string>; registrationIds: Set<string>; }
+interface OwnerRelations { farmIds: Set<string>; registrationIds: Set<string>; operationCount: number; }
 
 const toListItem = (owner: PersistedOwner, relations?: OwnerRelations): OwnerListItem => ({
   ...owner,
   farmCount: relations?.farmIds.size ?? 0,
   registrationCount: relations?.registrationIds.size ?? 0,
-  operationCount: 0,
+  operationCount: relations?.operationCount ?? 0,
 });
 
 const toRepositoryInput = (draft: OwnerDraft) => ({
@@ -26,17 +27,20 @@ const toRepositoryInput = (draft: OwnerDraft) => ({
 });
 
 const loadRelations = async () => {
-  const [links, registrations] = await Promise.all([supabaseOwnershipRepository.list(), supabaseRegistrationRepository.list()]);
+  const [links, registrations, related] = await Promise.all([supabaseOwnershipRepository.list(), supabaseRegistrationRepository.list(), operationService.listRelatedViews()]);
   const registrationById = new Map(registrations.map((registration) => [registration.id, registration]));
   const byOwner = new Map<string, OwnerRelations>();
   for (const link of links.filter((item) => item.status === "active")) {
     const registration = registrationById.get(link.registrationId);
     if (!registration) continue;
-    const current = byOwner.get(link.ownerId) ?? { farmIds: new Set<string>(), registrationIds: new Set<string>() };
+    const current = byOwner.get(link.ownerId) ?? { farmIds: new Set<string>(), registrationIds: new Set<string>(), operationCount: 0 };
     current.farmIds.add(registration.farmId);
     current.registrationIds.add(registration.id);
     byOwner.set(link.ownerId, current);
   }
+  byOwner.forEach((relations) => {
+    relations.operationCount = related.operations.filter((operation) => operation.registrationIds.some((id) => relations.registrationIds.has(id))).length;
+  });
   return { byOwner, registrations };
 };
 

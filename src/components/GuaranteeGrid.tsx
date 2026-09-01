@@ -18,7 +18,7 @@ interface GuaranteeGridProps {
   onSelect: (item: GuaranteeFormModel) => void;
 }
 
-const dateLabel = (value: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+const dateLabel = (value: string) => value ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)) : "—";
 
 const columns: TableColumnDefinition<GuaranteeFormModel>[] = [
   createTableColumn({ columnId: "numero", renderHeaderCell: () => "Número", renderCell: (item) => item.numeroOperacao }),

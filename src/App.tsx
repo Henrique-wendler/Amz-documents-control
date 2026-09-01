@@ -7,7 +7,7 @@ import {
   Toaster,
   useToastController,
 } from "@fluentui/react-components";
-import { operationService } from "./services/operationService";
+import { emptyGuaranteeForm, emptyGuaranteeItemForm, emptyOperationForm, operationService } from "./services/operationService";
 import type { AppData, GuaranteeFormModel, GuaranteeItemFormModel, OperationFormModel } from "./types/models";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
@@ -30,6 +30,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MfaPage } from "./pages/MfaPage";
 import { PasswordResetPage } from "./pages/PasswordResetPage";
 import { useAuth } from "./contexts/AuthContext";
+import { usePermissions } from "./hooks/usePermissions";
 
 type DialogState =
   | { kind: "none" }
@@ -38,46 +39,25 @@ type DialogState =
   | { kind: "close-guarantee" }
   | { kind: "delete-item" };
 
-const emptyOperation: OperationFormModel = {
-  id: "",
-  matricula: "",
-  banco: "",
-  numero: "",
-  finalidade: "",
-  valor: "",
-  situacao: "Em análise",
-  dataInicio: "",
-};
-
-const emptyGuarantee: GuaranteeFormModel = {
-  id: "",
-  numeroOperacao: "",
-  matricula: "",
-  fazenda: "",
-  banco: "",
-  tipo: "",
-  descricao: "",
-  grau: "",
-  valor: "",
-  anoAvaliacao: "",
-  situacao: "Ativa",
-  dataInicio: "",
-  dataVencimento: "",
-  observacoes: "",
-};
-
-const emptyItem: GuaranteeItemFormModel = {
-  id: "",
-  guaranteeId: "",
-  categoria: "",
-  descricao: "",
-  quantidade: 0,
-  unidade: "",
-  observacoes: "",
-};
+const emptyOperation = emptyOperationForm();
+const emptyGuarantee = emptyGuaranteeForm();
+const emptyItem = emptyGuaranteeItemForm();
 
 export default function App() {
   const { session, profile, stage: authStage, loading: authLoading } = useAuth();
+  const { hasPermission } = usePermissions();
+  const financialAccess = useMemo(() => ({
+    readFinancial: hasPermission("financial.read"),
+    writeFinancial: hasPermission("financial.write"),
+  }), [hasPermission]);
+  const canWriteOperations = hasPermission("operations.write");
+  const canDeleteOperations = hasPermission("operations.soft_delete");
+  const canCloseOperations = hasPermission("operations.close");
+  const canCancelOperations = hasPermission("operations.cancel");
+  const canWriteGuarantees = hasPermission("guarantees.write");
+  const canDeleteGuarantees = hasPermission("guarantees.soft_delete");
+  const canCloseGuarantees = hasPermission("guarantees.close");
+  const canCancelGuarantees = hasPermission("guarantees.cancel");
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname.replace(/\/+$/, "") || "/");
   const [data, setData] = useState<AppData>();
   const [operation, setOperation] = useState<OperationFormModel>(emptyOperation);
@@ -89,32 +69,36 @@ export default function App() {
   const toasterId = "system-feedback";
   const { dispatchToast } = useToastController(toasterId);
 
-  const notify = (message: string) => {
+  const notify = (message: string, intent: "success" | "error" = "success") => {
     dispatchToast(
       <Toast>
         <ToastTitle>{message}</ToastTitle>
       </Toast>,
-      { intent: "success", timeout: 2800 },
+      { intent, timeout: 3600 },
     );
   };
 
-  const loadData = async (showFeedback = false) => {
-    const loaded = await operationService.load();
-    setData(loaded);
-    setOperation(loaded.operation);
-    const firstGuarantee = loaded.guarantees[0];
-    const firstItem = loaded.items[0];
-    setGuarantee(firstGuarantee ?? emptyGuarantee);
-    setItem(firstItem ?? emptyItem);
-    setSelectedGuaranteeId(firstGuarantee?.id);
-    setSelectedItemId(firstItem?.id);
-    if (showFeedback) notify("Dados atualizados.");
+  const loadData = async (showFeedback = false, operationId?: string) => {
+    try {
+      const loaded = await operationService.load(financialAccess, operationId);
+      setData(loaded);
+      setOperation(loaded.operation);
+      const firstGuarantee = loaded.guarantees[0];
+      const firstItem = firstGuarantee ? loaded.items.find((current) => current.guaranteeId === firstGuarantee.id) : undefined;
+      setGuarantee(firstGuarantee ?? emptyGuaranteeForm(loaded.operation));
+      setItem(firstItem ?? emptyGuaranteeItemForm(firstGuarantee?.id));
+      setSelectedGuaranteeId(firstGuarantee?.id);
+      setSelectedItemId(firstItem?.id);
+      if (showFeedback) notify("Dados atualizados.");
+    } catch (loadError) {
+      notify(loadError instanceof Error ? loadError.message : "Não foi possível carregar as operações.", "error");
+    }
   };
 
   useEffect(() => {
     if (profile) void loadData();
     else setData(undefined);
-  }, [profile?.id]);
+  }, [profile?.id, financialAccess.readFinancial, financialAccess.writeFinancial]);
 
   useEffect(() => {
     const handlePopState = () => setCurrentPath(window.location.pathname.replace(/\/+$/, "") || "/");
@@ -143,7 +127,7 @@ export default function App() {
     if (path === `${currentPath}${window.location.search}`) return;
     window.history.pushState({}, "", path);
     setCurrentPath(targetPath);
-    if (targetPath === "/") void loadData();
+    if (targetPath === "/") void loadData(false, new URL(path, window.location.origin).searchParams.get("id") ?? undefined);
   };
 
   const activeGuarantees = useMemo(
@@ -206,18 +190,22 @@ export default function App() {
   if (!data) {
     return (
       <div className="loading-screen">
-        <Spinner label="Preparando o protótipo…" />
+        <Spinner label="Carregando operações e garantias…" />
       </div>
     );
   }
 
   const selectGuarantee = (selected: GuaranteeFormModel) => {
+    window.history.replaceState({}, "", `/?id=${operation.id}&garantia=${selected.id}`);
     setSelectedGuaranteeId(selected.id);
     setGuarantee({ ...selected });
     const linkedItem = data.items.find((current) => current.guaranteeId === selected.id);
     if (linkedItem) {
       setSelectedItemId(linkedItem.id);
       setItem({ ...linkedItem });
+    } else {
+      setSelectedItemId(undefined);
+      setItem(emptyGuaranteeItemForm(selected.id));
     }
   };
 
@@ -227,58 +215,99 @@ export default function App() {
   };
 
   const removeSelectedGuarantee = async () => {
-    if (selectedGuaranteeId) await operationService.deleteGuarantee(selectedGuaranteeId);
-    await loadData();
-    setDialog({ kind: "none" });
-    notify("Garantia excluída.");
+    try {
+      const selected = data?.guarantees.find((current) => current.id === selectedGuaranteeId);
+      if (!selected) return;
+      const result = await operationService.deleteGuarantee(selected.id, selected.version);
+      if (!result.deleted) return notify("Exclua primeiro os itens vinculados à garantia.", "error");
+      await loadData();
+      notify("Garantia excluída.");
+    } catch (actionError) {
+      notify(actionError instanceof Error ? actionError.message : "Não foi possível excluir a garantia.", "error");
+    } finally {
+      setDialog({ kind: "none" });
+    }
   };
 
   const closeSelectedGuarantee = async () => {
-    if (selectedGuaranteeId) await operationService.closeGuarantee(selectedGuaranteeId);
-    await loadData();
-    setDialog({ kind: "none" });
-    notify("Garantia encerrada.");
+    try {
+      const selected = data?.guarantees.find((current) => current.id === selectedGuaranteeId);
+      if (!selected) return;
+      await operationService.closeGuarantee(selected, financialAccess);
+      await loadData();
+      notify("Garantia encerrada.");
+    } catch (actionError) {
+      notify(actionError instanceof Error ? actionError.message : "Não foi possível encerrar a garantia.", "error");
+    } finally {
+      setDialog({ kind: "none" });
+    }
   };
 
   const removeSelectedItem = async () => {
-    if (selectedItemId) await operationService.deleteGuaranteeItem(selectedItemId);
-    await loadData();
-    setDialog({ kind: "none" });
-    notify("Item excluído.");
+    try {
+      const selected = data?.items.find((current) => current.id === selectedItemId);
+      if (!selected) return;
+      await operationService.deleteGuaranteeItem(selected.id, selected.version);
+      await loadData();
+      notify("Item excluído.");
+    } catch (actionError) {
+      notify(actionError instanceof Error ? actionError.message : "Não foi possível excluir o item.", "error");
+    } finally {
+      setDialog({ kind: "none" });
+    }
   };
 
   const saveCurrentOperation = async (message: string) => {
-    const saved = await operationService.saveOperation(operation);
-    setOperation(saved);
-    setData((current) => current ? { ...current, operation: saved } : current);
-    notify(message);
+    try {
+      const saved = await operationService.saveOperation(operation, financialAccess);
+      window.history.replaceState({}, "", `/?id=${saved.id}`);
+      await loadData(false, saved.id);
+      notify(message);
+    } catch (actionError) {
+      notify(actionError instanceof Error ? actionError.message : "Não foi possível salvar a operação.", "error");
+    }
   };
 
   const saveCurrentGuarantee = async (create: boolean) => {
-    await operationService.saveGuarantee(create ? { ...guarantee, id: "" } : guarantee);
-    await loadData();
-    notify(create ? "Garantia cadastrada." : "Garantia atualizada.");
+    try {
+      await operationService.saveGuarantee(create ? { ...guarantee, id: "", version: 0, operationId: operation.id } : guarantee, financialAccess);
+      await loadData(false, operation.id);
+      notify(create ? "Garantia cadastrada." : "Garantia atualizada.");
+    } catch (actionError) {
+      notify(actionError instanceof Error ? actionError.message : "Não foi possível salvar a garantia.", "error");
+    }
   };
 
   const saveCurrentItem = async (create: boolean) => {
     if (!selectedGuaranteeId) return;
-    await operationService.saveGuaranteeItem({ ...item, id: create ? "" : item.id, guaranteeId: selectedGuaranteeId });
-    await loadData();
-    notify(create ? "Item cadastrado." : "Item atualizado.");
+    try {
+      await operationService.saveGuaranteeItem({ ...item, id: create ? "" : item.id, version: create ? 0 : item.version, guaranteeId: selectedGuaranteeId });
+      await loadData(false, operation.id);
+      notify(create ? "Item cadastrado." : "Item atualizado.");
+    } catch (actionError) {
+      notify(actionError instanceof Error ? actionError.message : "Não foi possível salvar o item.", "error");
+    }
   };
 
   const dialogConfig = {
     "delete-operation": {
       title: "Excluir operação?",
-      message: "Esta ação removerá a operação atual do protótipo. Deseja continuar?",
+      message: "Esta ação excluirá logicamente a operação atual. Deseja continuar?",
       confirmLabel: "Excluir",
       danger: true,
       onConfirm: () => void (async () => {
-        if (operation.id) await operationService.deleteOperation(operation.id);
-        setOperation(emptyOperation);
-        setData({ operation: emptyOperation, guarantees: [], items: [] });
-        setDialog({ kind: "none" });
-        notify("Operação excluída.");
+        try {
+          if (!operation.id) return;
+          const result = await operationService.deleteOperation(operation.id, operation.version);
+          if (!result.deleted) return notify("Remova primeiro as garantias vinculadas à operação.", "error");
+          window.history.replaceState({}, "", "/");
+          await loadData();
+          notify("Operação excluída.");
+        } catch (actionError) {
+          notify(actionError instanceof Error ? actionError.message : "Não foi possível excluir a operação.", "error");
+        } finally {
+          setDialog({ kind: "none" });
+        }
       })(),
     },
     "delete-guarantee": {
@@ -305,6 +334,7 @@ export default function App() {
   } as const;
 
   const activeDialog = dialog.kind === "none" ? undefined : dialogConfig[dialog.kind];
+  const selectedGuaranteeItems = data.items.filter((current) => current.guaranteeId === selectedGuaranteeId);
 
   return (
     <div className="app-shell">
@@ -318,12 +348,30 @@ export default function App() {
 
           <OperationForm
             value={operation}
+            operations={data.operations}
+            institutions={data.institutions}
+            registrations={data.registrations}
+            canWrite={canWriteOperations}
+            canDelete={canDeleteOperations}
+            canClose={canCloseOperations}
+            canCancel={canCancelOperations}
+            canReadFinancial={financialAccess.readFinancial}
+            canWriteFinancial={financialAccess.writeFinancial}
             onChange={setOperation}
-            onNew={() => setOperation(emptyOperation)}
+            onSelectOperation={(id) => navigate(`/?id=${id}`)}
+            onNew={() => {
+              setOperation(emptyOperationForm());
+              setGuarantee(emptyGuaranteeForm());
+              setItem(emptyGuaranteeItemForm());
+              setSelectedGuaranteeId(undefined);
+              setSelectedItemId(undefined);
+            }}
             onSave={() => void saveCurrentOperation("Operação salva com sucesso.")}
             onEdit={() => void saveCurrentOperation("Operação atualizada.")}
             onDelete={() => setDialog({ kind: "delete-operation" })}
             onClear={() => setOperation(emptyOperation)}
+            onOpenRegistration={(id) => navigate(`/matriculas?open=${id}`)}
+            onOpenFarm={(id) => navigate(`/fazendas?open=${id}`)}
           />
 
           <div className="lower-layout">
@@ -334,7 +382,16 @@ export default function App() {
             >
               <GuaranteeForm
                 value={guarantee}
+                registrations={data.registrations}
+                guaranteeTypes={data.guaranteeTypes}
+                availableRegistrationIds={operation.registrationIds}
                 hasSelection={Boolean(selectedGuaranteeId)}
+                canWrite={canWriteGuarantees}
+                canDelete={canDeleteGuarantees}
+                canClose={canCloseGuarantees}
+                canCancel={canCancelGuarantees}
+                canReadFinancial={financialAccess.readFinancial}
+                canWriteFinancial={financialAccess.writeFinancial}
                 onChange={setGuarantee}
                 onCreate={() => void saveCurrentGuarantee(true)}
                 onUpdate={() => void saveCurrentGuarantee(false)}
@@ -344,8 +401,9 @@ export default function App() {
                   const selected = data.guarantees.find((current) => current.id === selectedGuaranteeId);
                   if (selected) setGuarantee({ ...selected });
                 }}
-                onClear={() => setGuarantee(emptyGuarantee)}
+                onClear={() => setGuarantee(emptyGuaranteeForm(operation))}
                 onList={() => notify("Lista de garantias atualizada.")}
+                onOpenRegistration={(id) => navigate(`/matriculas?open=${id}`)}
               />
               <div className="grid-section">
                 <div className="grid-section__title">
@@ -360,20 +418,22 @@ export default function App() {
               <GuaranteeItemForm
                 value={item}
                 hasSelection={Boolean(selectedItemId)}
+                canWrite={canWriteGuarantees}
+                canDelete={canDeleteGuarantees}
                 onChange={setItem}
                 onCreate={() => void saveCurrentItem(true)}
                 onUpdate={() => void saveCurrentItem(false)}
                 onDelete={() => setDialog({ kind: "delete-item" })}
                 onSearch={() => notify("Busca de itens concluída.")}
-                onClear={() => setItem(emptyItem)}
+                onClear={() => setItem(emptyGuaranteeItemForm(selectedGuaranteeId))}
                 onList={() => notify("Lista de itens atualizada.")}
               />
               <div className="grid-section">
                 <div className="grid-section__title">
                   <h3>Itens da garantia selecionada</h3>
-                  <span>{data.items.length} registro</span>
+                  <span>{selectedGuaranteeItems.length} registro</span>
                 </div>
-                <GuaranteeItemGrid items={data.items} selectedId={selectedItemId} onSelect={selectItem} />
+                <GuaranteeItemGrid items={selectedGuaranteeItems} selectedId={selectedItemId} onSelect={selectItem} />
               </div>
             </SectionCard>
           </div>

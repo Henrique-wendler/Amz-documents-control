@@ -8,6 +8,7 @@ import type { PersistedOwnershipLink } from "../repositories/ownershipRepository
 import type { PersistedRegistration } from "../repositories/registrationRepository";
 import type { OwnershipDraft, RegistrationDetailsViewModel, RegistrationDraft, RegistrationFilters, RegistrationListItem, RegistrationListResponse, RegistrationLoadMode, RegistrationSummary } from "../types/matricula";
 import { normalizeSearchText } from "./searchUtils";
+import { operationService } from "./operationService";
 
 const dateKey = (value?: string) => {
   if (!value) return "";
@@ -24,7 +25,7 @@ const buildItems = async (registrations: PersistedRegistration[]): Promise<Regis
   const farms = await supabaseFarmRepository.getByIds(farmIds);
   const farmById = new Map(farms.map((farm) => [farm.id, farm]));
   const registrationIds = new Set(registrations.map((registration) => registration.id));
-  const [allLinks, documents, cars] = await Promise.all([supabaseOwnershipRepository.list(), supabaseDocumentRepository.list(), supabaseCarRepository.list()]);
+  const [allLinks, documents, cars, related] = await Promise.all([supabaseOwnershipRepository.list(), supabaseDocumentRepository.list(), supabaseCarRepository.list(), operationService.listRelatedViews()]);
   const links = allLinks.filter((link) => registrationIds.has(link.registrationId));
   return registrations.map((registration) => {
     const farm = farmById.get(registration.farmId);
@@ -35,8 +36,8 @@ const buildItems = async (registrations: PersistedRegistration[]): Promise<Regis
       farmLocation: farm ? `${farm.municipality} / ${farm.state}` : "—",
       ownerCount: new Set(registrationLinks.filter((link) => link.status === "active").map((link) => link.ownerId)).size,
       ownershipLinkCount: registrationLinks.length,
-      operationCount: 0,
-      guaranteeCount: 0,
+      operationCount: related.operations.filter((operation) => operation.registrationIds.includes(registration.id)).length,
+      guaranteeCount: related.guarantees.filter((guarantee) => guarantee.registrationIds.includes(registration.id)).length,
       documentCount: documents.filter((document) => document.registrationId === registration.id).length,
       carCount: cars.filter((car) => car.registrationId === registration.id).length,
       activePercentage: activePercentage(links, registration.id),
@@ -105,7 +106,7 @@ export const registrationService = {
     const registration = await supabaseRegistrationRepository.getById(id);
     if (!registration) return undefined;
     const farm = await supabaseFarmRepository.getById(registration.farmId);
-    const [links, documents, cars] = await Promise.all([supabaseOwnershipRepository.listByRegistration(id), supabaseDocumentRepository.listByRegistration(id), supabaseCarRepository.listByRegistration(id)]);
+    const [links, documents, cars, related] = await Promise.all([supabaseOwnershipRepository.listByRegistration(id), supabaseDocumentRepository.listByRegistration(id), supabaseCarRepository.listByRegistration(id), operationService.listRelatedViews()]);
     const owners = await supabaseOwnerRepository.listAll();
     const ownerById = new Map(owners.map((owner) => [owner.id, owner]));
     const ownerships = links.flatMap((link) => {
@@ -116,8 +117,8 @@ export const registrationService = {
       registration: (await buildItems([registration]))[0],
       farm,
       ownerships,
-      operations: [],
-      guarantees: [],
+      operations: related.operations.filter((operation) => operation.registrationIds.includes(id)),
+      guarantees: related.guarantees.filter((guarantee) => guarantee.registrationIds.includes(id)),
       documents,
       cars,
       activePercentage: activePercentage(links, id),

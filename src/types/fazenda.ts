@@ -1,4 +1,5 @@
-import type { CarRecord, DocumentValidityStatus, EntityStatus, Farm, Operation, Owner, Registration, RuralDocument } from "./domain";
+import type { CarRecord, DocumentValidityStatus, EntityStatus, Farm, Owner, Registration, RuralDocument } from "./domain";
+import type { RelatedOperationView } from "./operacao";
 
 export interface FarmListItem extends Farm {
   version: number;
@@ -34,7 +35,7 @@ export interface FarmDetailsViewModel {
   farm: FarmListItem;
   registrations: Registration[];
   owners: Owner[];
-  operations: Operation[];
+  operations: RelatedOperationView[];
   documents: Array<RuralDocument & { validityStatus: DocumentValidityStatus }>;
   cars: CarRecord[];
 }

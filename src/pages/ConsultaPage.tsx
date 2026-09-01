@@ -18,6 +18,7 @@ import type {
   SearchRecord,
   SearchResponse,
 } from "../types/consulta";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface ConsultaPageProps {
   onNavigate: (path: string) => void;
@@ -55,6 +56,8 @@ const advancedKeys: Array<keyof SearchFiltersValue> = [
 const getLoadMode = (): SearchLoadMode => new URLSearchParams(window.location.search).get("state") === "error" ? "error" : "success";
 
 export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
+  const { hasPermission } = usePermissions();
+  const canReadFinancial = hasPermission("financial.read");
   const [searchInput, setSearchInput] = useState("");
   const [filters, setFilters] = useState(initialFilters);
   const [response, setResponse] = useState<SearchResponse>();
@@ -71,14 +74,14 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
     dispatchToast(<Toast><ToastTitle>{message}</ToastTitle></Toast>, { intent: "success", timeout: 2800 });
   }, [dispatchToast]);
 
-  const loadCounts = useCallback(async () => setCounts(await consultaService.getCounts()), []);
+  const loadCounts = useCallback(async () => setCounts(await consultaService.getCounts(canReadFinancial)), [canReadFinancial]);
 
   const search = useCallback(async (nextFilters: SearchFiltersValue, showFeedback = false) => {
     const currentRequest = ++requestId.current;
     setLoading(true);
     setError(false);
     try {
-      const nextResponse = await consultaService.search(nextFilters, getLoadMode());
+      const nextResponse = await consultaService.search(nextFilters, getLoadMode(), canReadFinancial);
       if (currentRequest !== requestId.current) return;
       setResponse(nextResponse);
       if (showFeedback) notify("Dados atualizados.");
@@ -89,7 +92,7 @@ export function ConsultaPage({ onNavigate }: ConsultaPageProps) {
     } finally {
       if (currentRequest === requestId.current) setLoading(false);
     }
-  }, [notify]);
+  }, [canReadFinancial, notify]);
 
   useEffect(() => {
     void loadCounts();
