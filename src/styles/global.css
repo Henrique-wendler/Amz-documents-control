@@ -2860,3 +2860,50 @@ button.registration-farm-card {
   .mfa-enrollment > div, .mfa-enrollment .fui-Field { width: 100%; }
   .mfa-enrollment__copy-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Administração de usuários */
+.user-administration-content { padding-top: 14px; }
+.user-administration-toolbar { display: grid; min-width: 0; grid-template-columns: minmax(260px, 1fr) minmax(150px, 210px) minmax(140px, 180px) max-content; align-items: end; gap: 10px; padding: 12px 14px 13px; }
+.user-administration-toolbar > .fui-Field { width: 100%; min-width: 0; }
+.user-administration-toolbar .fui-Dropdown { width: 100%; min-width: 0; }
+.user-administration-toolbar .fui-Field__label { color: #68736c; font-size: 10px; }
+.user-administration-toolbar__new { white-space: nowrap; }
+.user-administration-results { margin-top: 12px; }
+.user-administration-results .section-card__body { padding-top: 12px; }
+.user-administration-grid [role="grid"] { width: 100%; table-layout: fixed; }
+.user-administration-grid [role="row"]:not(:first-child) { min-height: 42px; cursor: pointer; }
+.user-administration-grid [role="row"] > :first-child { width: 20%; }
+.user-administration-grid [role="row"] > :nth-child(2) { width: 23%; }
+.user-administration-grid [role="row"] > :nth-child(4) { width: 105px; }
+.user-administration-grid [role="row"] > :nth-child(5) { width: 92px; }
+.user-administration-grid [role="row"] > :nth-child(6),
+.user-administration-grid [role="row"] > :nth-child(7) { width: 140px; }
+.user-administration-grid [role="row"] > :last-child { width: 68px; }
+.user-administration-grid__actions { display: flex; justify-content: flex-end; }
+.user-administration-empty { display: grid; min-height: 220px; color: #68736c; place-items: center; align-content: center; gap: 5px; text-align: center; }
+.user-administration-empty strong { color: #314139; font-size: 14px; }
+.user-administration-empty span { font-size: 10px; }
+.user-administration-form { padding-bottom: 16px; }
+.user-administration-form__intro { display: grid; gap: 3px; padding: 5px 0 17px; border-bottom: 1px solid #edf0eb; }
+.user-administration-form__intro strong { color: #26322b; font-size: 15px; }
+.user-administration-form__intro span { color: #68736c; font-size: 11px; line-height: 1.45; }
+.user-administration-form__grid { display: grid; gap: 15px; padding-top: 18px; }
+.user-administration-form__grid .fui-Dropdown { width: 100%; min-width: 0; }
+.user-administration-form__grid .fui-Field__label { color: #526058; font-size: 11px; }
+.user-administration-form__error { margin: 16px 0 0; padding: 10px 12px; color: #8b2f2c; background: #fff3f1; border: 1px solid #e8c7c2; border-radius: 7px; font-size: 11px; }
+
+@media (max-width: 1050px) {
+  .user-administration-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .user-administration-toolbar__search { grid-column: 1 / -1; }
+  .user-administration-toolbar__new { justify-self: end; }
+  .user-administration-grid .user-column--email { display: none; }
+  .user-administration-grid .user-column--created { display: none; }
+}
+
+@media (max-width: 680px) {
+  .user-administration-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .user-administration-toolbar__search { grid-column: auto; }
+  .user-administration-toolbar__new { width: 100%; justify-self: stretch; }
+  .user-administration-grid .user-column--role,
+  .user-administration-grid .user-column--lastAccess { display: none; }
+}

@@ -8,13 +8,16 @@ import {
   People24Regular,
   Search24Regular,
   Shield24Regular,
+  Settings24Regular,
 } from "@fluentui/react-icons";
 import type { ComponentType } from "react";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface NavItem {
   label: string;
   icon: ComponentType;
   path?: string;
+  permission?: string;
 }
 
 const items: NavItem[] = [
@@ -27,6 +30,7 @@ const items: NavItem[] = [
   { label: "Documentos", icon: Folder24Regular, path: "/documentos" },
   { label: "CAR", icon: Shield24Regular, path: "/car" },
   { label: "Relatórios", icon: ChartMultiple24Regular, path: "/relatorios" },
+  { label: "Administração · Usuários", icon: Settings24Regular, path: "/administracao/usuarios", permission: "users.manage" },
 ];
 
 interface SidebarProps {
@@ -35,6 +39,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activePath = "/", onNavigate }: SidebarProps) {
+  const { hasPermission } = usePermissions();
   return (
     <aside className="sidebar" aria-label="Navegação principal">
       <div className="sidebar__title">
@@ -42,7 +47,7 @@ export function Sidebar({ activePath = "/", onNavigate }: SidebarProps) {
         <strong>Imóveis Rurais</strong>
       </div>
       <nav className="sidebar__nav">
-        {items.map(({ label, icon: Icon, path }) => {
+        {items.filter((item) => !item.permission || hasPermission(item.permission)).map(({ label, icon: Icon, path }) => {
           const active = path === activePath;
           return (
             <button

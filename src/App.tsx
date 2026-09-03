@@ -29,6 +29,7 @@ import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaPage } from "./pages/MfaPage";
 import { PasswordResetPage } from "./pages/PasswordResetPage";
+import { UsersPage } from "./pages/UsersPage";
 import { useAuth } from "./contexts/AuthContext";
 import { usePermissions } from "./hooks/usePermissions";
 
@@ -185,6 +186,10 @@ export default function App() {
 
   if (currentPath === "/relatorios") {
     return <RelatoriosPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/administracao/usuarios") {
+    return <UsersPage onNavigate={navigate} />;
   }
 
   if (!data) {

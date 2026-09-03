@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual: schema executado e validado no Supabase local. O frontend usa Supabase para Auth/MFA, profiles/permissions e todos os módulos de negócio, incluindo Consulta Geral, Dashboard e Relatórios.
+> Estado atual: schema executado e validado no Supabase local. O frontend usa Supabase para Auth/MFA, profiles/permissions, administração de usuários e todos os módulos de negócio, incluindo Consulta Geral, Dashboard e Relatórios.
 
 ## Visão geral
 
@@ -34,6 +34,7 @@ Supabase/PostgreSQL é a única fonte de dados de negócio. A infraestrutura fro
 | 8 | `202608280008_harden_authenticated_table_grants.sql` | endurecimento dos grants para usuários autenticados |
 | 9 | `202608280009_expose_current_user_permissions.sql` | função segura para carregar permissions do usuário atual |
 | 10 | `202609010010_transactional_operations_guarantees.sql` | RPCs atômicos para Operações, Garantias, relações N:N e financeiro |
+| 11 | `202609030011_user_administration_support.sql` | alteração transacional de profiles, proteção do último gestor de usuários e eventos administrativos |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -114,7 +115,17 @@ Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuraçã
 4. O role `admin` é atribuído ao primeiro profile.
 5. Os demais usuários são posteriormente convidados pelo Admin e associados à mesma organização na V1.
 
-O papel `authenticated` não possui `INSERT` em `organizations`. Nenhum fluxo React de bootstrap, convite ou troca de tenant faz parte deste pacote.
+O papel `authenticated` não possui `INSERT` em `organizations`. Não existe fluxo React de bootstrap, signup público, criação de organização ou troca de tenant. Convites cotidianos são iniciados pela área administrativa e executados exclusivamente pela Edge Function autorizada.
+
+## Administração de usuários
+
+A rota `/administracao/usuarios` usa o fluxo `Component → Service → Repository → Edge Function → Supabase Admin API/PostgreSQL`. O navegador envia somente a sessão do usuário; `service_role` permanece exclusivamente no runtime da Edge Function. A função valida a sessão no Auth, exige `users.manage`, deriva `organization_id` do profile ativo e rejeita qualquer tenant recebido no payload.
+
+Convites e recuperações usam `APP_PUBLIC_URL`, e CORS usa `ALLOWED_ORIGINS`; nenhuma URL de implantação é compilada no frontend. A listagem cruza profiles do tenant com metadados não sensíveis do Auth e devolve apenas e-mail, datas de acesso e a situação booleana do MFA. Senhas, tokens, sessões e secrets TOTP nunca são retornados.
+
+Inativação preserva o profile e a auditoria, remove o acesso lógico via `profile.status`/RLS e aplica banimento no Supabase Auth. Reativação reverte ambos. Alterações de profile são transacionais no PostgreSQL e um advisory lock impede que operações concorrentes removam o último profile ativo cujo role concede `users.manage`.
+
+Revogação granular de todas as sessões de outro usuário não foi exposta: a Admin API disponível exige o JWT da própria sessão para logout global. Não há obtenção ou armazenamento inseguro de tokens de terceiros. Em produção, `ALLOWED_ORIGINS` deve conter somente origens HTTPS e os limites distribuídos devem ser aplicados no gateway/plataforma; o limitador em memória da função é apenas uma barreira complementar por instância.
 
 ## Concorrência, soft delete e auditoria
 
