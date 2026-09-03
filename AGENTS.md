@@ -20,7 +20,7 @@
 
 ## Referências
 
-- `src/data/mock/`: código legado sem uso funcional; não remover sem solicitação explícita.
+- `src/repositories/`: persistência, consultas agregadoras e mapeamento Supabase.
 - `src/services/`: regras de aplicação e acesso aos dados.
 - `src/types/`: entidades, contratos e view models.
 - `src/components/`: componentes reutilizáveis da interface.

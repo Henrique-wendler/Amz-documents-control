@@ -31,7 +31,7 @@ export function Header({
         <p>{subtitle}</p>
       </div>
       <div className="app-header__actions">
-        <Tooltip content="Recarregar os dados do protótipo" relationship="label">
+        <Tooltip content="Recarregar os dados" relationship="label">
           <Button
             appearance="subtle"
             disabled={refreshing}

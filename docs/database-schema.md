@@ -18,6 +18,8 @@ Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Se
 
 Não existe dual-write. Consulta Geral, Dashboard, Relatórios e os Drawers imobiliários consomem as entidades e relações reais. Dashboard e Relatórios derivam seus indicadores em camadas agregadoras de repositories com consultas paralelas; valores financeiros só são consultados quando as permissions correspondentes estão presentes.
 
+Supabase/PostgreSQL é a única fonte de dados de negócio. A infraestrutura frontend de MockStore, selectors e seeds demonstrativos foi removida após a conclusão da migração.
+
 ## Migrations e dependências
 
 | Ordem | Arquivo | Responsabilidade |

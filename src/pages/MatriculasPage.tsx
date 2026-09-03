@@ -94,7 +94,7 @@ export function MatriculasPage({ onNavigate }: MatriculasPageProps) {
     : dialog.kind === "delete" ? { title: "Excluir matrícula?", message: `A matrícula ${dialog.registration.number} será removida definitivamente. Deseja continuar?`, confirmLabel: "Excluir", danger: true, onConfirm: () => void confirmDelete() }
     : dialog.kind === "blocked" ? { title: "Exclusão não permitida", message: "Esta matrícula possui registros vinculados e não pode ser excluída. Considere inativá-la.", confirmLabel: "Entendi", danger: false, onConfirm: () => setDialog({ kind: "none" }) }
     : dialog.kind === "close-link" ? { title: "Encerrar vínculo?", message: "O vínculo permanecerá no histórico, mas deixará de ser considerado ativo.", confirmLabel: "Encerrar", danger: false, onConfirm: () => void confirmCloseLink() }
-    : dialog.kind === "delete-link" ? { title: "Excluir vínculo?", message: "O vínculo será removido do protótipo. Para preservar o histórico, prefira encerrá-lo.", confirmLabel: "Excluir", danger: true, onConfirm: () => void confirmDeleteLink() } : undefined;
+    : dialog.kind === "delete-link" ? { title: "Excluir vínculo?", message: "O vínculo será removido do sistema. Para preservar o histórico, prefira encerrá-lo.", confirmLabel: "Excluir", danger: true, onConfirm: () => void confirmDeleteLink() } : undefined;
   const editingPercentage = editingOwnership?.link.status === "active" ? editingOwnership.link.percentage ?? 0 : 0;
   const currentPercentage = Math.max((details?.activePercentage ?? 0) - editingPercentage, 0);
 

@@ -11,11 +11,15 @@ Componentes não acessam o Supabase diretamente. Services mantêm as regras de a
 | Fonte | Módulos |
 |---|---|
 | Supabase local | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral, Dashboard e Relatórios |
-| MockStore | Nenhum módulo funcional |
+| MockStore | Removido do frontend |
 
 Consulta Geral, Dashboard e Relatórios usam exclusivamente repositories reais. A Consulta monta um snapshot paginado das sete categorias; Dashboard e Relatórios agregam KPIs, alertas, previews e totais sem persistir valores derivados. Os Drawers imobiliários resolvem seus vínculos por UUID a partir dos repositories reais. Não há dual-write.
 
-| MockStore | PostgreSQL | Divergência relevante |
+Supabase/PostgreSQL é a única fonte de dados de negócio. `src/data/mock/`, seus seeds, selectors e validator foram removidos depois da auditoria final de consumidores.
+
+## Mapeamento histórico do legado removido
+
+| Modelo legado | PostgreSQL | Divergência relevante |
 |---|---|---|
 | `Owner` | `owners` | `type` vira `owner_type`; `document` vira `document_number`; banco acrescenta organização, autoria, versão e soft delete. |
 | `Farm` | `farms` | Mesmos dados de negócio; banco acrescenta organização, autoria, versão e soft delete. |
@@ -31,12 +35,12 @@ Consulta Geral, Dashboard e Relatórios usam exclusivamente repositories reais. 
 
 ## Divergências transversais
 
-- IDs atuais são strings sem garantia de UUID; a migração exigirá tabela de correspondência legado → UUID para preservar deep links e referências.
-- O código legado do MockStore permanece no repositório apenas para confirmação final e remoção futura; nenhuma funcionalidade o importa. Supabase Auth, RLS e `organization_id` protegem os módulos migrados.
-- Datas atuais são strings; precisam de validação e conversão distinta para `date` e `timestamptz`.
-- Números JavaScript serão convertidos para `numeric`; parsing deve evitar arredondamento de dinheiro e área.
-- O MockStore não possui `created_by`, `updated_by`, `version`, `deleted_at` ou `deleted_by`.
-- Bancos, tipos documentais e tipos de garantia são texto no mock e viram catálogos/FKs.
+- Os IDs de negócio ativos são UUIDs e preservam deep links e referências.
+- A infraestrutura do MockStore foi removida; Supabase Auth, RLS e `organization_id` protegem todos os módulos funcionais.
+- Datas usam conversão distinta para `date` civil e `timestamptz`.
+- Valores JavaScript são mapeados para `numeric`, com parsing específico para dinheiro e área.
+- O modelo PostgreSQL acrescenta autoria, `version` e soft delete às entidades editáveis.
+- Bancos, tipos documentais e tipos de garantia são catálogos relacionais/FKs.
 - Contadores e ViewModels continuam derivados; não há colunas para totais de proprietários, matrículas, operações ou anexos.
 - Status internos permanecem em inglês; a tradução para português continua sendo responsabilidade de apresentação.
 - Os repositories Supabase mantêm a cadeia aprovada `Component → Service → Repository → Supabase`, sem componentes consultando tabelas diretamente.
@@ -44,9 +48,9 @@ Consulta Geral, Dashboard e Relatórios usam exclusivamente repositories reais. 
 
 ## Próximas etapas da migração
 
-1. Manter os módulos já migrados exclusivamente no Supabase, sem fallback ou dual-write no MockStore.
+1. Manter todos os módulos exclusivamente no Supabase, sem fallback ou dual-write.
 2. Manter KPIs e contadores do Dashboard derivados, sem colunas de totais persistidos.
-3. Remover o código legado de MockStore somente após a confirmação explícita de que não será necessário para comparação ou testes históricos.
+3. Manter este documento apenas como histórico das decisões de migração.
 4. Reconciliar IDs, FKs, status, datas e duplicidades antes de importar qualquer dado real.
 5. Não criar dual-write nem novos mocks paralelos durante a transição.
 

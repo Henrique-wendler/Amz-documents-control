@@ -52,50 +52,6 @@ export interface OwnershipLink {
   endDate?: string;
 }
 
-export interface Operation {
-  id: string;
-  farmId: string;
-  registrationId?: string;
-  number: string;
-  bank: string;
-  purpose?: string;
-  value: number;
-  status: "under_review" | "active" | "completed" | "cancelled";
-  startDate?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Guarantee {
-  id: string;
-  operationId: string;
-  registrationId: string;
-  bank?: string;
-  type: string;
-  description?: string;
-  degree?: string;
-  value?: number;
-  evaluationYear?: number;
-  status: "active" | "closed" | "cancelled";
-  startDate?: string;
-  endDate?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface GuaranteeItem {
-  id: string;
-  guaranteeId: string;
-  category: string;
-  description: string;
-  quantity?: number;
-  unit?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface RuralDocument {
   id: string;
   documentTypeId?: string;
@@ -136,7 +92,6 @@ export interface CarRecord {
   id: string;
   farmId: string;
   registrationId?: string;
-  ownerId?: string;
   declaredOwnerName?: string;
   number: string;
   receiptNumber?: string;
@@ -144,27 +99,4 @@ export interface CarRecord {
   notes?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Activity {
-  id: string;
-  entityType: "owner" | "farm" | "registration" | "operation" | "guarantee" | "guaranteeItem" | "document" | "car";
-  entityId: string;
-  action: string;
-  userName: string;
-  createdAt: string;
-}
-
-export interface MockDatabase {
-  owners: Owner[];
-  farms: Farm[];
-  registrations: Registration[];
-  ownershipLinks: OwnershipLink[];
-  operations: Operation[];
-  guarantees: Guarantee[];
-  guaranteeItems: GuaranteeItem[];
-  documents: RuralDocument[];
-  documentAttachments: DocumentAttachment[];
-  carRecords: CarRecord[];
-  activities: Activity[];
 }

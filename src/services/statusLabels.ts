@@ -1,6 +1,7 @@
-import type { CarRecord, DocumentValidityStatus, Operation } from "../types/domain";
+import type { CarRecord, DocumentValidityStatus } from "../types/domain";
+import type { OperationStatus } from "../types/operacao";
 
-export const operationStatusLabels: Record<Operation["status"], "Ativa" | "Em análise" | "Concluída" | "Cancelada"> = {
+export const operationStatusLabels: Record<OperationStatus, "Ativa" | "Em análise" | "Concluída" | "Cancelada"> = {
   active: "Ativa",
   under_review: "Em análise",
   completed: "Concluída",
