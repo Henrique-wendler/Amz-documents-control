@@ -1,6 +1,6 @@
 # Estado da migração MockStore → PostgreSQL
 
-O frontend opera temporariamente em modo híbrido durante a migração incremental. A arquitetura aprovada para módulos migrados é:
+O frontend concluiu a migração dos módulos funcionais para a arquitetura:
 
 `Component → Service → Repository → Supabase`
 
@@ -10,10 +10,10 @@ Componentes não acessam o Supabase diretamente. Services mantêm as regras de a
 
 | Fonte | Módulos |
 |---|---|
-| Supabase local | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral e Dashboard |
-| MockStore | Relatórios |
+| Supabase local | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral, Dashboard e Relatórios |
+| MockStore | Nenhum módulo funcional |
 
-Consulta Geral e Dashboard usam exclusivamente repositories reais. A Consulta monta um snapshot paginado das sete categorias; o Dashboard agrega KPIs, alertas, validade documental, garantias e auditoria sem persistir totais. Os Drawers imobiliários resolvem seus vínculos por UUID a partir dos repositories reais. Relatórios permanece no MockStore nesta etapa. Não há dual-write.
+Consulta Geral, Dashboard e Relatórios usam exclusivamente repositories reais. A Consulta monta um snapshot paginado das sete categorias; Dashboard e Relatórios agregam KPIs, alertas, previews e totais sem persistir valores derivados. Os Drawers imobiliários resolvem seus vínculos por UUID a partir dos repositories reais. Não há dual-write.
 
 | MockStore | PostgreSQL | Divergência relevante |
 |---|---|---|
@@ -32,7 +32,7 @@ Consulta Geral e Dashboard usam exclusivamente repositories reais. A Consulta mo
 ## Divergências transversais
 
 - IDs atuais são strings sem garantia de UUID; a migração exigirá tabela de correspondência legado → UUID para preservar deep links e referências.
-- O MockStore é mono-organização e continua restrito a Relatórios. Supabase Auth, RLS e `organization_id` protegem os módulos migrados.
+- O código legado do MockStore permanece no repositório apenas para confirmação final e remoção futura; nenhuma funcionalidade o importa. Supabase Auth, RLS e `organization_id` protegem os módulos migrados.
 - Datas atuais são strings; precisam de validação e conversão distinta para `date` e `timestamptz`.
 - Números JavaScript serão convertidos para `numeric`; parsing deve evitar arredondamento de dinheiro e área.
 - O MockStore não possui `created_by`, `updated_by`, `version`, `deleted_at` ou `deleted_by`.
@@ -46,7 +46,7 @@ Consulta Geral e Dashboard usam exclusivamente repositories reais. A Consulta mo
 
 1. Manter os módulos já migrados exclusivamente no Supabase, sem fallback ou dual-write no MockStore.
 2. Manter KPIs e contadores do Dashboard derivados, sem colunas de totais persistidos.
-3. Migrar Relatórios somente após as fontes necessárias estarem estabilizadas.
+3. Remover o código legado de MockStore somente após a confirmação explícita de que não será necessário para comparação ou testes históricos.
 4. Reconciliar IDs, FKs, status, datas e duplicidades antes de importar qualquer dado real.
 5. Não criar dual-write nem novos mocks paralelos durante a transição.
 

@@ -35,4 +35,10 @@ export interface ReportFilterOptions {
   guaranteeTypes: string[];
   documentTypes: string[];
   statuses: ReportOption[];
+  hpAvailable: boolean;
+}
+
+export interface ReportLoadResult {
+  report: ReportViewModel;
+  options: ReportFilterOptions;
 }

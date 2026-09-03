@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual: schema executado e validado no Supabase local. O frontend já usa Supabase para Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral e Dashboard. Relatórios permanece temporariamente no MockStore.
+> Estado atual: schema executado e validado no Supabase local. O frontend usa Supabase para Auth/MFA, profiles/permissions e todos os módulos de negócio, incluindo Consulta Geral, Dashboard e Relatórios.
 
 ## Visão geral
 
@@ -14,10 +14,9 @@ Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Se
 
 | Fonte atual | Escopo |
 |---|---|
-| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral e Dashboard |
-| MockStore | Relatórios |
+| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral, Dashboard e Relatórios |
 
-Não existe dual-write. Consulta Geral, Dashboard e os Drawers imobiliários consomem as entidades e relações reais. O Dashboard deriva seus KPIs em uma camada agregadora de repositories com consultas paralelas; valores financeiros só são consultados quando `financial.read` está presente. Relatórios continua isolado no MockStore até sua migração específica.
+Não existe dual-write. Consulta Geral, Dashboard, Relatórios e os Drawers imobiliários consomem as entidades e relações reais. Dashboard e Relatórios derivam seus indicadores em camadas agregadoras de repositories com consultas paralelas; valores financeiros só são consultados quando as permissions correspondentes estão presentes.
 
 ## Migrations e dependências
 
@@ -132,6 +131,8 @@ Triggers gravam INSERT/UPDATE/INACTIVATE/CLOSE/CANCEL/SOFT_DELETE/RESTORE em `au
 ## Relatórios
 
 `report_templates` e `report_log` permanecem vinculados à organização. `configuration` e `included_sections` usam JSONB para seções configuráveis. Formatos previstos: PDF, XLSX e CSV. Fluxo futuro: React → backend/Edge Function → Auth/RLS/permissions → consulta → template → arquivo temporário → download/impressão → expiração. Dados de `organizations` formarão o emitente/cabeçalho. Valores financeiros exigem simultaneamente `reports.financial` e `financial.read`. `report_log` registra autor, filtros, seções, formato e horários, sem armazenar o PDF permanentemente.
+
+A pré-visualização atual dos sete relatórios consulta os repositories Supabase reais e calcula linhas, filtros e totais de forma derivada. Ela não cria artefatos nem grava `report_log`; exportação real e o registro da geração serão ligados ao fluxo backend/Edge Function em etapa futura.
 
 ## Navegação por IDs
 
