@@ -1,6 +1,6 @@
 import { reportQueryRepository, type ReportSnapshot } from "../repositories/reportQueryRepository";
 import type {
-  ReportColumn, ReportDefinition, ReportExportFormat, ReportFilterOptions, ReportFilters, ReportLoadResult,
+  ReportColumn, ReportDefinition, ReportFilterOptions, ReportFilters, ReportLoadResult,
   ReportMetric, ReportRow, ReportType, ReportViewModel,
 } from "../types/report";
 import { formatArea, formatCurrency, formatIsoDate } from "./searchUtils";
@@ -275,5 +275,4 @@ export const reportService = {
     };
   },
   getInitialFilterOptions(type: ReportType) { return buildFilterOptions(type); },
-  simulateExport(_format: ReportExportFormat) { return "Exportação será disponibilizada na integração final."; },
 };

@@ -25,11 +25,11 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 | Operações e Garantias | Operações, financeiro protegido, matrículas N:N, garantias, tipos e itens |
 | Documentos | Documentos rurais, validade derivada e referências de anexos |
 | CAR | Cadastro Ambiental Rural por fazenda e matrícula opcional |
-| Relatórios | Sete consultas consolidadas com filtros e pré-visualização |
+| Relatórios | Sete consultas consolidadas com filtros, pré-visualização e exportação PDF server-side |
 | Administração de Usuários | Convites, perfis, situação e recuperação de acesso |
 | Administração de Catálogos | Instituições financeiras, tipos de garantia e tipos de documento |
 
-A exportação real de relatórios e o armazenamento de arquivos ainda não fazem parte da implementação atual.
+O armazenamento e a entrega de arquivos de negócio reais ainda não fazem parte da implementação atual. Relatórios PDF são gerados sob demanda e entregues diretamente, sem persistência permanente do arquivo.
 
 ## Arquitetura
 
@@ -152,7 +152,7 @@ Use terminais separados.
 npx supabase start
 ```
 
-### 2. Edge Function administrativa
+### 2. Edge Functions
 
 Na primeira configuração local, crie o arquivo de ambiente da função a partir do exemplo:
 
@@ -160,13 +160,13 @@ Na primeira configuração local, crie o arquivo de ambiente da função a parti
 Copy-Item supabase/functions/.env.example supabase/functions/.env
 ```
 
-Depois execute:
+Depois execute o runtime local; a CLI serve as funções configuradas no projeto:
 
 ```powershell
-npx supabase functions serve admin-users --env-file supabase/functions/.env
+npx supabase functions serve --env-file supabase/functions/.env
 ```
 
-O arquivo contém apenas as origens autorizadas e a URL pública local usadas em convites e recuperações. Em produção, essas URLs deverão ser HTTPS e específicas do ambiente.
+O arquivo contém apenas as origens autorizadas e a URL pública local usadas pelas funções; convites e recuperações também usam a URL pública. Em produção, essas URLs deverão ser HTTPS e específicas do ambiente.
 
 ### 3. Frontend
 
@@ -236,6 +236,8 @@ Princípios obrigatórios:
 - auditoria exige permission própria;
 - administração de usuários e catálogos usa permissions administrativas distintas;
 - conhecer um UUID nunca concede acesso ao registro.
+
+Na exportação PDF, a Edge Function revalida a sessão, o profile ativo, a organização e as permissions `reports.read`, `reports.generate` e `reports.export`. Valores de Operações e Garantias só são consultados e incluídos com `financial.read` e `reports.financial`. Cada geração grava `report_log`; o PDF é devolvido diretamente com cache desabilitado e a URL temporária criada pelo frontend é revogada após o download.
 
 ## Multi-tenancy
 
@@ -384,6 +386,10 @@ Verifique se o usuário possui `profile` ativo, organização ativa, role válid
 
 Confirme que `admin-users` está sendo servida, que `supabase/functions/.env` foi criado a partir do exemplo e que `APP_PUBLIC_URL` está incluída em `ALLOWED_ORIGINS`.
 
+### Exportação PDF falha
+
+Confirme que `generate-report` está sendo servida, que a origem do frontend está em `ALLOWED_ORIGINS` e que o usuário possui as permissions de leitura, geração e exportação. Para relatórios financeiros, confirme também `financial.read` e `reports.financial`.
+
 ### E-mail de recuperação não aparece localmente
 
 Confirme o Mailpit em `npx supabase status` e verifique se a URL de retorno corresponde às URLs permitidas em `supabase/config.toml`.
@@ -394,7 +400,7 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 
 ## Limitações e roadmap
 
-- Geração real e download de PDF, XLSX e CSV.
+- Exportação XLSX e CSV; a implementação atual exporta somente PDF.
 - Upload e armazenamento de arquivos reais; integração autorizada com storage/servidor de arquivos.
 - Antivírus, retenção e backup dos arquivos.
 - Hardening final para produção, incluindo headers, limites distribuídos, observabilidade e recuperação.

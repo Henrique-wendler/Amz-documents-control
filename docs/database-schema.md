@@ -152,9 +152,9 @@ Triggers gravam INSERT/UPDATE/INACTIVATE/CLOSE/CANCEL/SOFT_DELETE/RESTORE em `au
 
 ## Relatórios
 
-`report_templates` e `report_log` permanecem vinculados à organização. `configuration` e `included_sections` usam JSONB para seções configuráveis. Formatos previstos: PDF, XLSX e CSV. Fluxo futuro: React → backend/Edge Function → Auth/RLS/permissions → consulta → template → arquivo temporário → download/impressão → expiração. Dados de `organizations` formarão o emitente/cabeçalho. Valores financeiros exigem simultaneamente `reports.financial` e `financial.read`. `report_log` registra autor, filtros, seções, formato e horários, sem armazenar o PDF permanentemente.
+`report_templates` e `report_log` permanecem vinculados à organização. `configuration` e `included_sections` usam JSONB para seções configuráveis. A exportação PDF segue React → Service → Repository → Edge Function → Auth/RLS/permissions → consulta → geração → resposta temporária. A organização autenticada forma o emitente/cabeçalho. Valores financeiros exigem simultaneamente `reports.financial` e `financial.read`. `report_log` registra autor, filtros, seções, formato, quantidade de linhas/páginas e horários, sem armazenar o PDF permanentemente. XLSX e CSV permanecem apenas como formatos previstos pelo schema.
 
-A pré-visualização atual dos sete relatórios consulta os repositories Supabase reais e calcula linhas, filtros e totais de forma derivada. Ela não cria artefatos nem grava `report_log`; exportação real e o registro da geração serão ligados ao fluxo backend/Edge Function em etapa futura.
+A pré-visualização dos sete relatórios consulta os repositories Supabase reais e calcula linhas, filtros e totais de forma derivada. A exportação PDF repete a consulta na Edge Function sob a sessão do usuário, deriva o tenant do profile, revalida `reports.read`, `reports.generate` e `reports.export` e nunca aceita `organization_id` do navegador. A resposta usa `Cache-Control: private, no-store`; nenhum objeto de Storage ou URL pública permanente é criado.
 
 ## Navegação por IDs
 
@@ -176,7 +176,7 @@ URLs, origens permitidas e callbacks serão configurados por ambiente, sem `loca
 
 ## Pendências explícitas
 
-- **PENDENTE — PDF real:** geração, armazenamento temporário, download e registro definitivo de relatórios ainda não foram implementados.
+- **CONCLUÍDO — PDF real:** geração server-side, download direto temporário, paginação, cabeçalho da organização e `report_log` estão implementados para os sete relatórios.
 - **PENDENTE — arquivos reais:** upload, armazenamento, acesso remoto autorizado, antivírus e integração com servidor de arquivos ainda não foram implementados; hoje existem somente metadados e referências.
 - **PENDENTE — hardening final:** revisão de produção de headers, rate limits distribuídos, secrets, observabilidade, backups e recuperação.
 - **PENDENTE — homologação:** testes integrados em staging, validação do negócio e aceite formal antes do uso com dados reais.
