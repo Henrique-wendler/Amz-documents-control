@@ -35,6 +35,7 @@ Supabase/PostgreSQL é a única fonte de dados de negócio. A infraestrutura fro
 | 9 | `202608280009_expose_current_user_permissions.sql` | função segura para carregar permissions do usuário atual |
 | 10 | `202609010010_transactional_operations_guarantees.sql` | RPCs atômicos para Operações, Garantias, relações N:N e financeiro |
 | 11 | `202609030011_user_administration_support.sql` | alteração transacional de profiles, proteção do último gestor de usuários e eventos administrativos |
+| 12 | `202609030012_catalog_administration.sql` | permission administrativa e RLS tenant-aware para instituições financeiras, tipos de garantia e tipos de documento |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -103,7 +104,7 @@ erDiagram
 
 Todas as 27 tabelas têm RLS habilitado. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID conhecido nunca substitui autorização.
 
-`audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de permissão exigem `permissions.manage`. Nenhuma função expõe `service_role`.
+`audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de roles/permissions exigem `permissions.manage`, enquanto os catálogos empresariais exigem `catalogs.manage` para escrita. Nenhuma função expõe `service_role`.
 
 Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuração inicial, sem usuários ou dados pessoais. Permissões financeiras e de exportação permanecem entradas independentes do catálogo.
 
@@ -126,6 +127,12 @@ Convites e recuperações usam `APP_PUBLIC_URL`, e CORS usa `ALLOWED_ORIGINS`; n
 Inativação preserva o profile e a auditoria, remove o acesso lógico via `profile.status`/RLS e aplica banimento no Supabase Auth. Reativação reverte ambos. Alterações de profile são transacionais no PostgreSQL e um advisory lock impede que operações concorrentes removam o último profile ativo cujo role concede `users.manage`.
 
 Revogação granular de todas as sessões de outro usuário não foi exposta: a Admin API disponível exige o JWT da própria sessão para logout global. Não há obtenção ou armazenamento inseguro de tokens de terceiros. Em produção, `ALLOWED_ORIGINS` deve conter somente origens HTTPS e os limites distribuídos devem ser aplicados no gateway/plataforma; o limitador em memória da função é apenas uma barreira complementar por instância.
+
+## Administração de catálogos
+
+A rota `/administracao/catalogos` administra `financial_institutions`, `guarantee_types` e `document_types` pela cadeia `Component → Service → Repository → Supabase`. Os três catálogos são delimitados por `organization_id`; nomes e códigos podem se repetir entre organizações, mas respeitam as unicidades compostas dentro do tenant.
+
+Somente `catalogs.manage` autoriza criação, edição, inativação e reativação. As permissions de leitura dos módulos continuam permitindo resolver opções e referências históricas. Novos vínculos oferecem itens ativos; itens inativos já referenciados permanecem consultáveis e exibem seus nomes porque as FKs usam `ON DELETE RESTRICT`. A interface não oferece exclusão física. Os triggers existentes registram criação, edição e mudanças de situação no `audit_log`.
 
 ## Concorrência, soft delete e auditoria
 

@@ -103,11 +103,13 @@ export interface FinancialInstitutionOption {
   id: string;
   name: string;
   shortName?: string;
+  status?: "active" | "inactive";
 }
 
 export interface GuaranteeTypeOption {
   id: string;
   name: string;
+  status?: "active" | "inactive";
 }
 
 export interface OperationRegistrationOption {

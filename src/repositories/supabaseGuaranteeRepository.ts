@@ -172,10 +172,12 @@ export const supabaseGuaranteeRepository: GuaranteeRepository = {
   async list(includeFinancial) { return loadRelated(await queryGuarantees(), includeFinancial); },
   async listByOperation(operationId, includeFinancial) { return loadRelated(await queryGuarantees({ operationId }), includeFinancial); },
   async getById(id, includeFinancial) { return (await loadRelated(await queryGuarantees({ id }), includeFinancial))[0]; },
-  async listTypes(): Promise<GuaranteeTypeOption[]> {
-    const { data, error } = await supabase.from("guarantee_types").select("id, name").eq("status", "active").is("deleted_at", null).order("name");
+  async listTypes(includeInactive = false): Promise<GuaranteeTypeOption[]> {
+    let query = supabase.from("guarantee_types").select("id, name, status").is("deleted_at", null).order("name");
+    if (!includeInactive) query = query.eq("status", "active");
+    const { data, error } = await query;
     if (error) throw friendlyError(error, "Não foi possível carregar os tipos de garantia.");
-    return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string }));
+    return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string, status: row.status as "active" | "inactive" }));
   },
   async create(input, canWriteFinancial) {
     validateInput(input);

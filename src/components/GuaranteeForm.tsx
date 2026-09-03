@@ -38,6 +38,7 @@ export function GuaranteeForm({
   const selectedTypeLabels = value.guaranteeTypeIds.map((id) => guaranteeTypes.find((item) => item.id === id)?.name).filter(Boolean).join(", ");
   const primaryType = guaranteeTypes.find((type) => type.id === value.primaryGuaranteeTypeId);
   const firstLinkedRegistrationId = value.registrationIds[0];
+  const availableTypes = guaranteeTypes.filter((type) => type.status !== "inactive" || value.guaranteeTypeIds.includes(type.id));
 
   return (
     <>
@@ -63,7 +64,10 @@ export function GuaranteeForm({
             const primaryGuaranteeTypeId = guaranteeTypeIds.includes(value.primaryGuaranteeTypeId) ? value.primaryGuaranteeTypeId : guaranteeTypeIds[0] ?? "";
             onChange({ ...value, guaranteeTypeIds, primaryGuaranteeTypeId, tipo: guaranteeTypeIds.map((id) => guaranteeTypes.find((item) => item.id === id)?.name).filter(Boolean).join(", ") });
           }}>
-            {guaranteeTypes.map((type) => <Option key={type.id} value={type.id}>{type.name}</Option>)}
+            {availableTypes.map((type) => {
+              const label = `${type.name}${type.status === "inactive" ? " (inativo)" : ""}`;
+              return <Option key={type.id} value={type.id} text={label}>{label}</Option>;
+            })}
           </Dropdown>
         </Field>
         <Field label="Tipo principal" required>

@@ -39,6 +39,7 @@ export function OperationForm({
   const selectedRegistrationLabels = value.registrationIds.map((id) => registrations.find((item) => item.id === id)?.label).filter(Boolean).join(", ");
   const primaryRegistration = registrations.find((item) => item.id === value.primaryRegistrationId);
   const selectedInstitution = institutions.find((item) => item.id === value.institutionId);
+  const availableInstitutions = institutions.filter((item) => item.status !== "inactive" || item.id === value.institutionId);
 
   return (
     <SectionCard title="Dados da operação" subtitle="Informações principais da operação financeira">
@@ -53,7 +54,10 @@ export function OperationForm({
             const institution = institutions.find((item) => item.id === data.optionValue);
             onChange({ ...value, institutionId: institution?.id ?? "", banco: institution?.name ?? "" });
           }}>
-            {institutions.map((institution) => <Option key={institution.id} value={institution.id}>{institution.name}</Option>)}
+            {availableInstitutions.map((institution) => {
+              const label = `${institution.name}${institution.status === "inactive" ? " (inativa)" : ""}`;
+              return <Option key={institution.id} value={institution.id} text={label}>{label}</Option>;
+            })}
           </Dropdown>
         </Field>
         <Field label="Número da operação" required>

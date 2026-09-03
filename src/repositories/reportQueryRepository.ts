@@ -49,12 +49,12 @@ export const reportQueryRepository = {
       ]);
     } else if (type === "operations") {
       [snapshot.farms, snapshot.registrations, snapshot.operations, snapshot.institutions] = await Promise.all([
-        supabaseFarmRepository.list(), supabaseRegistrationRepository.list(), supabaseOperationRepository.list(includeFinancial), supabaseOperationRepository.listInstitutions(),
+        supabaseFarmRepository.list(), supabaseRegistrationRepository.list(), supabaseOperationRepository.list(includeFinancial), supabaseOperationRepository.listInstitutions(true),
       ]);
     } else if (type === "guarantees") {
       [snapshot.farms, snapshot.registrations, snapshot.operations, snapshot.guarantees, snapshot.institutions, snapshot.guaranteeTypes] = await Promise.all([
         supabaseFarmRepository.list(), supabaseRegistrationRepository.list(), supabaseOperationRepository.list(false),
-        supabaseGuaranteeRepository.list(includeFinancial), supabaseOperationRepository.listInstitutions(), supabaseGuaranteeRepository.listTypes(),
+        supabaseGuaranteeRepository.list(includeFinancial), supabaseOperationRepository.listInstitutions(true), supabaseGuaranteeRepository.listTypes(true),
       ]);
     } else if (type === "documents") {
       [snapshot.farms, snapshot.registrations, snapshot.documents, snapshot.documentTypes] = await Promise.all([

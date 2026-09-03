@@ -1,5 +1,6 @@
 import {
   Building24Regular,
+  BookDatabase24Regular,
   ChartMultiple24Regular,
   Document24Regular,
   Folder24Regular,
@@ -31,6 +32,7 @@ const items: NavItem[] = [
   { label: "CAR", icon: Shield24Regular, path: "/car" },
   { label: "Relatórios", icon: ChartMultiple24Regular, path: "/relatorios" },
   { label: "Administração · Usuários", icon: Settings24Regular, path: "/administracao/usuarios", permission: "users.manage" },
+  { label: "Administração · Catálogos", icon: BookDatabase24Regular, path: "/administracao/catalogos", permission: "catalogs.manage" },
 ];
 
 interface SidebarProps {

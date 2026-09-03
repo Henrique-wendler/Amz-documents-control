@@ -3,7 +3,7 @@ import type { FinancialInstitutionOption, OperationInput, OperationRecord } from
 export interface OperationRepository {
   list(includeFinancial: boolean): Promise<OperationRecord[]>;
   getById(id: string, includeFinancial: boolean): Promise<OperationRecord | undefined>;
-  listInstitutions(): Promise<FinancialInstitutionOption[]>;
+  listInstitutions(includeInactive?: boolean): Promise<FinancialInstitutionOption[]>;
   create(input: OperationInput, writeFinancial: boolean): Promise<OperationRecord>;
   update(id: string, expectedVersion: number, input: OperationInput, writeFinancial: boolean): Promise<OperationRecord>;
   softDelete(id: string, expectedVersion: number): Promise<void>;

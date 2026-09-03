@@ -126,15 +126,16 @@ export const supabaseOperationRepository: OperationRepository = {
   async getById(id, includeFinancial) {
     return (await loadRelated(await queryOperations(id), includeFinancial))[0];
   },
-  async listInstitutions() {
-    const { data, error } = await supabase
+  async listInstitutions(includeInactive = false) {
+    let query = supabase
       .from("financial_institutions")
-      .select("id, name, short_name")
-      .eq("status", "active")
+      .select("id, name, short_name, status")
       .is("deleted_at", null)
       .order("name");
+    if (!includeInactive) query = query.eq("status", "active");
+    const { data, error } = await query;
     if (error) throw friendlyError(error, "Não foi possível carregar as instituições financeiras.");
-    return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string, shortName: (row.short_name as string | null) ?? undefined }));
+    return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string, shortName: (row.short_name as string | null) ?? undefined, status: row.status as "active" | "inactive" }));
   },
   async create(input, canWriteFinancial) {
     validateRegistrations(input);

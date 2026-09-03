@@ -2907,3 +2907,49 @@ button.registration-farm-card {
   .user-administration-grid .user-column--role,
   .user-administration-grid .user-column--lastAccess { display: none; }
 }
+
+/* Administração de catálogos */
+.catalog-administration-content { padding-top: 14px; }
+.catalog-administration-tabs { width: fit-content; max-width: 100%; padding: 3px; overflow-x: auto; background: #edf3e9; border: 1px solid #dce7d8; border-radius: 9px; }
+.catalog-administration-tabs .fui-Tab { white-space: nowrap; }
+.catalog-administration-toolbar { display: grid; min-width: 0; grid-template-columns: minmax(280px, 1fr) minmax(145px, 190px) max-content; align-items: end; gap: 10px; margin-top: 12px; padding: 12px 14px 13px; }
+.catalog-administration-toolbar > .fui-Field { width: 100%; min-width: 0; }
+.catalog-administration-toolbar .fui-Dropdown { width: 100%; min-width: 0; }
+.catalog-administration-toolbar .fui-Field__label { color: #68736c; font-size: 10px; }
+.catalog-administration-toolbar__new { white-space: nowrap; }
+.catalog-administration-results { margin-top: 12px; }
+.catalog-administration-results .section-card__body { padding-top: 12px; }
+.catalog-administration-grid [role="grid"] { width: 100%; table-layout: fixed; }
+.catalog-administration-grid [role="row"]:not(:first-child) { min-height: 42px; cursor: pointer; }
+.catalog-administration-grid [role="row"] > :first-child { width: 34%; }
+.catalog-administration-grid [role="row"] > :nth-child(2) { width: 31%; }
+.catalog-administration-grid [role="row"] > :nth-child(3) { width: 104px; }
+.catalog-administration-grid [role="row"] > :nth-child(4) { width: 150px; }
+.catalog-administration-grid [role="row"] > :last-child { width: 68px; }
+.catalog-administration-grid__details { overflow: hidden; color: #68736c; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-administration-grid__actions { display: flex; justify-content: flex-end; }
+.catalog-administration-empty { display: grid; min-height: 220px; color: #68736c; place-items: center; align-content: center; gap: 5px; text-align: center; }
+.catalog-administration-empty strong { color: #314139; font-size: 14px; }
+.catalog-administration-empty span { font-size: 10px; }
+.catalog-administration-form { padding-bottom: 16px; }
+.catalog-administration-form__intro { display: grid; gap: 3px; padding: 5px 0 17px; border-bottom: 1px solid #edf0eb; }
+.catalog-administration-form__intro strong { color: #26322b; font-size: 15px; }
+.catalog-administration-form__intro span { color: #68736c; font-size: 11px; line-height: 1.45; }
+.catalog-administration-form__grid { display: grid; gap: 15px; padding-top: 18px; }
+.catalog-administration-form__grid .fui-Dropdown { width: 100%; min-width: 0; }
+.catalog-administration-form__grid .fui-Field__label { color: #526058; font-size: 11px; }
+.catalog-administration-form__error { margin: 16px 0 0; padding: 10px 12px; color: #8b2f2c; background: #fff3f1; border: 1px solid #e8c7c2; border-radius: 7px; font-size: 11px; }
+
+@media (max-width: 820px) {
+  .catalog-administration-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalog-administration-toolbar__search { grid-column: 1 / -1; }
+  .catalog-administration-toolbar__new { justify-self: end; }
+  .catalog-administration-grid .catalog-column--updated { display: none; }
+}
+
+@media (max-width: 560px) {
+  .catalog-administration-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .catalog-administration-toolbar__search { grid-column: auto; }
+  .catalog-administration-toolbar__new { width: 100%; justify-self: stretch; }
+  .catalog-administration-grid .catalog-column--details { display: none; }
+}

@@ -88,7 +88,7 @@ export const dashboardQueryRepository = {
       supabaseCarRepository.list(),
       supabaseOperationRepository.list(access.readFinancial),
       supabaseGuaranteeRepository.list(access.readFinancial),
-      supabaseGuaranteeRepository.listTypes(),
+      supabaseGuaranteeRepository.listTypes(true),
       access.readAudit ? supabaseGuaranteeRepository.listItems() : Promise.resolve([]),
       access.readAudit ? loadAudit() : Promise.resolve([]),
     ]);

@@ -4,7 +4,7 @@ export interface GuaranteeRepository {
   list(includeFinancial: boolean): Promise<GuaranteeRecord[]>;
   listByOperation(operationId: string, includeFinancial: boolean): Promise<GuaranteeRecord[]>;
   getById(id: string, includeFinancial: boolean): Promise<GuaranteeRecord | undefined>;
-  listTypes(): Promise<GuaranteeTypeOption[]>;
+  listTypes(includeInactive?: boolean): Promise<GuaranteeTypeOption[]>;
   create(input: GuaranteeInput, writeFinancial: boolean): Promise<GuaranteeRecord>;
   update(id: string, expectedVersion: number, input: GuaranteeInput, writeFinancial: boolean): Promise<GuaranteeRecord>;
   softDelete(id: string, expectedVersion: number): Promise<void>;

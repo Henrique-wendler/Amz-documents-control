@@ -100,7 +100,7 @@ const requestedId = (key: "id" | "garantia") => new URLSearchParams(window.locat
 export const operationService = {
   async load(access: OperationFinancialAccess, operationId = requestedId("id")): Promise<AppData> {
     const [operations, institutions, registrations, guaranteeTypes] = await Promise.all([
-      supabaseOperationRepository.list(access.readFinancial), supabaseOperationRepository.listInstitutions(), registrationOptions(), supabaseGuaranteeRepository.listTypes(),
+      supabaseOperationRepository.list(access.readFinancial), supabaseOperationRepository.listInstitutions(true), registrationOptions(), supabaseGuaranteeRepository.listTypes(true),
     ]);
     const selectedOperation = operations.find((item) => item.id === operationId) ?? operations[0];
     if (!selectedOperation) return { operation: emptyOperationForm(), operations: [], guarantees: [], items: [], institutions, registrations, guaranteeTypes };
@@ -122,7 +122,7 @@ export const operationService = {
     const saved = value.id
       ? await supabaseOperationRepository.update(value.id, value.version, input, access.writeFinancial && access.readFinancial)
       : await supabaseOperationRepository.create(input, access.writeFinancial && access.readFinancial);
-    const [registrations, institutions] = await Promise.all([registrationOptions(), supabaseOperationRepository.listInstitutions()]);
+    const [registrations, institutions] = await Promise.all([registrationOptions(), supabaseOperationRepository.listInstitutions(true)]);
     return toOperationForm(saved, registrations, institutions);
   },
   async deleteOperation(id: string, expectedVersion: number) {
@@ -137,7 +137,7 @@ export const operationService = {
       : await supabaseGuaranteeRepository.create(input, access.writeFinancial && access.readFinancial);
     const operation = await supabaseOperationRepository.getById(saved.operationId, access.readFinancial);
     if (!operation) throw new Error("Operação da garantia não encontrada.");
-    const [registrations, institutions, guaranteeTypes] = await Promise.all([registrationOptions(), supabaseOperationRepository.listInstitutions(), supabaseGuaranteeRepository.listTypes()]);
+    const [registrations, institutions, guaranteeTypes] = await Promise.all([registrationOptions(), supabaseOperationRepository.listInstitutions(true), supabaseGuaranteeRepository.listTypes(true)]);
     return toGuaranteeForm(saved, toOperationForm(operation, registrations, institutions), registrations, guaranteeTypes);
   },
   async closeGuarantee(value: GuaranteeFormModel, access: OperationFinancialAccess) { return this.saveGuarantee({ ...value, situacao: "Encerrada" }, access); },
@@ -157,7 +157,7 @@ export const operationService = {
   async listRecords(includeFinancial = false) {
     const [operations, guarantees, items, institutions, registrations, guaranteeTypes] = await Promise.all([
       supabaseOperationRepository.list(includeFinancial), supabaseGuaranteeRepository.list(includeFinancial), supabaseGuaranteeRepository.listItems(),
-      supabaseOperationRepository.listInstitutions(), registrationOptions(), supabaseGuaranteeRepository.listTypes(),
+      supabaseOperationRepository.listInstitutions(true), registrationOptions(), supabaseGuaranteeRepository.listTypes(true),
     ]);
     return { operations, guarantees, items, institutions, registrations, guaranteeTypes };
   },
