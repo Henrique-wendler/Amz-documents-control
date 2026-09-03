@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual: schema executado e validado no Supabase local. O frontend usa Supabase para Auth/MFA, profiles/permissions, administração de usuários e todos os módulos de negócio, incluindo Consulta Geral, Dashboard e Relatórios.
+> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `012`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos.
 
 ## Visão geral
 
@@ -14,11 +14,13 @@ Nos módulos já migrados, a arquitetura de acesso aprovada é `Component → Se
 
 | Fonte atual | Escopo |
 |---|---|
-| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral, Dashboard e Relatórios |
+| Supabase | Auth/MFA, profiles/permissions, Proprietários, Fazendas, Matrículas, OwnershipLinks, Documentos, referências de arquivos, CAR, Operações, Garantias, itens de garantia, Consulta Geral, Dashboard, Relatórios, Administração de Usuários e Administração de Catálogos |
 
 Não existe dual-write. Consulta Geral, Dashboard, Relatórios e os Drawers imobiliários consomem as entidades e relações reais. Dashboard e Relatórios derivam seus indicadores em camadas agregadoras de repositories com consultas paralelas; valores financeiros só são consultados quando as permissions correspondentes estão presentes.
 
 Supabase/PostgreSQL é a única fonte de dados de negócio. A infraestrutura frontend de MockStore, selectors e seeds demonstrativos foi removida após a conclusão da migração.
+
+Administração de Usuários e Administração de Catálogos estão concluídas no escopo atual. A primeira usa Edge Function para operações administrativas privilegiadas; a segunda usa repository Supabase e RLS com `catalogs.manage`, sem `service_role` no frontend.
 
 ## Migrations e dependências
 
@@ -166,8 +168,18 @@ Os módulos migrados usam deep links por UUID (`/fazendas?open=<uuid>`, `/matric
 - Antes da entrada de dados reais, o banco de desenvolvimento poderá ser recriado integralmente pelas migrations, removendo resíduos e comprovando a reprodutibilidade do schema.
 - PostgreSQL e arquivos precisam de backups automáticos, retenções separadas e testes periódicos de restauração. Backup sem restore testado não é considerado confiável.
 
+## Acesso remoto previsto
+
+A implantação remota futura manterá o frontend servido exclusivamente por HTTPS, comunicando-se com Supabase Cloud por chaves publicáveis e sessão autenticada. Operações privilegiadas ou que exijam segredo permanecerão em backend/Edge Functions; `service_role`, credenciais PostgreSQL e demais secrets nunca serão enviados ao navegador.
+
+URLs, origens permitidas e callbacks serão configurados por ambiente, sem `localhost` ou IP fixo no bundle de produção. RLS, permissions e `organization_id` continuarão sendo a fronteira efetiva de segurança no banco.
+
 ## Pendências explícitas
 
+- **PENDENTE — PDF real:** geração, armazenamento temporário, download e registro definitivo de relatórios ainda não foram implementados.
+- **PENDENTE — arquivos reais:** upload, armazenamento, acesso remoto autorizado, antivírus e integração com servidor de arquivos ainda não foram implementados; hoje existem somente metadados e referências.
+- **PENDENTE — hardening final:** revisão de produção de headers, rate limits distribuídos, secrets, observabilidade, backups e recuperação.
+- **PENDENTE — homologação:** testes integrados em staging, validação do negócio e aceite formal antes do uso com dados reais.
 - **PENDENTE — CAB:** significado e regras não definidos; nenhum campo ou regra CAB foi cristalizado no schema.
 - **PENDENTE — HP:** significado e regras não definidos; nenhum campo ou regra HP foi cristalizado no schema.
 - Demais decisões abertas estão em `docs/database-open-questions.md`.
