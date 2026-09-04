@@ -31,11 +31,14 @@ export interface DocumentListItem extends RuralDocument {
 export interface DocumentSummaryViewModel { total: number; active: number; expiring: number; expired: number; }
 export interface DocumentListResponse { records: DocumentListItem[]; total: number; page: number; pageSize: number; totalPages: number; summary: DocumentSummaryViewModel; }
 export type AttachmentLocationStatus = "uploading" | "active" | "removing" | "inactive" | "failed";
+export type RemoteCopyStatus = "pending" | "processing" | "completed" | "failed";
 export interface DocumentAttachmentLocationView {
   id: string;
   storageType: "network_share" | "supabase_storage" | "external";
   status: AttachmentLocationStatus;
   version: number;
+  remoteCopyStatus?: RemoteCopyStatus;
+  remoteCopyErrorCode?: string;
 }
 export interface DocumentAttachmentView extends DocumentAttachment {
   storageType: "network_share" | "supabase_storage" | "external";

@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 
 type JsonRecord = Record<string, unknown>;
-type GatewayAction = "claim" | "download" | "complete" | "failed";
+type GatewayAction = "claim" | "download" | "complete" | "failed" | "claim-remote" | "prepare-remote-upload" | "complete-remote-upload" | "fail-remote";
 
 interface GatewayContext {
   client: SupabaseClient;
@@ -21,6 +21,27 @@ interface CloudLocationRow {
   sync_claimed_by: string | null;
   sync_lease_until: string | null;
   deleted_at: string | null;
+}
+
+interface RemoteJobRow {
+  id: string;
+  organization_id: string;
+  attachment_id: string;
+  source_location_id: string;
+  target_location_id: string | null;
+  status: "pending" | "processing" | "completed" | "failed";
+  claimed_by: string | null;
+  lease_until: string | null;
+}
+
+interface PreparedRemoteUpload {
+  job_status: "processing" | "existing" | "completed";
+  cloud_location_id: string;
+  bucket_id: string;
+  object_key: string;
+  mime_type: string;
+  file_size: number | string;
+  checksum: string;
 }
 
 class HttpError extends Error {
@@ -43,6 +64,16 @@ const maximumBatchSize = Number.isSafeInteger(configuredMaximumBatch) && configu
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const checksumPattern = /^[a-f0-9]{64}$/i;
 const errorCodePattern = /^[a-z0-9_]{1,64}$/;
+const allowedMimeTypes = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+]);
 const rateWindows = new Map<string, { count: number; resetAt: number }>();
 
 if (!supabaseUrl || !serviceRoleKey) throw new Error("File Gateway function environment is unavailable.");
@@ -81,7 +112,8 @@ const readBody = async (request: Request) => {
 
 const actionField = (body: JsonRecord): GatewayAction => {
   const value = body.action;
-  if (value !== "claim" && value !== "download" && value !== "complete" && value !== "failed") {
+  if (value !== "claim" && value !== "download" && value !== "complete" && value !== "failed"
+    && value !== "claim-remote" && value !== "prepare-remote-upload" && value !== "complete-remote-upload" && value !== "fail-remote") {
     throw new HttpError(400, "Invalid action.", "invalid_action");
   }
   return value;
@@ -159,6 +191,28 @@ const friendlyDatabaseError = (error: { code?: string } | null) => {
   return new HttpError(500, "Gateway database operation failed.", "database_error");
 };
 
+const externalizeStorageUrl = (value: string) => {
+  if (!storagePublicUrl) return value;
+  const internalUrl = new URL(value);
+  return new URL(`${internalUrl.pathname}${internalUrl.search}`, `${storagePublicUrl}/`).toString();
+};
+
+const checksumBytes = async (value: Blob) => {
+  const digest = await crypto.subtle.digest("SHA-256", await value.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const inspectStoredObject = async (bucketId: string, objectKey: string) => {
+  const { data, error } = await serviceClient.storage.from(bucketId).download(objectKey);
+  if (error) {
+    const status = Number((error as { statusCode?: string | number }).statusCode);
+    if (status === 400 || status === 404 || /not found/i.test(error.message)) return undefined;
+    throw new HttpError(502, "Cloud object could not be inspected.", "storage_inspection_failed");
+  }
+  if (!data) return undefined;
+  return { size: data.size, mimeType: data.type.split(";", 1)[0].trim().toLowerCase(), checksum: await checksumBytes(data) };
+};
+
 const loadClaimedLocation = async (context: GatewayContext, locationId: string) => {
   const { data, error } = await context.client
     .from("attachment_locations")
@@ -198,9 +252,7 @@ const download = async (context: GatewayContext, body: JsonRecord) => {
   const { data, error } = await context.client.storage.from(location.bucket_id!).createSignedUrl(location.object_key!, signedUrlSeconds);
   if (error || !data?.signedUrl) throw new HttpError(404, "Cloud object is unavailable.", "object_unavailable");
   const internalUrl = new URL(data.signedUrl);
-  const signedUrl = storagePublicUrl
-    ? new URL(`${internalUrl.pathname}${internalUrl.search}`, `${storagePublicUrl}/`).toString()
-    : data.signedUrl;
+  const signedUrl = externalizeStorageUrl(internalUrl.toString());
   return { signedUrl, expiresIn: signedUrlSeconds };
 };
 
@@ -238,6 +290,152 @@ const failed = async (context: GatewayContext, body: JsonRecord) => {
   return { failed: true };
 };
 
+const claimRemote = async (context: GatewayContext, body: JsonRecord) => {
+  const limit = integerField(body, "limit", 20, 1, maximumBatchSize);
+  const leaseSeconds = integerField(body, "leaseSeconds", 300, 30, 3600);
+  const maxAttempts = integerField(body, "maxAttempts", 10, 1, 100);
+  const { data, error } = await context.client.rpc("claim_remote_copy_jobs", {
+    p_gateway_id: context.gatewayId,
+    p_limit: limit,
+    p_lease_seconds: leaseSeconds,
+    p_max_attempts: maxAttempts,
+  });
+  if (error) throw friendlyDatabaseError(error);
+  return { candidates: data ?? [] };
+};
+
+const readRemoteMetadata = (body: JsonRecord) => {
+  const mimeType = textField(body, "mimeType", 255).toLowerCase();
+  const checksum = textField(body, "checksum", 64).toLowerCase();
+  const fileSize = integerField(body, "fileSize", 0, 1, 20 * 1024 * 1024);
+  if (!allowedMimeTypes.has(mimeType)) throw new HttpError(415, "File type is not allowed.", "mime_not_allowed");
+  if (!checksumPattern.test(checksum)) throw new HttpError(400, "Invalid checksum.", "invalid_checksum");
+  return { mimeType, checksum, fileSize };
+};
+
+const completePreparedRemoteUpload = async (context: GatewayContext, jobId: string, prepared: PreparedRemoteUpload) => {
+  const { error } = await context.client.rpc("complete_remote_copy_upload", {
+    p_gateway_id: context.gatewayId,
+    p_job_id: jobId,
+    p_cloud_location_id: prepared.cloud_location_id,
+    p_mime_type: prepared.mime_type,
+    p_file_size: Number(prepared.file_size),
+    p_checksum: prepared.checksum,
+  });
+  if (error) throw friendlyDatabaseError(error);
+};
+
+const prepareRemoteUpload = async (context: GatewayContext, body: JsonRecord) => {
+  const jobId = uuidField(body, "jobId");
+  const metadata = readRemoteMetadata(body);
+  const { data, error } = await context.client.rpc("prepare_remote_copy_upload", {
+    p_gateway_id: context.gatewayId,
+    p_job_id: jobId,
+    p_mime_type: metadata.mimeType,
+    p_file_size: metadata.fileSize,
+    p_checksum: metadata.checksum,
+  });
+  const prepared = (Array.isArray(data) ? data[0] : data) as PreparedRemoteUpload | undefined;
+  if (error || !prepared) throw friendlyDatabaseError(error);
+  if (prepared.job_status === "completed") return { status: "completed", locationId: prepared.cloud_location_id };
+  if (prepared.bucket_id !== "rural-documents" || !prepared.object_key.startsWith(`${context.organizationId}/`)) {
+    throw new HttpError(400, "Cloud destination is inconsistent.", "invalid_metadata");
+  }
+
+  const stored = await inspectStoredObject(prepared.bucket_id, prepared.object_key);
+  if (prepared.job_status === "existing" && !stored) {
+    throw new HttpError(409, "Existing Cloud metadata has no corresponding object.", "cloud_object_conflict");
+  }
+  if (stored) {
+    if (stored.checksum !== prepared.checksum || stored.size !== Number(prepared.file_size) || stored.mimeType !== prepared.mime_type) {
+      throw new HttpError(409, "An existing Cloud object has different content.", "cloud_object_conflict");
+    }
+    await completePreparedRemoteUpload(context, jobId, prepared);
+    return { status: "completed", locationId: prepared.cloud_location_id };
+  }
+
+  const { data: signedUpload, error: signedUploadError } = await context.client.storage
+    .from(prepared.bucket_id)
+    .createSignedUploadUrl(prepared.object_key, { upsert: false });
+  if (signedUploadError || !signedUpload?.signedUrl) throw new HttpError(502, "Cloud upload could not be authorized.", "upload_authorization_failed");
+  return {
+    status: "uploading",
+    locationId: prepared.cloud_location_id,
+    signedUploadUrl: externalizeStorageUrl(signedUpload.signedUrl),
+  };
+};
+
+const loadRemoteJobAndLocation = async (context: GatewayContext, jobId: string, locationId: string) => {
+  const { data: jobData, error: jobError } = await context.client
+    .from("remote_copy_jobs")
+    .select("id,organization_id,attachment_id,source_location_id,target_location_id,status,claimed_by,lease_until")
+    .eq("id", jobId)
+    .eq("organization_id", context.organizationId)
+    .eq("status", "processing")
+    .eq("claimed_by", context.gatewayId)
+    .eq("target_location_id", locationId)
+    .maybeSingle();
+  const job = jobData as RemoteJobRow | null;
+  if (jobError || !job || !job.lease_until || new Date(job.lease_until).getTime() < Date.now()) {
+    throw new HttpError(403, "Remote-copy job is not claimed by this gateway.", "invalid_claim");
+  }
+  const { data: location, error: locationError } = await context.client
+    .from("attachment_locations")
+    .select("id,organization_id,attachment_id,storage_type,bucket_id,object_key,status,mime_type,file_size,checksum")
+    .eq("id", locationId)
+    .eq("organization_id", context.organizationId)
+    .eq("attachment_id", job.attachment_id)
+    .eq("source_location_id", job.source_location_id)
+    .eq("storage_type", "supabase_storage")
+    .in("status", ["uploading", "active"])
+    .maybeSingle();
+  if (locationError || !location?.bucket_id || !location.object_key) throw new HttpError(403, "Cloud destination is outside the gateway scope.", "invalid_claim");
+  return location as { bucket_id: string; object_key: string; mime_type: string; file_size: number | string; checksum: string };
+};
+
+const completeRemoteUpload = async (context: GatewayContext, body: JsonRecord) => {
+  const jobId = uuidField(body, "jobId");
+  const locationId = uuidField(body, "locationId");
+  const metadata = readRemoteMetadata(body);
+  const location = await loadRemoteJobAndLocation(context, jobId, locationId);
+  if (location.bucket_id !== "rural-documents" || !location.object_key.startsWith(`${context.organizationId}/`)
+    || location.checksum.toLowerCase() !== metadata.checksum || Number(location.file_size) !== metadata.fileSize
+    || location.mime_type.toLowerCase() !== metadata.mimeType) {
+    throw new HttpError(400, "Cloud destination metadata is inconsistent.", "invalid_metadata");
+  }
+  const stored = await inspectStoredObject(location.bucket_id, location.object_key);
+  if (!stored) throw new HttpError(404, "Uploaded Cloud object is unavailable.", "object_unavailable");
+  if (stored.checksum !== metadata.checksum || stored.size !== metadata.fileSize || stored.mimeType !== metadata.mimeType) {
+    throw new HttpError(409, "Uploaded Cloud object has different content.", "cloud_object_conflict");
+  }
+  const prepared: PreparedRemoteUpload = {
+    job_status: "processing",
+    cloud_location_id: locationId,
+    bucket_id: location.bucket_id,
+    object_key: location.object_key,
+    mime_type: metadata.mimeType,
+    file_size: metadata.fileSize,
+    checksum: metadata.checksum,
+  };
+  await completePreparedRemoteUpload(context, jobId, prepared);
+  return { status: "completed", locationId };
+};
+
+const failRemote = async (context: GatewayContext, body: JsonRecord) => {
+  const jobId = uuidField(body, "jobId");
+  const errorCode = textField(body, "errorCode", 64).toLowerCase();
+  if (!errorCodePattern.test(errorCode)) throw new HttpError(400, "Invalid error code.", "invalid_error_code");
+  const retryAfterSeconds = integerField(body, "retryAfterSeconds", 60, 5, 86400);
+  const { error } = await context.client.rpc("fail_remote_copy_job", {
+    p_gateway_id: context.gatewayId,
+    p_job_id: jobId,
+    p_error_code: errorCode,
+    p_retry_after_seconds: retryAfterSeconds,
+  });
+  if (error) throw friendlyDatabaseError(error);
+  return { failed: true };
+};
+
 Deno.serve(async (request) => {
   try {
     if (request.method !== "POST") throw new HttpError(405, "Method not allowed.", "method_not_allowed");
@@ -248,7 +446,11 @@ Deno.serve(async (request) => {
     const result = action === "claim" ? await claim(context, body)
       : action === "download" ? await download(context, body)
       : action === "complete" ? await complete(context, body)
-      : await failed(context, body);
+      : action === "failed" ? await failed(context, body)
+      : action === "claim-remote" ? await claimRemote(context, body)
+      : action === "prepare-remote-upload" ? await prepareRemoteUpload(context, body)
+      : action === "complete-remote-upload" ? await completeRemoteUpload(context, body)
+      : await failRemote(context, body);
     return json(result);
   } catch (error) {
     if (error instanceof HttpError) return json({ error: error.message, code: error.code }, error.status);

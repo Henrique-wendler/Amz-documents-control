@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 
 type JsonRecord = Record<string, unknown>;
-type FileAction = "prepare-upload" | "finalize-upload" | "abort-upload" | "download" | "remove-location";
+type FileAction = "prepare-upload" | "finalize-upload" | "abort-upload" | "download" | "remove-location" | "request-remote-copy";
 
 interface FileContext {
   client: SupabaseClient;
@@ -163,7 +163,7 @@ const fileSizeField = (body: JsonRecord) => {
 
 const actionField = (body: JsonRecord) => {
   const action = body.action;
-  if (action !== "prepare-upload" && action !== "finalize-upload" && action !== "abort-upload" && action !== "download" && action !== "remove-location") {
+  if (action !== "prepare-upload" && action !== "finalize-upload" && action !== "abort-upload" && action !== "download" && action !== "remove-location" && action !== "request-remote-copy") {
     throw new HttpError(400, "Ação de arquivo inválida.", "invalid_action");
   }
   return action;
@@ -408,6 +408,18 @@ const removeLocation = async (context: FileContext, body: JsonRecord) => {
   return { removed: true };
 };
 
+const requestRemoteCopy = async (context: FileContext, body: JsonRecord) => {
+  requirePermission(context, "files.manage");
+  const attachmentId = uuidField(body, "attachmentId");
+  const sourceLocationId = uuidField(body, "sourceLocationId");
+  const { data, error } = await context.client.rpc("request_attachment_remote_copy", {
+    p_attachment_id: attachmentId,
+    p_source_location_id: sourceLocationId,
+  });
+  if (error || !data) throw friendlyDatabaseError(error, "Não foi possível solicitar a disponibilização remota.");
+  return { jobId: data.id, status: data.status };
+};
+
 Deno.serve(async (request) => {
   let headers: HeadersInit = {};
   try {
@@ -424,7 +436,8 @@ Deno.serve(async (request) => {
       : action === "finalize-upload" ? await finalizeUpload(context, body)
       : action === "abort-upload" ? await abortUpload(context, body)
       : action === "download" ? await download(context, body)
-      : await removeLocation(context, body);
+      : action === "remove-location" ? await removeLocation(context, body)
+      : await requestRemoteCopy(context, body);
     return json(result, 200, headers);
   } catch (error) {
     if (error instanceof HttpError) return json({ error: error.message, code: error.code }, error.status, headers);

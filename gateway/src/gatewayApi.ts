@@ -1,8 +1,11 @@
-import type { CompleteSyncInput, GatewayApi, GatewayConfig, SyncCandidate } from "./types.js";
+import type { CompleteSyncInput, GatewayApi, GatewayConfig, RemoteCopyApi, RemoteCopyCandidate, RemoteUploadPreparation, SyncCandidate } from "./types.js";
 
 interface GatewayResponse {
-  candidates?: SyncCandidate[];
+  candidates?: Array<SyncCandidate | RemoteCopyCandidate>;
   signedUrl?: string;
+  signedUploadUrl?: string;
+  locationId?: string;
+  status?: "uploading" | "completed";
   error?: string;
   code?: string;
 }
@@ -15,7 +18,7 @@ export class GatewayHttpError extends Error {
 
 const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export class HttpGatewayApi implements GatewayApi {
+export class HttpGatewayApi implements GatewayApi, RemoteCopyApi {
   readonly #endpoint: string;
 
   constructor(private readonly config: GatewayConfig, private readonly fetcher: typeof fetch = fetch) {
@@ -63,7 +66,7 @@ export class HttpGatewayApi implements GatewayApi {
       leaseSeconds: this.config.leaseSeconds,
       maxAttempts: this.config.maxSyncAttempts,
     });
-    return response.candidates ?? [];
+    return (response.candidates ?? []) as SyncCandidate[];
   }
 
   async getDownloadUrl(locationId: string) {
@@ -78,5 +81,49 @@ export class HttpGatewayApi implements GatewayApi {
 
   async failed(locationId: string, errorCode: string, retryAfterSeconds: number) {
     await this.#request({ action: "failed", locationId, errorCode, retryAfterSeconds });
+  }
+
+  async claimRemoteCopies() {
+    const response = await this.#request({
+      action: "claim-remote",
+      limit: this.config.batchSize,
+      leaseSeconds: this.config.leaseSeconds,
+      maxAttempts: this.config.maxSyncAttempts,
+    });
+    return (response.candidates ?? []) as RemoteCopyCandidate[];
+  }
+
+  async prepareRemoteUpload(jobId: string, mimeType: string, fileSize: number, checksum: string): Promise<RemoteUploadPreparation> {
+    const response = await this.#request({ action: "prepare-remote-upload", jobId, mimeType, fileSize, checksum });
+    if (!response.status || !response.locationId) throw new Error("Gateway did not return a Cloud destination.");
+    if (response.status === "uploading" && !response.signedUploadUrl) throw new Error("Gateway did not return an upload authorization.");
+    return { status: response.status, locationId: response.locationId, signedUploadUrl: response.signedUploadUrl };
+  }
+
+  async uploadRemote(signedUploadUrl: string, bytes: Uint8Array, mimeType: string) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.downloadTimeoutMs);
+    try {
+      const response = await this.fetcher(signedUploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": mimeType, "Cache-Control": "max-age=3600", "X-Upsert": "false" },
+        body: bytes as BodyInit,
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new GatewayHttpError(response.status, response.status === 409 ? "cloud_object_conflict" : "cloud_upload_failed");
+    } catch (error) {
+      if (error instanceof GatewayHttpError) throw error;
+      throw new GatewayHttpError(502, "cloud_upload_failed");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async completeRemoteUpload(jobId: string, locationId: string, mimeType: string, fileSize: number, checksum: string) {
+    await this.#request({ action: "complete-remote-upload", jobId, locationId, mimeType, fileSize, checksum });
+  }
+
+  async failRemoteCopy(jobId: string, errorCode: string, retryAfterSeconds: number) {
+    await this.#request({ action: "fail-remote", jobId, errorCode, retryAfterSeconds });
   }
 }

@@ -3,13 +3,14 @@ import { supabase } from "../lib/supabase";
 import type { DocumentAttachmentRepository, DocumentAttachmentRepositoryInput, PersistedAttachmentLocation, PersistedDocumentAttachment } from "./documentAttachmentRepository";
 import { DocumentAttachmentConcurrencyError } from "./documentAttachmentRepository";
 
-interface AttachmentRow { id: string; document_id: string; file_name: string; storage_type: "network_share" | "supabase_storage" | "external"; file_path: string; mime_type: string | null; file_size: number | string | null; checksum: string | null; status: "active" | "inactive"; created_at: string; updated_at: string; version: number; }
+interface AttachmentRow { id: string; document_id: string; file_name: string; storage_type: "network_share" | "supabase_storage" | "external"; mime_type: string | null; file_size: number | string | null; checksum: string | null; status: "active" | "inactive"; created_at: string; updated_at: string; version: number; }
 interface LocationRow { id: string; attachment_id: string; storage_type: "network_share" | "supabase_storage" | "external"; status: "uploading" | "active" | "removing" | "inactive" | "failed"; version: number; }
-const selection = "id, document_id, file_name, storage_type, file_path, mime_type, file_size, checksum, status, created_at, updated_at, version";
+interface RemoteCopyJobRow { source_location_id: string; status: "pending" | "processing" | "completed" | "failed"; error_code: string | null; }
+const selection = "id, document_id, file_name, storage_type, mime_type, file_size, checksum, status, created_at, updated_at, version";
 const locationSelection = "id, attachment_id, storage_type, status, version";
 const formatTimestamp = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "America/Araguaina" }).format(new Date(value));
 const mapLocation = (row: LocationRow): PersistedAttachmentLocation => ({ id: row.id, storageType: row.storage_type, status: row.status, version: row.version });
-const mapRow = (row: AttachmentRow, locations: PersistedAttachmentLocation[] = []): PersistedDocumentAttachment => ({ id: row.id, documentId: row.document_id, fileName: row.file_name, storageType: row.storage_type, filePath: row.file_path, fileType: row.mime_type ?? undefined, fileSize: row.file_size === null ? undefined : Number(row.file_size), checksum: row.checksum ?? undefined, status: row.status, createdAt: formatTimestamp(row.created_at), updatedAt: formatTimestamp(row.updated_at), version: row.version, locations });
+const mapRow = (row: AttachmentRow, locations: PersistedAttachmentLocation[] = []): PersistedDocumentAttachment => ({ id: row.id, documentId: row.document_id, fileName: row.file_name, storageType: row.storage_type, filePath: "", fileType: row.mime_type ?? undefined, fileSize: row.file_size === null ? undefined : Number(row.file_size), checksum: row.checksum ?? undefined, status: row.status, createdAt: formatTimestamp(row.created_at), updatedAt: formatTimestamp(row.updated_at), version: row.version, locations });
 const mapInput = (input: DocumentAttachmentRepositoryInput) => ({ file_name: input.fileName, storage_type: input.storageType, file_path: input.filePath, mime_type: input.mimeType || null, file_size: input.fileSize ?? null });
 const friendlyError = (error: PostgrestError, fallback: string) => {
   if (error.code === "23514") return new Error("O caminho contém credencial ou metadado inválido e não pode ser armazenado.");
@@ -27,10 +28,26 @@ const withLocations = async (rows: AttachmentRow[]) => {
   if (!rows.length) return [];
   const { data, error } = await supabase.from("attachment_locations").select(locationSelection).in("attachment_id", rows.map((row) => row.id)).is("deleted_at", null).order("created_at");
   if (error) throw friendlyError(error, "Não foi possível carregar a disponibilidade dos arquivos.");
+  const locationRows = (data ?? []) as unknown as LocationRow[];
+  const networkLocationIds = locationRows.filter((row) => row.storage_type === "network_share").map((row) => row.id);
+  const jobsBySource = new Map<string, RemoteCopyJobRow>();
+  if (networkLocationIds.length) {
+    const { data: jobData, error: jobError } = await supabase
+      .from("remote_copy_jobs")
+      .select("source_location_id, status, error_code")
+      .in("source_location_id", networkLocationIds)
+      .order("created_at", { ascending: false });
+    if (jobError) throw friendlyError(jobError, "Não foi possível carregar o estado da disponibilização remota.");
+    ((jobData ?? []) as unknown as RemoteCopyJobRow[]).forEach((job) => {
+      if (!jobsBySource.has(job.source_location_id)) jobsBySource.set(job.source_location_id, job);
+    });
+  }
   const locationsByAttachment = new Map<string, PersistedAttachmentLocation[]>();
-  ((data ?? []) as unknown as LocationRow[]).forEach((row) => {
+  locationRows.forEach((row) => {
     const current = locationsByAttachment.get(row.attachment_id) ?? [];
-    current.push(mapLocation(row));
+    const location = mapLocation(row);
+    const job = jobsBySource.get(row.id);
+    current.push(job ? { ...location, remoteCopyStatus: job.status, remoteCopyErrorCode: job.error_code ?? undefined } : location);
     locationsByAttachment.set(row.attachment_id, current);
   });
   return rows.map((row) => mapRow(row, locationsByAttachment.get(row.id) ?? []));

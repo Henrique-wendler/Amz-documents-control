@@ -16,6 +16,7 @@ const config: GatewayConfig = {
   retryBaseMs: 1,
   maxSyncAttempts: 10,
   leaseSeconds: 300,
+  maxUploadBytes: 20 * 1024 * 1024,
 };
 
 test("retries retryable gateway responses and then succeeds", async () => {

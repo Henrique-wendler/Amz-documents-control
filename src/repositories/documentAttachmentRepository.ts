@@ -2,11 +2,14 @@ import type { DocumentAttachment } from "../types/domain";
 
 export type AttachmentStorageType = "network_share" | "supabase_storage" | "external";
 export type AttachmentLocationStatus = "uploading" | "active" | "removing" | "inactive" | "failed";
+export type RemoteCopyStatus = "pending" | "processing" | "completed" | "failed";
 export interface PersistedAttachmentLocation {
   id: string;
   storageType: AttachmentStorageType;
   status: AttachmentLocationStatus;
   version: number;
+  remoteCopyStatus?: RemoteCopyStatus;
+  remoteCopyErrorCode?: string;
 }
 export interface PersistedDocumentAttachment extends DocumentAttachment {
   storageType: AttachmentStorageType;

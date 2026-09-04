@@ -49,5 +49,6 @@ export const loadConfig = (): GatewayConfig => {
     retryBaseMs: integer("GATEWAY_RETRY_BASE_MS", 1_000, 100, 60_000),
     maxSyncAttempts: integer("GATEWAY_MAX_SYNC_ATTEMPTS", 10, 1, 100),
     leaseSeconds: integer("GATEWAY_LEASE_SECONDS", 300, 30, 3_600),
+    maxUploadBytes: integer("GATEWAY_MAX_UPLOAD_BYTES", 20 * 1024 * 1024, 1, 50 * 1024 * 1024),
   };
 };

@@ -39,4 +39,8 @@ export const documentFileService = {
   async removeLocation(locationId: string, expectedVersion: number) {
     return supabaseDocumentFileRepository.removeLocation(locationId, expectedVersion);
   },
+
+  async requestRemoteCopy(attachmentId: string, sourceLocationId: string) {
+    return supabaseDocumentFileRepository.requestRemoteCopy(attachmentId, sourceLocationId);
+  },
 };

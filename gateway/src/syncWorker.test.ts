@@ -28,6 +28,7 @@ const config = (rootPath: string): GatewayConfig => ({
   retryBaseMs: 100,
   maxSyncAttempts: 10,
   leaseSeconds: 300,
+  maxUploadBytes: 20 * 1024 * 1024,
 });
 
 const candidate = (overrides: Partial<SyncCandidate> = {}): SyncCandidate => ({

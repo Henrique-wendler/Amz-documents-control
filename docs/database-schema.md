@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `015`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para a segunda cópia local.
+> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `016`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -41,6 +41,7 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 13 | `202609040013_hybrid_document_storage.sql` | localizações 1:N, bucket privado, Storage RLS e ciclo compensável de upload/download |
 | 14 | `202609040014_files_manage_attachment_visibility.sql` | leitura de metadados para gestão independente de acesso ao conteúdo |
 | 15 | `202609040015_file_gateway_sync.sql` | instâncias de Gateway por tenant, claim/lease, estados de sincronização, segunda localização e auditoria |
+| 16 | `202609040016_on_demand_remote_copy.sql` | jobs tenant-aware para disponibilização remota, RPCs de claim/upload/conclusão/falha e auditoria |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -159,6 +160,8 @@ Na Fase A, o bucket `rural-documents` é privado e aceita até 20 MB nos MIME do
 
 Na Fase B, `file_gateway_instances` vincula cada instância a exatamente uma organização e armazena apenas o hash SHA-256 do token dedicado. A Edge Function `file-gateway` autentica esse token, deriva o tenant da instância e usa RPCs transacionais restritos ao `service_role` para claim/lease, conclusão ou falha. O worker recebe URL curta, publica a cópia em caminho relativo por UUID e cria idempotentemente uma localização `network_share` ligada à origem Cloud por `source_location_id`. `sync_attempt_count`, `sync_next_attempt_at` e `sync_lease_until` permitem backoff e retomada após reinício.
 
+Na Fase C, `request_attachment_remote_copy` exige sessão e `files.manage`, deriva a organização do profile e cria `remote_copy_jobs` usando somente UUIDs do anexo e da localização `network_share`. Apenas o Gateway recebe a referência persistida. O worker resolve `realpath`, exige contenção na raiz configurada, bloqueia traversal e escape por symlink/junction, calcula SHA-256 e envia por autorização curta ao bucket privado. As RPCs de Gateway são exclusivas do `service_role`, mas o segredo bruto nunca é entregue ao frontend nem persistido. Localização Cloud igual é reutilizada após verificação do objeto real; divergência gera conflito sem sobrescrita. O arquivo local não é removido.
+
 Os estados `uploading → active` e `active → removing → inactive` registram consistência. Falhas após envio removem o objeto quando seguro e marcam metadados como `failed`/inativos; o fluxo é idempotente na finalização. `file_access_log` registra upload, download/view e remoção de localização sem URL, token, secret ou caminho interno. Referências `network_share` permanecem válidas, mas o navegador não tenta abrir SMB. Backup de Storage continua independente do backup PostgreSQL.
 
 ## Relatórios
@@ -191,7 +194,8 @@ URLs, origens permitidas e callbacks serão configurados por ambiente, sem `loca
 - **CONCLUÍDO — XLSX real:** geração server-side, download direto temporário, metadados, resumo, dados tipados e `report_log` estão implementados para os sete relatórios.
 - **CONCLUÍDO — arquivos Fase A:** upload real no Storage privado, download por URL curta, SHA-256, localizações 1:N, RLS, auditoria de acesso e compensação básica.
 - **CONCLUÍDO — arquivos Fase B (software):** File Gateway outbound-only, autenticação por instância/tenant, claim/lease, download privado, SHA-256, publicação atômica, idempotência, backoff e auditoria.
-- **PENDENTE — implantação de arquivos:** homologação no servidor Windows/HD real, acesso de conta de serviço ao compartilhamento, antivírus, retenção e migração de legados.
+- **CONCLUÍDO — arquivos Fase C (software):** solicitação sob demanda com `files.manage`, job/lease tenant-aware, resolução segura de paths, upload privado, checksum, idempotência e auditoria.
+- **PENDENTE — implantação de arquivos:** homologação no servidor Windows/HD real, acesso de conta de serviço ao compartilhamento, antivírus, retenção e definição operacional para migração seletiva de legados.
 - **PENDENTE — hardening final:** revisão de produção de headers, rate limits distribuídos, secrets, observabilidade, backups e recuperação.
 - **PENDENTE — homologação:** testes integrados em staging, validação do negócio e aceite formal antes do uso com dados reais.
 - **PENDENTE — CAB:** significado e regras não definidos; nenhum campo ou regra CAB foi cristalizado no schema.

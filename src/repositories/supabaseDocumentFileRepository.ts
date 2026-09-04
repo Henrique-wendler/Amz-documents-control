@@ -78,4 +78,12 @@ export const supabaseDocumentFileRepository: DocumentFileRepository = {
   async removeLocation(locationId, expectedVersion) {
     await invoke({ action: "remove-location", locationId, expectedVersion }, "Não foi possível remover a localização Cloud.");
   },
+
+  async requestRemoteCopy(attachmentId, sourceLocationId) {
+    return invoke<{ jobId: string; status: "pending" | "processing" | "completed" | "failed" }>({
+      action: "request-remote-copy",
+      attachmentId,
+      sourceLocationId,
+    }, "Não foi possível solicitar a disponibilização remota.");
+  },
 };

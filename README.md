@@ -10,9 +10,10 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 - Todos os módulos de negócio usam Supabase.
 - Autenticação, recuperação de senha e MFA TOTP estão funcionais.
 - Administração de Usuários e Administração de Catálogos estão concluídas no escopo atual.
-- O schema é reproduzido pelas migrations `001` a `015`.
+- O schema é reproduzido pelas migrations `001` a `016`.
 - A Fase A de arquivos usa Supabase Storage privado para upload e download remoto, preservando referências legadas de servidor interno.
 - A Fase B inclui um File Gateway outbound-only para cópia Cloud → diretório Windows/HD, com tenant por instância, lease, SHA-256 e idempotência.
+- A Fase C disponibiliza sob demanda referências legadas do servidor no Storage privado, sem varredura em massa ou exclusão da cópia local.
 - O ambiente atual é local; homologação e produção ainda não foram implantadas.
 
 ## Módulos disponíveis
@@ -143,6 +144,7 @@ As migrations ficam em `supabase/migrations/` e atualmente vão de:
 202609040013_hybrid_document_storage.sql
 202609040014_files_manage_attachment_visibility.sql
 202609040015_file_gateway_sync.sql
+202609040016_on_demand_remote_copy.sql
 ```
 
 Elas devem ser executadas na ordem existente. Alterações de schema, RLS, functions SQL ou permissions devem ser feitas em migration incremental; migrations já aplicadas não devem ser reescritas silenciosamente.
@@ -189,7 +191,7 @@ npm run build
 npm start
 ```
 
-Para polling contínuo use `npm run start:poll`. A configuração e o provisionamento seguro da instância estão em [`gateway/README.md`](gateway/README.md). O Gateway usa somente HTTPS de saída e não requer porta inbound.
+Para polling contínuo use `npm run start:poll`. O mesmo ciclo trata Cloud → local e os jobs locais → Cloud solicitados por usuários com `files.manage`. A configuração e o provisionamento seguro da instância estão em [`gateway/README.md`](gateway/README.md). O Gateway usa somente HTTPS de saída e não requer porta inbound.
 
 ### 3. Frontend
 
@@ -422,7 +424,7 @@ Confirme que `document-files` está sendo servida, que `STORAGE_PUBLIC_URL` repr
 
 ### File Gateway não sincroniza
 
-Confirme se `file-gateway` está disponível, a instância está ativa e vinculada à organização correta, o token corresponde ao hash provisionado, o caminho raiz é absoluto e dedicado e o volume suporta publicação atômica. Consulte apenas códigos sanitizados em `sync_error_code`/`file_access_log`; não registre token ou URL assinada durante o diagnóstico.
+Confirme se `file-gateway` está disponível, a instância está ativa e vinculada à organização correta, o token corresponde ao hash provisionado, o caminho raiz é absoluto e dedicado e o volume suporta publicação atômica. Para disponibilização remota, confirme também o job em `remote_copy_jobs`, a referência persistida e a permissão `files.manage`. Consulte apenas códigos sanitizados; não registre token, URL assinada ou caminho absoluto durante o diagnóstico.
 
 ### E-mail de recuperação não aparece localmente
 
@@ -436,6 +438,7 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 
 - Exportação CSV; a implementação atual exporta PDF e Excel (`.xlsx`).
 - Implantação e homologação do File Gateway no servidor Windows/HD real, incluindo conta de serviço e validação do volume/compartilhamento.
+- Validação operacional da Fase C contra um compartilhamento Windows de homologação; os testes automatizados usam somente diretórios temporários.
 - Antivírus, retenção, backup e reconciliação periódica dos objetos armazenados.
 - Hardening final para produção, incluindo headers, limites distribuídos, observabilidade e recuperação.
 - Ambiente de homologação e aceite formal.
