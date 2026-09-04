@@ -1,9 +1,13 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
+import ExcelJS from "npm:exceljs@4.4.0";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
 type JsonRecord = Record<string, unknown>;
 type ReportType = "farms" | "owners" | "registrations" | "operations" | "guarantees" | "documents" | "car";
+type ReportExportFormat = "pdf" | "xlsx";
 type Row = Record<string, unknown>;
+type SpreadsheetValue = string | number | Date | null;
+type SpreadsheetCellKind = "text" | "integer" | "decimal" | "currency" | "date" | "datetime";
 
 interface ReportFilters {
   farmId: string;
@@ -18,9 +22,9 @@ interface ReportFilters {
   expirationWindow: "all" | "30" | "60" | "90";
 }
 
-interface ReportColumn { key: string; label: string; align?: "start" | "end"; }
-interface ReportRow { id: string; values: Record<string, string>; }
-interface ReportMetric { label: string; value: string; }
+interface ReportColumn { key: string; label: string; align?: "start" | "end"; kind?: SpreadsheetCellKind; }
+interface ReportRow { id: string; values: Record<string, string>; spreadsheetValues: Record<string, SpreadsheetValue>; }
+interface ReportMetric { label: string; value: string; spreadsheetValue: SpreadsheetValue; numberFormat?: string; }
 interface BuiltReport { title: string; columns: ReportColumn[]; rows: ReportRow[]; metrics: ReportMetric[]; }
 
 interface RequestContext {
@@ -120,7 +124,9 @@ const validCivilDate = (value: string) => {
 
 const readPayload = (body: JsonRecord) => {
   const type = body.type;
+  const format = body.format;
   if (typeof type !== "string" || !Object.prototype.hasOwnProperty.call(reportTitles, type)) throw new HttpError(400, "Tipo de relatório inválido.", "invalid_report_type");
+  if (format !== "pdf" && format !== "xlsx") throw new HttpError(400, "Formato de exportação inválido.", "invalid_export_format");
   if ("organizationId" in body || "organization_id" in body) {
     throw new HttpError(400, "A organização é definida pela sessão autenticada.", "tenant_from_payload");
   }
@@ -147,7 +153,7 @@ const readPayload = (body: JsonRecord) => {
   if (!validCivilDate(filters.startDate) || !validCivilDate(filters.endDate) || filters.startDate && filters.endDate && filters.startDate > filters.endDate) {
     throw new HttpError(400, "Período informado inválido.", "invalid_filter");
   }
-  return { type: reportType, filters, includeFinancial: body.includeFinancial === true };
+  return { type: reportType, filters, includeFinancial: body.includeFinancial === true, format: format as ReportExportFormat };
 };
 
 const requireContext = async (request: Request): Promise<RequestContext> => {
@@ -239,6 +245,14 @@ const formatTimestamp = (value: unknown) => {
   const date = new Date(str(value));
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "UTC" }).format(date) + " UTC";
 };
+const spreadsheetCivilDate = (value: unknown) => {
+  const match = isoCivil(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)) : null;
+};
+const spreadsheetTimestamp = (value: unknown) => {
+  const date = new Date(str(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 const todayCivil = () => new Date().toISOString().slice(0, 10);
 const civilDaysBetween = (from: string, to: string) => Math.round((new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86_400_000);
 const unique = (values: string[]) => [...new Set(values.filter(Boolean))];
@@ -249,9 +263,10 @@ const inPeriod = (date: unknown, filters: ReportFilters) => {
   const value = isoCivil(date);
   return Boolean(value && (!filters.startDate || value >= filters.startDate) && (!filters.endDate || value <= filters.endDate));
 };
-const columns = (items: Array<[string, string, ("start" | "end")?]>): ReportColumn[] => items.map(([key, label, align]) => ({ key, label, align }));
-const reportRow = (id: unknown, values: Record<string, string>): ReportRow => ({ id: str(id), values });
-const metrics = (rows: ReportRow[]): ReportMetric[] => [{ label: "Registros", value: count(rows.length) }];
+const columns = (items: Array<[string, string, ("start" | "end")?, SpreadsheetCellKind?]>): ReportColumn[] => items.map(([key, label, align, kind]) => ({ key, label, align, kind }));
+const reportRow = (id: unknown, values: Record<string, string>, spreadsheetValues: Record<string, SpreadsheetValue> = {}): ReportRow => ({ id: str(id), values, spreadsheetValues: { ...values, ...spreadsheetValues } });
+const metric = (label: string, value: string, spreadsheetValue: SpreadsheetValue = value, numberFormat?: string): ReportMetric => ({ label, value, spreadsheetValue, numberFormat });
+const metrics = (rows: ReportRow[]): ReportMetric[] => [metric("Registros", count(rows.length), rows.length, "#,##0")];
 
 const buildFarms = async (context: RequestContext, filters: ReportFilters): Promise<BuiltReport> => {
   const [farms, registrations] = await Promise.all([
@@ -264,8 +279,9 @@ const buildFarms = async (context: RequestContext, filters: ReportFilters): Prom
   const rows = selected.map((farm) => reportRow(farm.id, {
     name: str(farm.name), location: `${str(farm.municipality)} / ${str(farm.state)}`, area: area(num(farm.total_area)),
     registrations: count(registrationCounts.get(str(farm.id)) ?? 0), status: str(farm.status) === "active" ? "Ativa" : "Inativa", updated: formatTimestamp(farm.updated_at),
-  }));
-  return { title: reportTitles.farms, columns: columns([["name", "Fazenda"], ["location", "Município / UF"], ["area", "Área total", "end"], ["registrations", "Matrículas", "end"], ["status", "Situação"], ["updated", "Atualizado em"]]), rows, metrics: [...metrics(rows), { label: "Área total", value: area(selected.reduce((sum, farm) => sum + num(farm.total_area), 0)) }] };
+  }, { area: num(farm.total_area), registrations: registrationCounts.get(str(farm.id)) ?? 0, updated: spreadsheetTimestamp(farm.updated_at) }));
+  const totalArea = selected.reduce((sum, farm) => sum + num(farm.total_area), 0);
+  return { title: reportTitles.farms, columns: columns([["name", "Fazenda"], ["location", "Município / UF"], ["area", "Área total", "end", "decimal"], ["registrations", "Matrículas", "end", "integer"], ["status", "Situação"], ["updated", "Atualizado em", undefined, "datetime"]]), rows, metrics: [...metrics(rows), metric("Área total", area(totalArea), totalArea, '#,##0.0000 "ha"')] };
 };
 
 const buildOwners = async (context: RequestContext, filters: ReportFilters): Promise<BuiltReport> => {
@@ -289,8 +305,10 @@ const buildOwners = async (context: RequestContext, filters: ReportFilters): Pro
     name: str(owner.name), type: owner.owner_type === "individual" ? "Pessoa Física" : "Pessoa Jurídica",
     document: formatDocument(owner.document_number), farms: count(farmsByOwner.get(str(owner.id))?.size ?? 0),
     status: entityStatusLabels[str(owner.status)] ?? str(owner.status), updated: formatTimestamp(owner.updated_at),
-  }));
-  return { title: reportTitles.owners, columns: columns([["name", "Proprietário"], ["type", "Tipo"], ["document", "CPF / CNPJ"], ["farms", "Fazendas", "end"], ["status", "Situação"], ["updated", "Atualizado em"]]), rows, metrics: [...metrics(rows), { label: "Pessoas físicas", value: count(selected.filter((owner) => owner.owner_type === "individual").length) }, { label: "Pessoas jurídicas", value: count(selected.filter((owner) => owner.owner_type === "company").length) }] };
+  }, { farms: farmsByOwner.get(str(owner.id))?.size ?? 0, updated: spreadsheetTimestamp(owner.updated_at) }));
+  const individualCount = selected.filter((owner) => owner.owner_type === "individual").length;
+  const companyCount = selected.filter((owner) => owner.owner_type === "company").length;
+  return { title: reportTitles.owners, columns: columns([["name", "Proprietário"], ["type", "Tipo"], ["document", "CPF / CNPJ"], ["farms", "Fazendas", "end", "integer"], ["status", "Situação"], ["updated", "Atualizado em", undefined, "datetime"]]), rows, metrics: [...metrics(rows), metric("Pessoas físicas", count(individualCount), individualCount, "#,##0"), metric("Pessoas jurídicas", count(companyCount), companyCount, "#,##0")] };
 };
 
 const buildRegistrations = async (context: RequestContext, filters: ReportFilters): Promise<BuiltReport> => {
@@ -312,8 +330,9 @@ const buildRegistrations = async (context: RequestContext, filters: ReportFilter
     number: str(registration.number), farm: farmById.get(str(registration.farm_id)) ?? "—",
     owners: unique(ownersByRegistration.get(str(registration.id)) ?? []).join(", ") || "—", hp: "Pendente de definição",
     area: area(num(registration.legal_area)), status: str(registration.status) === "active" ? "Ativa" : "Inativa", updated: formatTimestamp(registration.updated_at),
-  }));
-  return { title: reportTitles.registrations, columns: columns([["number", "Matrícula"], ["farm", "Fazenda"], ["owners", "Proprietário"], ["hp", "HP"], ["area", "Área legal", "end"], ["status", "Situação"], ["updated", "Atualizado em"]]), rows, metrics: [...metrics(rows), { label: "Área legal", value: area(selected.reduce((sum, registration) => sum + num(registration.legal_area), 0)) }, { label: "HP", value: "Pendente de definição" }] };
+  }, { area: num(registration.legal_area), updated: spreadsheetTimestamp(registration.updated_at) }));
+  const totalLegalArea = selected.reduce((sum, registration) => sum + num(registration.legal_area), 0);
+  return { title: reportTitles.registrations, columns: columns([["number", "Matrícula"], ["farm", "Fazenda"], ["owners", "Proprietário"], ["hp", "HP"], ["area", "Área legal", "end", "decimal"], ["status", "Situação"], ["updated", "Atualizado em", undefined, "datetime"]]), rows, metrics: [...metrics(rows), metric("Área legal", area(totalLegalArea), totalLegalArea, '#,##0.0000 "ha"'), metric("HP", "Pendente de definição")] };
 };
 
 const buildOperations = async (context: RequestContext, filters: ReportFilters, includeFinancial: boolean): Promise<BuiltReport> => {
@@ -339,8 +358,8 @@ const buildOperations = async (context: RequestContext, filters: ReportFilters, 
       && (!filters.bank || institutionById.get(str(operation.institution_id)) === filters.bank) && inPeriod(date, filters);
   });
   const reportColumns = columns([["number", "Número"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["bank", "Banco"], ["purpose", "Finalidade"]]);
-  if (includeFinancial) reportColumns.push({ key: "value", label: "Valor", align: "end" });
-  reportColumns.push(...columns([["status", "Situação"], ["date", "Data"]]));
+  if (includeFinancial) reportColumns.push({ key: "value", label: "Valor", align: "end", kind: "currency" });
+  reportColumns.push(...columns([["status", "Situação"], ["date", "Data", undefined, "date"]]));
   const rows = selected.map((operation) => {
     const registrationsForOperation = (linksByOperation.get(str(operation.id)) ?? []).map((link) => registrationById.get(str(link.registration_id))).filter(Boolean) as Row[];
     const values: Record<string, string> = {
@@ -349,12 +368,15 @@ const buildOperations = async (context: RequestContext, filters: ReportFilters, 
       bank: institutionById.get(str(operation.institution_id)) ?? "—", purpose: str(operation.purpose) || "—",
       status: operationStatusLabels[str(operation.status)] ?? str(operation.status), date: formatCivil(operation.start_date || operation.created_at),
     };
-    if (includeFinancial) values.value = money(amountByOperation.get(str(operation.id)) ?? 0);
-    return reportRow(operation.id, values);
+    const operationAmount = amountByOperation.get(str(operation.id)) ?? 0;
+    if (includeFinancial) values.value = money(operationAmount);
+    return reportRow(operation.id, values, { date: spreadsheetCivilDate(operation.start_date || operation.created_at), ...(includeFinancial ? { value: operationAmount } : {}) });
   });
   const reportMetrics = [...metrics(rows)];
-  if (includeFinancial) reportMetrics.push({ label: "Valor das operações", value: money(selected.reduce((sum, operation) => sum + (amountByOperation.get(str(operation.id)) ?? 0), 0)) });
-  reportMetrics.push({ label: "Operações ativas", value: count(selected.filter((operation) => operation.status === "active").length) });
+  const operationTotal = selected.reduce((sum, operation) => sum + (amountByOperation.get(str(operation.id)) ?? 0), 0);
+  const activeOperations = selected.filter((operation) => operation.status === "active").length;
+  if (includeFinancial) reportMetrics.push(metric("Valor das operações", money(operationTotal), operationTotal, '"R$" #,##0.00'));
+  reportMetrics.push(metric("Operações ativas", count(activeOperations), activeOperations, "#,##0"));
   return { title: reportTitles.operations, columns: reportColumns, rows, metrics: reportMetrics };
 };
 
@@ -392,8 +414,8 @@ const buildGuarantees = async (context: RequestContext, filters: ReportFilters, 
       && inPeriod(guarantee.start_date || guarantee.created_at, filters);
   });
   const reportColumns = columns([["type", "Tipo"], ["operation", "Operação"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["bank", "Banco"]]);
-  if (includeFinancial) reportColumns.push({ key: "value", label: "Valor", align: "end" });
-  reportColumns.push(...columns([["status", "Situação"], ["date", "Data"]]));
+  if (includeFinancial) reportColumns.push({ key: "value", label: "Valor", align: "end", kind: "currency" });
+  reportColumns.push(...columns([["status", "Situação"], ["date", "Data", undefined, "date"]]));
   const rows = selected.map((guarantee) => {
     const linkedRegistrations = registrationsByGuarantee.get(str(guarantee.id)) ?? [];
     const operation = operationById.get(str(guarantee.operation_id));
@@ -404,12 +426,15 @@ const buildGuarantees = async (context: RequestContext, filters: ReportFilters, 
       bank: institutionById.get(str(operation?.institution_id)) ?? "—",
       status: guaranteeStatusLabels[str(guarantee.status)] ?? str(guarantee.status), date: formatCivil(guarantee.start_date || guarantee.created_at),
     };
-    if (includeFinancial) values.value = money(amountByGuarantee.get(str(guarantee.id)) ?? 0);
-    return reportRow(guarantee.id, values);
+    const guaranteeAmount = amountByGuarantee.get(str(guarantee.id)) ?? 0;
+    if (includeFinancial) values.value = money(guaranteeAmount);
+    return reportRow(guarantee.id, values, { date: spreadsheetCivilDate(guarantee.start_date || guarantee.created_at), ...(includeFinancial ? { value: guaranteeAmount } : {}) });
   });
   const reportMetrics = [...metrics(rows)];
-  if (includeFinancial) reportMetrics.push({ label: "Valor das garantias", value: money(selected.reduce((sum, guarantee) => sum + (amountByGuarantee.get(str(guarantee.id)) ?? 0), 0)) });
-  reportMetrics.push({ label: "Garantias ativas", value: count(selected.filter((guarantee) => guarantee.status === "active").length) });
+  const guaranteeTotal = selected.reduce((sum, guarantee) => sum + (amountByGuarantee.get(str(guarantee.id)) ?? 0), 0);
+  const activeGuarantees = selected.filter((guarantee) => guarantee.status === "active").length;
+  if (includeFinancial) reportMetrics.push(metric("Valor das garantias", money(guaranteeTotal), guaranteeTotal, '"R$" #,##0.00'));
+  reportMetrics.push(metric("Garantias ativas", count(activeGuarantees), activeGuarantees, "#,##0"));
   return { title: reportTitles.guarantees, columns: reportColumns, rows, metrics: reportMetrics };
 };
 
@@ -438,9 +463,11 @@ const buildDocuments = async (context: RequestContext, filters: ReportFilters): 
       document: document.document_number ? `${typeName} · ${str(document.document_number)}` : typeName,
       farm: farmById.get(str(document.farm_id)) ?? "—", registration: document.registration_id ? registrationById.get(str(document.registration_id)) ?? "—" : "—",
       validity: formatCivil(document.expiration_date), status: documentStatusLabels[str(document.validity_status)] ?? str(document.validity_status),
-    });
+    }, { validity: spreadsheetCivilDate(document.expiration_date) });
   });
-  return { title: reportTitles.documents, columns: columns([["document", "Documento"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["validity", "Validade"], ["status", "Situação"]]), rows, metrics: [...metrics(rows), { label: "Vencidos ou a vencer", value: count(selected.filter((document) => ["expiring", "expired"].includes(str(document.validity_status))).length) }, { label: "Com validade", value: count(selected.filter((document) => Boolean(document.expiration_date)).length) }] };
+  const expirationCount = selected.filter((document) => ["expiring", "expired"].includes(str(document.validity_status))).length;
+  const datedCount = selected.filter((document) => Boolean(document.expiration_date)).length;
+  return { title: reportTitles.documents, columns: columns([["document", "Documento"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["validity", "Validade", undefined, "date"], ["status", "Situação"]]), rows, metrics: [...metrics(rows), metric("Vencidos ou a vencer", count(expirationCount), expirationCount, "#,##0"), metric("Com validade", count(datedCount), datedCount, "#,##0")] };
 };
 
 const buildCar = async (context: RequestContext, filters: ReportFilters): Promise<BuiltReport> => {
@@ -457,8 +484,10 @@ const buildCar = async (context: RequestContext, filters: ReportFilters): Promis
     registration: car.registration_id ? registrationById.get(str(car.registration_id)) ?? "—" : "—",
     owner: str(car.declared_owner_name) || "—", receipt: str(car.receipt_number) || "—",
     status: carStatusLabels[str(car.status)] ?? str(car.status), updated: formatTimestamp(car.updated_at),
-  }));
-  return { title: reportTitles.car, columns: columns([["number", "Número CAR"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["owner", "Proprietário"], ["receipt", "Número do recibo"], ["status", "Situação"], ["updated", "Atualizado em"]]), rows, metrics: [...metrics(rows), { label: "Ativos", value: count(selected.filter((car) => car.status === "active").length) }, { label: "Pendentes", value: count(selected.filter((car) => car.status === "pending").length) }] };
+  }, { updated: spreadsheetTimestamp(car.updated_at) }));
+  const activeCars = selected.filter((car) => car.status === "active").length;
+  const pendingCars = selected.filter((car) => car.status === "pending").length;
+  return { title: reportTitles.car, columns: columns([["number", "Número CAR"], ["farm", "Fazenda"], ["registration", "Matrícula"], ["owner", "Proprietário"], ["receipt", "Número do recibo"], ["status", "Situação"], ["updated", "Atualizado em", undefined, "datetime"]]), rows, metrics: [...metrics(rows), metric("Ativos", count(activeCars), activeCars, "#,##0"), metric("Pendentes", count(pendingCars), pendingCars, "#,##0")] };
 };
 
 const buildReport = (context: RequestContext, type: ReportType, filters: ReportFilters, includeFinancial: boolean) => {
@@ -637,6 +666,133 @@ const generatePdf = async (
   return { bytes: await document.save(), pageCount: pages.length };
 };
 
+const spreadsheetNumberFormat = (kind?: SpreadsheetCellKind) => {
+  if (kind === "integer") return "#,##0";
+  if (kind === "decimal") return '#,##0.0000 "ha"';
+  if (kind === "currency") return '"R$" #,##0.00';
+  if (kind === "date") return "dd/mm/yyyy";
+  if (kind === "datetime") return "dd/mm/yyyy hh:mm";
+  return undefined;
+};
+
+const generateXlsx = async (
+  report: BuiltReport,
+  context: RequestContext,
+  reportId: string,
+  generatedAt: Date,
+  filtersText: string,
+) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Sistema de Gestão de Imóveis Rurais";
+  workbook.lastModifiedBy = context.userName;
+  workbook.created = generatedAt;
+  workbook.modified = generatedAt;
+  workbook.subject = `Relatório ${report.title}`;
+  workbook.title = `${report.title} - ${context.organizationName}`;
+  workbook.company = context.organizationLegalName;
+
+  const colors = {
+    forest: "FF185C37", dark: "FF12452C", sage: "FF8FAA7B", light: "FFE8F0E3",
+    beige: "FFF5F1E8", white: "FFFFFFFF", text: "FF414141", border: "FFD5DDD2",
+  };
+  const thinRule = { style: "thin" as const, color: { argb: colors.border } };
+  const summary = workbook.addWorksheet("Resumo", { properties: { tabColor: { argb: colors.sage } }, views: [{ showGridLines: false }] });
+  summary.columns = [{ width: 25 }, { width: 90 }];
+  summary.getCell("A1").value = report.title;
+  summary.getCell("A1").font = { name: "Arial", size: 18, bold: true, color: { argb: colors.dark } };
+  summary.getCell("A2").value = "Relatório administrativo";
+  summary.getCell("A2").font = { name: "Arial", size: 10, italic: true, color: { argb: colors.text } };
+  summary.getRow(3).border = { bottom: thinRule };
+
+  const metadata: Array<[string, string | Date]> = [
+    ["Organização", context.organizationName],
+    ["Razão social", context.organizationLegalName],
+    ["Tipo de relatório", report.title],
+    ["Filtros", filtersText],
+    ["Data de geração", generatedAt],
+    ["Usuário", context.userName],
+    ["Report ID", reportId],
+  ];
+  metadata.forEach(([label, value], index) => {
+    const row = summary.getRow(index + 4);
+    row.getCell(1).value = label;
+    row.getCell(2).value = value;
+    row.getCell(1).font = { name: "Arial", size: 10, bold: true, color: { argb: colors.dark } };
+    row.getCell(2).font = { name: "Arial", size: 10, color: { argb: colors.text } };
+    row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.light } };
+    row.getCell(1).alignment = { vertical: "top" };
+    row.getCell(2).alignment = { vertical: "top", wrapText: true };
+    row.border = { bottom: thinRule };
+    if (label === "Data de geração") row.getCell(2).numFmt = "dd/mm/yyyy hh:mm";
+  });
+  summary.getRow(7).height = Math.max(24, Math.ceil(filtersText.length / 85) * 15);
+
+  const metricHeaderRow = 12;
+  summary.getRow(metricHeaderRow).values = ["Resumo", "Valor"];
+  summary.getRow(metricHeaderRow).height = 24;
+  summary.getRow(metricHeaderRow).eachCell((cell) => {
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: colors.white } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.forest } };
+    cell.alignment = { vertical: "middle" };
+  });
+  report.metrics.forEach((item, index) => {
+    const row = summary.getRow(metricHeaderRow + index + 1);
+    row.values = [item.label, item.spreadsheetValue];
+    row.height = 22;
+    row.eachCell((cell) => {
+      cell.font = { name: "Arial", size: 10, color: { argb: colors.text } };
+      cell.border = { bottom: thinRule };
+    });
+    if (item.numberFormat) row.getCell(2).numFmt = item.numberFormat;
+  });
+  summary.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+
+  const sheetName = report.title.slice(0, 31);
+  const records = workbook.addWorksheet(sheetName, { properties: { tabColor: { argb: colors.forest } }, views: [{ state: "frozen", ySplit: 4, showGridLines: false }] });
+  records.getCell("A1").value = report.title;
+  records.getCell("A1").font = { name: "Arial", size: 16, bold: true, color: { argb: colors.dark } };
+  records.getCell("A2").value = `${context.organizationName} · Gerado em ${formatTimestamp(generatedAt.toISOString())}`;
+  records.getCell("A2").font = { name: "Arial", size: 9, italic: true, color: { argb: colors.text } };
+  records.getRow(3).border = { bottom: thinRule };
+
+  const tableHeaderRow = 4;
+  const header = records.getRow(tableHeaderRow);
+  header.values = report.columns.map((column) => column.label);
+  header.height = 26;
+  header.eachCell((cell) => {
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: colors.white } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.forest } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.border = { right: { style: "thin", color: { argb: colors.white } } };
+  });
+
+  report.rows.forEach((item, rowIndex) => {
+    const row = records.getRow(tableHeaderRow + rowIndex + 1);
+    row.values = report.columns.map((column) => item.spreadsheetValues[column.key] ?? null);
+    row.height = 22;
+    report.columns.forEach((column, columnIndex) => {
+      const cell = row.getCell(columnIndex + 1);
+      cell.font = { name: "Arial", size: 10, color: { argb: colors.text } };
+      cell.alignment = { horizontal: column.align === "end" ? "right" : "left", vertical: "top", wrapText: true, indent: column.align === "end" ? 0 : 1 };
+      cell.border = { bottom: thinRule, right: thinRule };
+      const numberFormat = spreadsheetNumberFormat(column.kind);
+      if (numberFormat) cell.numFmt = numberFormat;
+      if (rowIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7F9F6" } };
+    });
+  });
+  report.columns.forEach((column, index) => {
+    const observed = report.rows.slice(0, 200).reduce((max, row) => Math.max(max, (row.values[column.key] ?? "").length), column.label.length);
+    const minimumWidth = column.kind === "currency" ? 22 : column.kind === "date" ? 13 : column.kind === "datetime" ? 19 : 12;
+    records.getColumn(index + 1).width = Math.min(42, Math.max(minimumWidth, observed + 4));
+  });
+  records.autoFilter = { from: { row: tableHeaderRow, column: 1 }, to: { row: tableHeaderRow, column: report.columns.length } };
+  records.pageSetup = { orientation: report.columns.length > 6 ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, repeatRows: `${tableHeaderRow}:${tableHeaderRow}`, margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+  records.headerFooter.oddFooter = `&LRelatório ${reportId}&R&P de &N`;
+
+  const output = await workbook.xlsx.writeBuffer();
+  return { bytes: new Uint8Array(output), worksheetCount: workbook.worksheets.length };
+};
+
 const rateWindows = new Map<string, { count: number; resetAt: number }>();
 const checkRateLimit = (userId: string) => {
   const now = Date.now();
@@ -670,7 +826,9 @@ Deno.serve(async (request) => {
     const reportId = crypto.randomUUID();
     const generatedAt = new Date();
     const filtersText = filterDescription(payload.type, payload.filters, farmNames, includeFinancial);
-    const { bytes, pageCount } = await generatePdf(report, context, reportId, generatedAt, filtersText);
+    const generated = payload.format === "pdf"
+      ? await generatePdf(report, context, reportId, generatedAt, filtersText)
+      : await generateXlsx(report, context, reportId, generatedAt, filtersText);
 
     const timestamp = generatedAt.toISOString();
     const { error: logError } = await context.client.from("report_log").insert({
@@ -680,20 +838,25 @@ Deno.serve(async (request) => {
       report_type: payload.type,
       filters: payload.filters,
       included_sections: { summary: true, table: true, include_financial_values: includeFinancial },
-      format: "pdf",
+      format: payload.format,
       generated_at: timestamp,
       downloaded_at: timestamp,
-      context: { row_count: report.rows.length, page_count: pageCount, delivery: "direct_temporary_download" },
+      context: {
+        row_count: report.rows.length,
+        ...(payload.format === "pdf" ? { page_count: generated.pageCount } : { worksheet_count: generated.worksheetCount }),
+        delivery: "direct_temporary_download",
+      },
     });
     if (logError) throw new HttpError(logError.code === "42501" ? 403 : 500, "Não foi possível registrar a geração do relatório.", "report_log_failed");
 
     const date = timestamp.slice(0, 10);
-    const fileName = `relatorio-${payload.type}-${date}-${reportId.slice(0, 8)}.pdf`;
-    return new Response(new Blob([bytes], { type: "application/pdf" }), {
+    const contentType = payload.format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const fileName = `relatorio-${payload.type}-${date}-${reportId.slice(0, 8)}.${payload.format}`;
+    return new Response(new Blob([generated.bytes], { type: contentType }), {
       status: 200,
       headers: {
         ...headers,
-        "Content-Type": "application/pdf",
+        "Content-Type": contentType,
         "Content-Disposition": `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
         "X-Report-Id": reportId,
         "Cache-Control": "private, no-store, max-age=0",

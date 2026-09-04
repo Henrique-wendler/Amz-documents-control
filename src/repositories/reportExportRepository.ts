@@ -1,5 +1,5 @@
-import type { ReportPdfFile, ReportPdfRequest } from "../types/report";
+import type { ReportExportFile, ReportExportRequest } from "../types/report";
 
 export interface ReportExportRepository {
-  generatePdf(request: ReportPdfRequest): Promise<ReportPdfFile>;
+  generate(request: ReportExportRequest): Promise<ReportExportFile>;
 }

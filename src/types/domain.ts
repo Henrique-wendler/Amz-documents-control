@@ -81,6 +81,7 @@ export interface DocumentAttachment {
   filePath: string;
   fileType?: string;
   fileSize?: number;
+  checksum?: string;
   storageType?: "network_share" | "supabase_storage" | "external";
   status?: "active" | "inactive";
   version?: number;

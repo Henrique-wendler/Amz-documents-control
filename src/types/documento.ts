@@ -30,10 +30,18 @@ export interface DocumentListItem extends RuralDocument {
 
 export interface DocumentSummaryViewModel { total: number; active: number; expiring: number; expired: number; }
 export interface DocumentListResponse { records: DocumentListItem[]; total: number; page: number; pageSize: number; totalPages: number; summary: DocumentSummaryViewModel; }
+export type AttachmentLocationStatus = "uploading" | "active" | "removing" | "inactive" | "failed";
+export interface DocumentAttachmentLocationView {
+  id: string;
+  storageType: "network_share" | "supabase_storage" | "external";
+  status: AttachmentLocationStatus;
+  version: number;
+}
 export interface DocumentAttachmentView extends DocumentAttachment {
   storageType: "network_share" | "supabase_storage" | "external";
   status: "active" | "inactive";
   version: number;
+  locations: DocumentAttachmentLocationView[];
 }
 export interface DocumentDetailsViewModel { document: DocumentListItem; farm?: Farm; registration?: Registration; attachments: DocumentAttachmentView[]; }
 export interface DocumentOption { id: string; label: string; farmId?: string; }

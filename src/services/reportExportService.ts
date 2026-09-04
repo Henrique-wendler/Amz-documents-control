@@ -1,9 +1,9 @@
 import { supabaseReportExportRepository } from "../repositories/supabaseReportExportRepository";
-import type { ReportFilters, ReportType } from "../types/report";
+import type { ReportExportFormat, ReportFilters, ReportType } from "../types/report";
 
 export const reportExportService = {
-  async downloadPdf(type: ReportType, filters: ReportFilters, includeFinancial: boolean) {
-    const file = await supabaseReportExportRepository.generatePdf({ type, filters, includeFinancial });
+  async download(type: ReportType, filters: ReportFilters, includeFinancial: boolean, format: ReportExportFormat) {
+    const file = await supabaseReportExportRepository.generate({ type, filters, includeFinancial, format });
     const objectUrl = URL.createObjectURL(file.blob);
     try {
       const anchor = document.createElement("a");
@@ -14,6 +14,6 @@ export const reportExportService = {
     } finally {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
     }
-    return { fileName: file.fileName, reportId: file.reportId };
+    return { fileName: file.fileName, reportId: file.reportId, format: file.format };
   },
 };

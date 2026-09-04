@@ -10,7 +10,8 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 - Todos os módulos de negócio usam Supabase.
 - Autenticação, recuperação de senha e MFA TOTP estão funcionais.
 - Administração de Usuários e Administração de Catálogos estão concluídas no escopo atual.
-- O schema é reproduzido pelas migrations `001` a `012`.
+- O schema é reproduzido pelas migrations `001` a `014`.
+- A Fase A de arquivos usa Supabase Storage privado para upload e download remoto, preservando referências legadas de servidor interno.
 - O ambiente atual é local; homologação e produção ainda não foram implantadas.
 
 ## Módulos disponíveis
@@ -23,13 +24,13 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 | Fazendas | Cadastro, edição, vínculos e consulta detalhada |
 | Matrículas | Cadastro, titularidade e vínculos com fazendas e proprietários |
 | Operações e Garantias | Operações, financeiro protegido, matrículas N:N, garantias, tipos e itens |
-| Documentos | Documentos rurais, validade derivada e referências de anexos |
+| Documentos | Documentos rurais, validade derivada, upload Cloud privado e referências de servidor interno |
 | CAR | Cadastro Ambiental Rural por fazenda e matrícula opcional |
-| Relatórios | Sete consultas consolidadas com filtros, pré-visualização e exportação PDF server-side |
+| Relatórios | Sete consultas consolidadas com filtros, pré-visualização e exportação PDF/Excel server-side |
 | Administração de Usuários | Convites, perfis, situação e recuperação de acesso |
 | Administração de Catálogos | Instituições financeiras, tipos de garantia e tipos de documento |
 
-O armazenamento e a entrega de arquivos de negócio reais ainda não fazem parte da implementação atual. Relatórios PDF são gerados sob demanda e entregues diretamente, sem persistência permanente do arquivo.
+Arquivos documentais usam bucket privado, autorização temporária e checksum SHA-256. Relatórios PDF e Excel continuam gerados sob demanda e entregues diretamente, sem persistência permanente do relatório.
 
 ## Arquitetura
 
@@ -57,6 +58,8 @@ Component → Service → Repository → Edge Function → Supabase Auth/Postgre
 A função `admin-users` valida a sessão, a permission `users.manage` e o `organization_id` do usuário antes de atuar. Credenciais administrativas permanecem exclusivamente no ambiente seguro da função e nunca são enviadas ao navegador.
 
 A Administração de Catálogos usa o fluxo padrão de repositories e é protegida por `catalogs.manage` e RLS.
+
+O upload/download documental usa `Component → Service → Repository → Edge Function → Supabase Storage/PostgreSQL`. A função `document-files` valida sessão, tenant e `files.read`/`files.manage`; os bytes seguem diretamente para o Storage por autorização temporária, sem atravessar a função durante o upload.
 
 ## Tecnologias
 
@@ -136,6 +139,8 @@ As migrations ficam em `supabase/migrations/` e atualmente vão de:
 202608270001_core_identity.sql
 ...
 202609030012_catalog_administration.sql
+202609040013_hybrid_document_storage.sql
+202609040014_files_manage_attachment_visibility.sql
 ```
 
 Elas devem ser executadas na ordem existente. Alterações de schema, RLS, functions SQL ou permissions devem ser feitas em migration incremental; migrations já aplicadas não devem ser reescritas silenciosamente.
@@ -167,6 +172,8 @@ npx supabase functions serve --env-file supabase/functions/.env
 ```
 
 O arquivo contém apenas as origens autorizadas e a URL pública local usadas pelas funções; convites e recuperações também usam a URL pública. Em produção, essas URLs deverão ser HTTPS e específicas do ambiente.
+
+Para arquivos, configure também `STORAGE_PUBLIC_URL`, `DOCUMENT_UPLOAD_MAX_BYTES` e `DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES` conforme `supabase/functions/.env.example`. O limite da função deve permanecer igual ou menor que o limite do bucket privado.
 
 ### 3. Frontend
 
@@ -237,7 +244,7 @@ Princípios obrigatórios:
 - administração de usuários e catálogos usa permissions administrativas distintas;
 - conhecer um UUID nunca concede acesso ao registro.
 
-Na exportação PDF, a Edge Function revalida a sessão, o profile ativo, a organização e as permissions `reports.read`, `reports.generate` e `reports.export`. Valores de Operações e Garantias só são consultados e incluídos com `financial.read` e `reports.financial`. Cada geração grava `report_log`; o PDF é devolvido diretamente com cache desabilitado e a URL temporária criada pelo frontend é revogada após o download.
+Na exportação PDF/Excel, a Edge Function revalida a sessão, o profile ativo, a organização e as permissions `reports.read`, `reports.generate` e `reports.export`. Valores de Operações e Garantias só são consultados e incluídos com `financial.read` e `reports.financial`. Cada geração grava `report_log`; o arquivo é devolvido diretamente com cache desabilitado e a URL temporária criada pelo frontend é revogada após o download.
 
 ## Multi-tenancy
 
@@ -295,6 +302,8 @@ docs/              arquitetura, decisões e questões de negócio
 - Não confiar na ocultação de botões como mecanismo de autorização.
 - Não desabilitar RLS para contornar falhas de acesso.
 - Não aceitar `organization_id` informado pelo navegador em fluxos administrativos privilegiados.
+- Manter buckets documentais privados; nunca persistir URL assinada, token de upload ou cabeçalho `Authorization`.
+- Usar object keys baseadas exclusivamente em UUIDs e validar checksum SHA-256 após o upload.
 - Preservar redação/minimização de CPF/CNPJ, telefone, e-mail, notas sensíveis e caminhos de arquivos na auditoria.
 - Usar dados exclusivamente fictícios em desenvolvimento e testes.
 - Não reescrever migrations ou commits anteriores.
@@ -386,9 +395,13 @@ Verifique se o usuário possui `profile` ativo, organização ativa, role válid
 
 Confirme que `admin-users` está sendo servida, que `supabase/functions/.env` foi criado a partir do exemplo e que `APP_PUBLIC_URL` está incluída em `ALLOWED_ORIGINS`.
 
-### Exportação PDF falha
+### Exportação de relatório falha
 
 Confirme que `generate-report` está sendo servida, que a origem do frontend está em `ALLOWED_ORIGINS` e que o usuário possui as permissions de leitura, geração e exportação. Para relatórios financeiros, confirme também `financial.read` e `reports.financial`.
+
+### Upload ou download de documento falha
+
+Confirme que `document-files` está sendo servida, que `STORAGE_PUBLIC_URL` representa a origem pública da API do ambiente e que o usuário possui `files.manage` para upload ou `files.read` para download. Verifique também MIME, limite configurado e policies do bucket privado `rural-documents`.
 
 ### E-mail de recuperação não aparece localmente
 
@@ -400,9 +413,9 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 
 ## Limitações e roadmap
 
-- Exportação XLSX e CSV; a implementação atual exporta somente PDF.
-- Upload e armazenamento de arquivos reais; integração autorizada com storage/servidor de arquivos.
-- Antivírus, retenção e backup dos arquivos.
+- Exportação CSV; a implementação atual exporta PDF e Excel (`.xlsx`).
+- File Gateway, sincronização e segunda cópia em servidor Windows/HD corporativo.
+- Antivírus, retenção, backup e reconciliação periódica dos objetos armazenados.
 - Hardening final para produção, incluindo headers, limites distribuídos, observabilidade e recuperação.
 - Ambiente de homologação e aceite formal.
 - Definição de CAB e HP.

@@ -1,13 +1,18 @@
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
-import type { ReportPdfFile, ReportPdfRequest } from "../types/report";
+import type { ReportExportFile, ReportExportFormat, ReportExportRequest } from "../types/report";
 import type { ReportExportRepository } from "./reportExportRepository";
 
 interface FunctionErrorBody {
   error?: string;
 }
 
-const fallbackFileName = (type: ReportPdfRequest["type"]) => `relatorio-${type}.pdf`;
+const mimeTypes: Record<ReportExportFormat, string> = {
+  pdf: "application/pdf",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+const fallbackFileName = (type: ReportExportRequest["type"], format: ReportExportFormat) => `relatorio-${type}.${format}`;
 
 const readFileName = (contentDisposition: string | null, fallback: string) => {
   const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
@@ -26,20 +31,21 @@ const functionError = async (error: unknown) => {
       // The fallback intentionally hides transport and server implementation details.
     }
   }
-  return new Error("Não foi possível gerar o PDF no momento.");
+  return new Error("Não foi possível gerar o arquivo no momento.");
 };
 
 export const supabaseReportExportRepository: ReportExportRepository = {
-  async generatePdf(request: ReportPdfRequest): Promise<ReportPdfFile> {
+  async generate(request: ReportExportRequest): Promise<ReportExportFile> {
     const { data, error, response } = await supabase.functions.invoke("generate-report", { body: request });
     if (error) throw await functionError(error);
-    if (!(data instanceof Blob) || data.type !== "application/pdf") {
-      throw new Error("O servidor não retornou um arquivo PDF válido.");
+    if (!(data instanceof Blob) || data.type !== mimeTypes[request.format]) {
+      throw new Error("O servidor não retornou um arquivo válido.");
     }
     return {
       blob: data,
-      fileName: readFileName(response?.headers.get("Content-Disposition") ?? null, fallbackFileName(request.type)),
+      fileName: readFileName(response?.headers.get("Content-Disposition") ?? null, fallbackFileName(request.type, request.format)),
       reportId: response?.headers.get("X-Report-Id") ?? "",
+      format: request.format,
     };
   },
 };

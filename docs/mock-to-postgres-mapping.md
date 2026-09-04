@@ -17,7 +17,7 @@ Consulta Geral, Dashboard e Relatórios usam exclusivamente repositories reais. 
 
 Supabase/PostgreSQL é a única fonte de dados de negócio. `src/data/mock/`, seus seeds, selectors e validator foram removidos depois da auditoria final de consumidores.
 
-O schema aprovado está materializado pelas migrations `001` a `012`. O acesso remoto futuro está previsto com frontend HTTPS, backend/Edge Functions para operações privilegiadas e Supabase Cloud, mantendo secrets fora do navegador. A exportação PDF dos sete relatórios já usa Edge Function, sessão/RLS/permissions e `report_log`, sem persistir o arquivo. Permanecem pendentes XLSX/CSV, o armazenamento/acesso de arquivos reais, o hardening final de produção e a homologação.
+O schema aprovado está materializado pelas migrations `001` a `014`. O acesso remoto futuro está previsto com frontend HTTPS, backend/Edge Functions para operações privilegiadas e Supabase Cloud, mantendo secrets fora do navegador. As exportações PDF e XLSX dos sete relatórios usam Edge Function, sessão/RLS/permissions e `report_log`, sem persistir o arquivo. Arquivos documentais já usam Storage privado na Fase A; permanecem pendentes CSV, File Gateway/sincronização com servidor interno, hardening final de produção e homologação.
 
 ## Mapeamento histórico do legado removido
 
@@ -31,7 +31,7 @@ O schema aprovado está materializado pelas migrations `001` a `012`. O acesso r
 | `Guarantee` | `guarantees` + `guarantee_type_links` + `guarantee_registrations` + `guarantee_financials` | `type` e `registrationId` deixam de ser únicos; `bank` é derivado da operação; `value` é protegido em tabela financeira. |
 | `GuaranteeItem` | `guarantee_items` | Estrutura equivalente, com tenant, autoria, versão e soft delete. |
 | `RuralDocument` | `rural_documents` + `document_types` | `type` vira FK configurável; `exercise` vira `exercise_year`; validade é derivada; `cab` não foi modelado. |
-| `DocumentAttachment` | `document_attachments` | Acrescenta storage type, MIME, checksum, status, autoria, versão e soft delete; referência não pode carregar credenciais. |
+| `DocumentAttachment` | `document_attachments` + `attachment_locations` | Separa arquivo lógico de localizações 1:N, preserva referências legadas e acrescenta Storage privado, MIME, tamanho, SHA-256, status, autoria e versão. |
 | `CarRecord` | `car_records` | `number` vira `car_number`; `ownerId` não vira FK: o modelo aprovado usa `declared_owner_name`; banco valida fazenda/matrícula. |
 | `Activity` | `audit_log` e futura activity view | Mock armazena `userName` e ações de UI; banco registra `actor_user_id`, ação, diff redigido, request/context. Uma view de atividade amigável permanece futura. |
 

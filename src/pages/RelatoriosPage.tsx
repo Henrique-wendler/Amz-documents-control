@@ -10,7 +10,7 @@ import { SectionCard } from "../components/SectionCard";
 import { Sidebar } from "../components/Sidebar";
 import { initialReportFilters, reportDefinitions, reportService } from "../services/reportService";
 import { reportExportService } from "../services/reportExportService";
-import type { ReportFilterOptions, ReportFilters, ReportType, ReportViewModel } from "../types/report";
+import type { ReportExportFormat, ReportFilterOptions, ReportFilters, ReportType, ReportViewModel } from "../types/report";
 import { usePermissions } from "../hooks/usePermissions";
 
 interface Props { onNavigate: (path: string) => void; }
@@ -52,14 +52,15 @@ export function RelatoriosPage({ onNavigate }: Props) {
   }, [canIncludeFinancial, canRead]);
   useEffect(() => { void generate("farms", initialReportFilters); }, [generate]);
   const selectType = (nextType: ReportType) => { const nextFilters = { ...initialReportFilters }; setType(nextType); setFilters(nextFilters); setOptions(reportService.getInitialFilterOptions(nextType)); void generate(nextType, nextFilters); };
-  const exportReport = async () => {
+  const exportReport = async (format: ReportExportFormat) => {
     setExporting(true);
     try {
-      const result = await reportExportService.downloadPdf(type, filters, canIncludeFinancial);
+      const result = await reportExportService.download(type, filters, canIncludeFinancial, format);
       const reference = result.reportId ? ` · ID ${result.reportId.slice(0, 8)}` : "";
-      dispatchToast(<Toast><ToastTitle>PDF gerado com segurança{reference}.</ToastTitle></Toast>, { intent: "success", timeout: 4500 });
+      const formatLabel = format === "pdf" ? "PDF" : "Excel";
+      dispatchToast(<Toast><ToastTitle>{formatLabel} gerado com segurança{reference}.</ToastTitle></Toast>, { intent: "success", timeout: 4500 });
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Não foi possível gerar o PDF no momento.";
+      const message = caught instanceof Error ? caught.message : "Não foi possível gerar o arquivo no momento.";
       dispatchToast(<Toast><ToastTitle>{message}</ToastTitle></Toast>, { intent: "error", timeout: 5000 });
     } finally {
       setExporting(false);
@@ -67,7 +68,7 @@ export function RelatoriosPage({ onNavigate }: Props) {
   };
   return <div className="app-shell"><Sidebar activePath="/relatorios" onNavigate={onNavigate} /><div className="app-workspace"><Header title="Relatórios" subtitle="Consultas consolidadas e exportação de informações" refreshing={generating} onRefresh={() => void generate(type, filters)} /><main className="main-content reports-content">
     <ReportTypeCards items={reportDefinitions} selected={type} onSelect={selectType} />
-    <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} exporting={exporting} canGenerate={canGenerate} canExport={canExport} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={() => void exportReport()} /></SectionCard>
+    <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} exporting={exporting} canGenerate={canGenerate} canExport={canExport} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={(format) => void exportReport(format)} /></SectionCard>
     {error ? <DashboardMessageState kind="error" title="Não foi possível gerar o relatório" description={error} onRetry={() => void generate(type, filters)} /> : <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{report?.rows.length ?? 0} registros</Badge>}>
       {report ? <ReportSummary metrics={report.metrics} /> : null}
       <ReportGrid columns={report?.columns ?? []} rows={report?.rows ?? []} loading={generating} />

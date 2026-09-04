@@ -1,4 +1,5 @@
 export type ReportType = "farms" | "owners" | "registrations" | "operations" | "guarantees" | "documents" | "car";
+export type ReportExportFormat = "pdf" | "xlsx";
 
 export interface ReportFilters {
   farmId: string;
@@ -42,14 +43,16 @@ export interface ReportLoadResult {
   options: ReportFilterOptions;
 }
 
-export interface ReportPdfRequest {
+export interface ReportExportRequest {
   type: ReportType;
   filters: ReportFilters;
   includeFinancial: boolean;
+  format: ReportExportFormat;
 }
 
-export interface ReportPdfFile {
+export interface ReportExportFile {
   blob: Blob;
   fileName: string;
   reportId: string;
+  format: ReportExportFormat;
 }

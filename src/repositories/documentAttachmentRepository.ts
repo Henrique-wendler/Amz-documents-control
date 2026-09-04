@@ -1,10 +1,18 @@
 import type { DocumentAttachment } from "../types/domain";
 
 export type AttachmentStorageType = "network_share" | "supabase_storage" | "external";
+export type AttachmentLocationStatus = "uploading" | "active" | "removing" | "inactive" | "failed";
+export interface PersistedAttachmentLocation {
+  id: string;
+  storageType: AttachmentStorageType;
+  status: AttachmentLocationStatus;
+  version: number;
+}
 export interface PersistedDocumentAttachment extends DocumentAttachment {
   storageType: AttachmentStorageType;
   status: "active" | "inactive";
   version: number;
+  locations: PersistedAttachmentLocation[];
 }
 export interface DocumentAttachmentRepositoryInput {
   fileName: string;

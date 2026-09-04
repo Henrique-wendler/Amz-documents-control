@@ -36,7 +36,7 @@
 10. Qual fuso civil deve reger `current_date` para validade documental e qual política vale na virada do dia?
 11. Número de documento precisa de unicidade por organização, tipo, fazenda e/ou exercício?
 12. O proprietário declarado no CAR permanece texto histórico ou haverá também vínculo opcional com `owners`?
-13. Quais convenções de `file_path`, tamanhos máximos, MIME permitidos, retenção e verificação de checksum serão adotadas por storage type?
+13. A Fase A definiu object keys por UUID, bucket privado, limite padrão de 20 MB, MIME configurável e SHA-256 verificado. Permanecem pendentes retenção, antivírus, reconciliação e regras da futura cópia `network_share`.
 
 ## Governança e operação
 

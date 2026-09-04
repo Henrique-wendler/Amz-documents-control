@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `012`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos.
+> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `014`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. A Fase A de arquivos usa Storage privado.
 
 ## Visão geral
 
@@ -38,6 +38,8 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 10 | `202609010010_transactional_operations_guarantees.sql` | RPCs atômicos para Operações, Garantias, relações N:N e financeiro |
 | 11 | `202609030011_user_administration_support.sql` | alteração transacional de profiles, proteção do último gestor de usuários e eventos administrativos |
 | 12 | `202609030012_catalog_administration.sql` | permission administrativa e RLS tenant-aware para instituições financeiras, tipos de garantia e tipos de documento |
+| 13 | `202609040013_hybrid_document_storage.sql` | localizações 1:N, bucket privado, Storage RLS e ciclo compensável de upload/download |
+| 14 | `202609040014_files_manage_attachment_visibility.sql` | leitura de metadados para gestão independente de acesso ao conteúdo |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -49,7 +51,7 @@ A ordem é obrigatória: cada migration referencia somente objetos criados anter
 | Imóveis | `owners`, `farms`, `registrations`, `ownership_links` | cadastro rural e titularidade |
 | Operações | `financial_institutions`, `operations`, `operation_registrations`, `operation_financials` | operação N:N com matrículas e valores isolados |
 | Garantias | `guarantees`, `guarantee_types`, `guarantee_type_links`, `guarantee_registrations`, `guarantee_financials`, `guarantee_items` | garantias multi-tipo e multi-matrícula |
-| Documentos | `document_types`, `rural_documents`, `document_attachments`, `file_access_log` | documentos configuráveis, referências e acessos |
+| Documentos | `document_types`, `rural_documents`, `document_attachments`, `attachment_locations`, `file_access_log` | documentos, anexos lógicos, localizações físicas e acessos |
 | CAR | `car_records` | histórico de CAR por fazenda/matrícula |
 | Governança | `audit_log`, `report_templates`, `report_log` | trilha imutável e geração de relatórios |
 
@@ -81,6 +83,7 @@ erDiagram
   REGISTRATIONS o|--o{ RURAL_DOCUMENTS : especifica
   DOCUMENT_TYPES ||--o{ RURAL_DOCUMENTS : tipifica
   RURAL_DOCUMENTS ||--o{ DOCUMENT_ATTACHMENTS : referencia
+  DOCUMENT_ATTACHMENTS ||--o{ ATTACHMENT_LOCATIONS : possui
   DOCUMENT_ATTACHMENTS ||--o{ FILE_ACCESS_LOG : acessado
   FARMS ||--o{ CAR_RECORDS : possui
   REGISTRATIONS o|--o{ CAR_RECORDS : especifica
@@ -100,11 +103,12 @@ erDiagram
 - Matrícula de garantia deve existir entre as matrículas da operação. A relação da operação não pode ser removida/alterada enquanto uma garantia depender dela.
 - FKs históricas usam `ON DELETE RESTRICT`; relações técnicas N:N podem ser removidas explicitamente, mas não por cascade.
 - `rural_documents_with_validity` deriva `active`, `expiring`, `expired` e `inactive`; esses estados de validade não são persistidos.
-- `file_path` rejeita padrões explícitos de credencial em URL/query string; checksum, quando informado, tem formato SHA-256 hexadecimal.
+- `file_path` e referências de localização rejeitam padrões explícitos de credencial; checksums usam SHA-256 hexadecimal.
+- Object keys Cloud seguem `organization/document/attachment/object`, formadas somente por UUIDs. Bucket, object key e referência externa são mutuamente coerentes com o storage type.
 
 ## RLS e segurança
 
-Todas as 27 tabelas têm RLS habilitado. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID conhecido nunca substitui autorização.
+Todas as 28 tabelas empresariais/governança têm RLS habilitado, além das policies específicas de `storage.objects`. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID ou object key conhecido nunca substitui autorização.
 
 `audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de roles/permissions exigem `permissions.manage`, enquanto os catálogos empresariais exigem `catalogs.manage` para escrita. Nenhuma função expõe `service_role`.
 
@@ -148,13 +152,17 @@ Triggers gravam INSERT/UPDATE/INACTIVATE/CLOSE/CANCEL/SOFT_DELETE/RESTORE em `au
 
 ## Arquivos
 
-`document_attachments` armazena apenas metadados e referências para `network_share`, `supabase_storage` ou `external`. Não armazena bytes nem credenciais. O acesso futuro deve passar por uma camada autorizada (backend/Edge Function) que resolva a referência e registre `view`, `download` ou `copy_reference`. Backup dos arquivos é independente do backup PostgreSQL.
+`document_attachments` representa o arquivo lógico; `attachment_locations` permite múltiplas localizações físicas `supabase_storage`, `network_share` ou `external`. As colunas de localização legadas em `document_attachments` foram preservadas e sincronizadas com uma localização primária para compatibilidade.
+
+Na Fase A, o bucket `rural-documents` é privado e aceita até 20 MB nos MIME documentados. `document-files` deriva o tenant da sessão, exige `files.manage` para preparar/finalizar/remover e `files.read` para download. O navegador envia bytes diretamente com autorização temporária; a função baixa o objeto somente na finalização para conferir MIME/tamanho e calcular SHA-256. URLs assinadas duram 60 segundos, usam origem configurada por ambiente e não são persistidas.
+
+Os estados `uploading → active` e `active → removing → inactive` registram consistência. Falhas após envio removem o objeto quando seguro e marcam metadados como `failed`/inativos; o fluxo é idempotente na finalização. `file_access_log` registra upload, download/view e remoção de localização sem URL, token, secret ou caminho interno. Referências `network_share` permanecem válidas, mas o navegador não tenta abrir SMB. Backup de Storage continua independente do backup PostgreSQL.
 
 ## Relatórios
 
-`report_templates` e `report_log` permanecem vinculados à organização. `configuration` e `included_sections` usam JSONB para seções configuráveis. A exportação PDF segue React → Service → Repository → Edge Function → Auth/RLS/permissions → consulta → geração → resposta temporária. A organização autenticada forma o emitente/cabeçalho. Valores financeiros exigem simultaneamente `reports.financial` e `financial.read`. `report_log` registra autor, filtros, seções, formato, quantidade de linhas/páginas e horários, sem armazenar o PDF permanentemente. XLSX e CSV permanecem apenas como formatos previstos pelo schema.
+`report_templates` e `report_log` permanecem vinculados à organização. `configuration` e `included_sections` usam JSONB para seções configuráveis. As exportações PDF e XLSX seguem React → Service → Repository → Edge Function → Auth/RLS/permissions → consulta → geração → resposta temporária. A organização autenticada forma o emitente/cabeçalho. Valores financeiros exigem simultaneamente `reports.financial` e `financial.read`. `report_log` registra autor, filtros, seções, formato, quantidade de linhas e páginas/abas e horários, sem armazenar o arquivo permanentemente. CSV permanece apenas como formato previsto pelo schema.
 
-A pré-visualização dos sete relatórios consulta os repositories Supabase reais e calcula linhas, filtros e totais de forma derivada. A exportação PDF repete a consulta na Edge Function sob a sessão do usuário, deriva o tenant do profile, revalida `reports.read`, `reports.generate` e `reports.export` e nunca aceita `organization_id` do navegador. A resposta usa `Cache-Control: private, no-store`; nenhum objeto de Storage ou URL pública permanente é criado.
+A pré-visualização dos sete relatórios consulta os repositories Supabase reais e calcula linhas, filtros e totais de forma derivada. A exportação repete a consulta na Edge Function sob a sessão do usuário, deriva o tenant do profile, revalida `reports.read`, `reports.generate` e `reports.export` e nunca aceita `organization_id` do navegador. O XLSX contém uma aba `Resumo` e uma aba principal tipada; datas, números e valores monetários permanecem valores nativos. A resposta usa `Cache-Control: private, no-store`; nenhum objeto de Storage ou URL pública permanente é criado.
 
 ## Navegação por IDs
 
@@ -177,7 +185,9 @@ URLs, origens permitidas e callbacks serão configurados por ambiente, sem `loca
 ## Pendências explícitas
 
 - **CONCLUÍDO — PDF real:** geração server-side, download direto temporário, paginação, cabeçalho da organização e `report_log` estão implementados para os sete relatórios.
-- **PENDENTE — arquivos reais:** upload, armazenamento, acesso remoto autorizado, antivírus e integração com servidor de arquivos ainda não foram implementados; hoje existem somente metadados e referências.
+- **CONCLUÍDO — XLSX real:** geração server-side, download direto temporário, metadados, resumo, dados tipados e `report_log` estão implementados para os sete relatórios.
+- **CONCLUÍDO — arquivos Fase A:** upload real no Storage privado, download por URL curta, SHA-256, localizações 1:N, RLS, auditoria de acesso e compensação básica.
+- **PENDENTE — arquivos Fase B:** File Gateway, SMB, sincronização/segunda cópia no servidor Windows/HD, antivírus, retenção e migração de legados.
 - **PENDENTE — hardening final:** revisão de produção de headers, rate limits distribuídos, secrets, observabilidade, backups e recuperação.
 - **PENDENTE — homologação:** testes integrados em staging, validação do negócio e aceite formal antes do uso com dados reais.
 - **PENDENTE — CAB:** significado e regras não definidos; nenhum campo ou regra CAB foi cristalizado no schema.
