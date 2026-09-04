@@ -3,6 +3,7 @@ export interface GatewayConfig {
   gatewayId: string;
   token: string;
   rootPath: string;
+  tempPath: string;
   batchSize: number;
   pollIntervalMs: number;
   requestTimeoutMs: number;
@@ -41,6 +42,21 @@ export interface GatewayApi {
   getDownloadUrl(locationId: string): Promise<string>;
   complete(input: CompleteSyncInput): Promise<void>;
   failed(locationId: string, errorCode: string, retryAfterSeconds: number): Promise<void>;
+}
+
+export interface GatewayBackendHealth {
+  gatewayActive: boolean;
+  backendConnected: boolean;
+  pendingJobs: number;
+  failedJobs: number;
+  retryingJobs: number;
+  lastJobAt?: string;
+  lastSynchronizationAt?: string;
+  lastFailureAt?: string;
+}
+
+export interface GatewayHealthApi {
+  health(): Promise<GatewayBackendHealth>;
 }
 
 export interface Logger {

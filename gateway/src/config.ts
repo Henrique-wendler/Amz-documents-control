@@ -34,13 +34,19 @@ export const loadConfig = (): GatewayConfig => {
   const configuredRoot = required("GATEWAY_ROOT_PATH");
   if (!isAbsolute(configuredRoot)) throw new Error("GATEWAY_ROOT_PATH must be absolute.");
   const rootPath = resolve(configuredRoot);
-  if (rootPath === parse(rootPath).root) throw new Error("GATEWAY_ROOT_PATH cannot be a filesystem root.");
+  const uncShareRoot = process.platform === "win32" && rootPath.startsWith("\\\\");
+  if (rootPath === parse(rootPath).root && !uncShareRoot) throw new Error("GATEWAY_ROOT_PATH cannot be a filesystem root.");
+  const configuredTemp = process.env.GATEWAY_TEMP_PATH?.trim();
+  if (configuredTemp && !isAbsolute(configuredTemp)) throw new Error("GATEWAY_TEMP_PATH must be absolute when configured.");
+  const tempPath = configuredTemp ? resolve(configuredTemp) : resolve(rootPath, ".gateway-tmp");
+  if (tempPath === parse(tempPath).root) throw new Error("GATEWAY_TEMP_PATH cannot be a filesystem root.");
 
   return {
     supabaseUrl,
     gatewayId,
     token,
     rootPath,
+    tempPath,
     batchSize: integer("GATEWAY_BATCH_SIZE", 10, 1, 50),
     pollIntervalMs: integer("GATEWAY_POLL_INTERVAL_MS", 30_000, 5_000, 3_600_000),
     requestTimeoutMs: integer("GATEWAY_REQUEST_TIMEOUT_MS", 30_000, 1_000, 300_000),

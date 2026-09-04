@@ -58,15 +58,19 @@ const downloadBytes = async (url: string, timeoutMs: number) => {
   }
 };
 
+export const atomicPublishErrorCode = (error: unknown) => {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EEXIST") return "local_conflict";
+  if (code === "EPERM" || code === "ENOTSUP" || code === "EXDEV") return "atomic_publish_unsupported";
+  return "local_write_failed";
+};
+
 const publishWithoutOverwrite = async (temporaryPath: string, destination: string) => {
   try {
     await link(temporaryPath, destination);
     await unlink(temporaryPath);
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EEXIST") throw new SyncError("local_conflict");
-    if (code === "EPERM" || code === "ENOTSUP" || code === "EXDEV") throw new SyncError("atomic_publish_unsupported");
-    throw new SyncError("local_write_failed");
+    throw new SyncError(atomicPublishErrorCode(error));
   }
 };
 
@@ -100,7 +104,8 @@ export class FileSyncWorker {
       return;
     }
 
-    const temporaryPath = `${destination}.partial-${randomUUID()}`;
+    await mkdir(this.config.tempPath, { recursive: true });
+    const temporaryPath = resolve(this.config.tempPath, `.partial-${randomUUID()}`);
     try {
       let signedUrl: string;
       try {

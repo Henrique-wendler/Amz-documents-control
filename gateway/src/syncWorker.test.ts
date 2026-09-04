@@ -20,6 +20,7 @@ const config = (rootPath: string): GatewayConfig => ({
   gatewayId: "66666666-6666-4666-8666-666666666666",
   token: "x".repeat(48),
   rootPath,
+  tempPath: join(rootPath, ".gateway-tmp"),
   batchSize: 10,
   pollIntervalMs: 5_000,
   requestTimeoutMs: 1_000,
@@ -87,6 +88,17 @@ test("synchronizes Cloud bytes, verifies SHA-256 and completes metadata", async 
   assert.equal(completed.checksum, checksum);
   assert.equal(completed.fileSize, bytes.byteLength);
   assert.deepEqual(await readFile(join(root, ...completed.relativePath.split("/"))), Buffer.from(bytes));
+}));
+
+test("synchronizes under a Unicode Windows-compatible root", async () => withRoot(async (root) => {
+  const unicodeRoot = join(root, "SistemaRural-Homologação", "área documental");
+  await mkdir(unicodeRoot, { recursive: true });
+  const api = new FakeApi();
+  const worker = new FileSyncWorker(config(unicodeRoot), api, silentLogger, async () => bytes);
+  await worker.syncCandidate(candidate());
+  const completed = api.completed[0];
+  assert.ok(completed);
+  assert.deepEqual(await readFile(join(unicodeRoot, ...completed.relativePath.split("/"))), Buffer.from(bytes));
 }));
 
 test("rejects a divergent Cloud checksum and removes partial files", async () => withRoot(async (root) => {

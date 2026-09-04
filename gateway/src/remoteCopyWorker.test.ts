@@ -18,6 +18,7 @@ const config = (rootPath: string): GatewayConfig => ({
   gatewayId: "44444444-4444-4444-8444-444444444444",
   token: "x".repeat(48),
   rootPath,
+  tempPath: join(rootPath, ".gateway-tmp"),
   batchSize: 10,
   pollIntervalMs: 5_000,
   requestTimeoutMs: 1_000,

@@ -8,6 +8,7 @@ const config: GatewayConfig = {
   gatewayId: "66666666-6666-4666-8666-666666666666",
   token: "test-secret-not-for-logs".padEnd(48, "x"),
   rootPath: "C:\\temporary\\gateway",
+  tempPath: "C:\\temporary\\gateway\\.gateway-tmp",
   batchSize: 10,
   pollIntervalMs: 5_000,
   requestTimeoutMs: 1_000,

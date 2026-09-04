@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js --once",
     "start:poll": "node dist/index.js --poll",
+    "health": "node dist/index.js --health",
     "test": "npm run build && node --test dist/**/*.test.js",
     "test:integration": "npm run build && node scripts/integration-test.mjs",
     "test:phase-c": "npm run build && node scripts/phase-c-integration-test.mjs"

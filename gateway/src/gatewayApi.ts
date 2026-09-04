@@ -1,4 +1,4 @@
-import type { CompleteSyncInput, GatewayApi, GatewayConfig, RemoteCopyApi, RemoteCopyCandidate, RemoteUploadPreparation, SyncCandidate } from "./types.js";
+import type { CompleteSyncInput, GatewayApi, GatewayBackendHealth, GatewayConfig, GatewayHealthApi, RemoteCopyApi, RemoteCopyCandidate, RemoteUploadPreparation, SyncCandidate } from "./types.js";
 
 interface GatewayResponse {
   candidates?: Array<SyncCandidate | RemoteCopyCandidate>;
@@ -8,6 +8,14 @@ interface GatewayResponse {
   status?: "uploading" | "completed";
   error?: string;
   code?: string;
+  gatewayActive?: boolean;
+  backendConnected?: boolean;
+  pendingJobs?: number;
+  failedJobs?: number;
+  retryingJobs?: number;
+  lastJobAt?: string;
+  lastSynchronizationAt?: string;
+  lastFailureAt?: string;
 }
 
 export class GatewayHttpError extends Error {
@@ -18,7 +26,7 @@ export class GatewayHttpError extends Error {
 
 const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export class HttpGatewayApi implements GatewayApi, RemoteCopyApi {
+export class HttpGatewayApi implements GatewayApi, RemoteCopyApi, GatewayHealthApi {
   readonly #endpoint: string;
 
   constructor(private readonly config: GatewayConfig, private readonly fetcher: typeof fetch = fetch) {
@@ -67,6 +75,21 @@ export class HttpGatewayApi implements GatewayApi, RemoteCopyApi {
       maxAttempts: this.config.maxSyncAttempts,
     });
     return (response.candidates ?? []) as SyncCandidate[];
+  }
+
+  async health(): Promise<GatewayBackendHealth> {
+    const response = await this.#request({ action: "health" });
+    if (response.gatewayActive !== true || response.backendConnected !== true) throw new Error("Gateway backend health response is invalid.");
+    return {
+      gatewayActive: true,
+      backendConnected: true,
+      pendingJobs: response.pendingJobs ?? 0,
+      failedJobs: response.failedJobs ?? 0,
+      retryingJobs: response.retryingJobs ?? 0,
+      lastJobAt: response.lastJobAt,
+      lastSynchronizationAt: response.lastSynchronizationAt,
+      lastFailureAt: response.lastFailureAt,
+    };
   }
 
   async getDownloadUrl(locationId: string) {

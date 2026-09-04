@@ -451,3 +451,4 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 - [`docs/database-schema.md`](docs/database-schema.md): schema, migrations, RLS, auditoria, bootstrap e arquitetura administrativa.
 - [`docs/mock-to-postgres-mapping.md`](docs/mock-to-postgres-mapping.md): histórico da migração para Supabase e divergências de domínio.
 - [`docs/database-open-questions.md`](docs/database-open-questions.md): decisões fechadas e questões de negócio pendentes.
+- [`docs/file-gateway-homologation-checklist.md`](docs/file-gateway-homologation-checklist.md): preparação e aceite futuro do Gateway em SMB/NTFS dedicado.

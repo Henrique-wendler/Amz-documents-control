@@ -51,6 +51,7 @@ const gatewayConfig = (gatewayId, token) => ({
   gatewayId,
   token,
   rootPath,
+  tempPath: join(rootPath, ".gateway-tmp"),
   batchSize: 20,
   pollIntervalMs: 5_000,
   requestTimeoutMs: 5_000,

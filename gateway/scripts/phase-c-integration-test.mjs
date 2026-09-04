@@ -86,6 +86,7 @@ const gatewayConfig = (gateway) => ({
   gatewayId: gateway.id,
   token: gateway.token,
   rootPath,
+  tempPath: join(rootPath, ".gateway-tmp"),
   batchSize: 20,
   pollIntervalMs: 5_000,
   requestTimeoutMs: 5_000,
@@ -184,6 +185,9 @@ try {
   const workerA = new LocalToCloudWorker(gatewayConfig(gatewayA), apiA, quiet);
   const invalidApi = new HttpGatewayApi(gatewayConfig({ id: gatewayA.id, token: [...gatewayA.token].reverse().join("") }));
   await assert.rejects(invalidApi.claimRemoteCopies());
+  const initialHealth = await apiA.health();
+  assert.equal(initialHealth.gatewayActive, true);
+  assert.equal(initialHealth.backendConnected, true);
 
   const normalBytes = new TextEncoder().encode("phase c local to cloud\n");
   const normal = await createNetworkFixture(organizationA, "normal", normalBytes, { persistedChecksum: null, persistedSize: null });
@@ -192,6 +196,9 @@ try {
   await requestRemote(adminA.token, tenantB, 403);
   const requested = await requestRemote(adminA.token, normal);
   assert.equal(requested.status, "pending");
+  const pendingHealth = await apiA.health();
+  assert.ok(pendingHealth.pendingJobs >= 1);
+  assert.ok(pendingHealth.lastJobAt);
   assert.equal((await apiB.claimRemoteCopies()).length, 0);
   const normalCandidate = (await apiA.claimRemoteCopies())[0];
   assert.ok(normalCandidate);
