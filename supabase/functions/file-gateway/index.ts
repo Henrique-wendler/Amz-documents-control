@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 
 type JsonRecord = Record<string, unknown>;
-type GatewayAction = "claim" | "download" | "complete" | "failed" | "claim-remote" | "prepare-remote-upload" | "complete-remote-upload" | "fail-remote";
+type GatewayAction = "health" | "claim" | "download" | "complete" | "failed" | "claim-remote" | "prepare-remote-upload" | "complete-remote-upload" | "fail-remote";
 
 interface GatewayContext {
   client: SupabaseClient;
@@ -112,11 +112,54 @@ const readBody = async (request: Request) => {
 
 const actionField = (body: JsonRecord): GatewayAction => {
   const value = body.action;
-  if (value !== "claim" && value !== "download" && value !== "complete" && value !== "failed"
+  if (value !== "health" && value !== "claim" && value !== "download" && value !== "complete" && value !== "failed"
     && value !== "claim-remote" && value !== "prepare-remote-upload" && value !== "complete-remote-upload" && value !== "fail-remote") {
     throw new HttpError(400, "Invalid action.", "invalid_action");
   }
   return value;
+};
+
+const latestTimestamp = (...values: Array<string | null | undefined>) => values
+  .filter((value): value is string => Boolean(value))
+  .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
+
+const health = async (context: GatewayContext) => {
+  const now = new Date().toISOString();
+  const [
+    remotePending,
+    remoteFailed,
+    remoteRetrying,
+    localPending,
+    localFailed,
+    localRetrying,
+    latestRemote,
+    latestLocal,
+    latestSuccess,
+    latestFailure,
+  ] = await Promise.all([
+    context.client.from("remote_copy_jobs").select("id", { count: "exact", head: true }).eq("organization_id", context.organizationId).in("status", ["pending", "processing"]),
+    context.client.from("remote_copy_jobs").select("id", { count: "exact", head: true }).eq("organization_id", context.organizationId).eq("status", "failed"),
+    context.client.from("remote_copy_jobs").select("id", { count: "exact", head: true }).eq("organization_id", context.organizationId).eq("status", "failed").gt("next_attempt_at", now),
+    context.client.from("attachment_locations").select("id", { count: "exact", head: true }).eq("organization_id", context.organizationId).eq("storage_type", "supabase_storage").eq("status", "active").in("sync_status", ["pending", "syncing"]),
+    context.client.from("attachment_locations").select("id", { count: "exact", head: true }).eq("organization_id", context.organizationId).eq("storage_type", "supabase_storage").eq("status", "active").eq("sync_status", "failed"),
+    context.client.from("attachment_locations").select("id", { count: "exact", head: true }).eq("organization_id", context.organizationId).eq("storage_type", "supabase_storage").eq("status", "active").eq("sync_status", "failed").gt("sync_next_attempt_at", now),
+    context.client.from("remote_copy_jobs").select("updated_at").eq("organization_id", context.organizationId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    context.client.from("attachment_locations").select("sync_last_attempt_at").eq("organization_id", context.organizationId).not("sync_last_attempt_at", "is", null).order("sync_last_attempt_at", { ascending: false }).limit(1).maybeSingle(),
+    context.client.from("file_access_log").select("created_at").eq("organization_id", context.organizationId).in("action", ["FILE_SYNCED", "REMOTE_COPY_COMPLETED"]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    context.client.from("file_access_log").select("created_at").eq("organization_id", context.organizationId).in("action", ["FILE_SYNC_FAILED", "REMOTE_COPY_FAILED"]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const results = [remotePending, remoteFailed, remoteRetrying, localPending, localFailed, localRetrying, latestRemote, latestLocal, latestSuccess, latestFailure];
+  if (results.some((result) => result.error)) throw new HttpError(500, "Gateway health data is unavailable.", "health_query_failed");
+  return {
+    gatewayActive: true,
+    backendConnected: true,
+    pendingJobs: (remotePending.count ?? 0) + (localPending.count ?? 0),
+    failedJobs: (remoteFailed.count ?? 0) + (localFailed.count ?? 0),
+    retryingJobs: (remoteRetrying.count ?? 0) + (localRetrying.count ?? 0),
+    lastJobAt: latestTimestamp(latestRemote.data?.updated_at as string | undefined, latestLocal.data?.sync_last_attempt_at as string | undefined),
+    lastSynchronizationAt: latestSuccess.data?.created_at as string | undefined,
+    lastFailureAt: latestFailure.data?.created_at as string | undefined,
+  };
 };
 
 const integerField = (body: JsonRecord, key: string, fallback: number, minimum: number, maximum: number) => {
@@ -443,7 +486,8 @@ Deno.serve(async (request) => {
     const action = actionField(body);
     const context = await authenticate(request);
     checkRateLimit(context.gatewayId);
-    const result = action === "claim" ? await claim(context, body)
+    const result = action === "health" ? await health(context)
+      : action === "claim" ? await claim(context, body)
       : action === "download" ? await download(context, body)
       : action === "complete" ? await complete(context, body)
       : action === "failed" ? await failed(context, body)
