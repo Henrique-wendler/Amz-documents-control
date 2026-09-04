@@ -10,8 +10,9 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 - Todos os módulos de negócio usam Supabase.
 - Autenticação, recuperação de senha e MFA TOTP estão funcionais.
 - Administração de Usuários e Administração de Catálogos estão concluídas no escopo atual.
-- O schema é reproduzido pelas migrations `001` a `014`.
+- O schema é reproduzido pelas migrations `001` a `015`.
 - A Fase A de arquivos usa Supabase Storage privado para upload e download remoto, preservando referências legadas de servidor interno.
+- A Fase B inclui um File Gateway outbound-only para cópia Cloud → diretório Windows/HD, com tenant por instância, lease, SHA-256 e idempotência.
 - O ambiente atual é local; homologação e produção ainda não foram implantadas.
 
 ## Módulos disponíveis
@@ -141,6 +142,7 @@ As migrations ficam em `supabase/migrations/` e atualmente vão de:
 202609030012_catalog_administration.sql
 202609040013_hybrid_document_storage.sql
 202609040014_files_manage_attachment_visibility.sql
+202609040015_file_gateway_sync.sql
 ```
 
 Elas devem ser executadas na ordem existente. Alterações de schema, RLS, functions SQL ou permissions devem ser feitas em migration incremental; migrations já aplicadas não devem ser reescritas silenciosamente.
@@ -174,6 +176,20 @@ npx supabase functions serve --env-file supabase/functions/.env
 O arquivo contém apenas as origens autorizadas e a URL pública local usadas pelas funções; convites e recuperações também usam a URL pública. Em produção, essas URLs deverão ser HTTPS e específicas do ambiente.
 
 Para arquivos, configure também `STORAGE_PUBLIC_URL`, `DOCUMENT_UPLOAD_MAX_BYTES` e `DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES` conforme `supabase/functions/.env.example`. O limite da função deve permanecer igual ou menor que o limite do bucket privado.
+
+### 4. File Gateway
+
+O runtime fica isolado em `gateway/`. Instale, compile e configure a partir de seu próprio exemplo:
+
+```powershell
+Set-Location gateway
+npm ci
+Copy-Item .env.example .env
+npm run build
+npm start
+```
+
+Para polling contínuo use `npm run start:poll`. A configuração e o provisionamento seguro da instância estão em [`gateway/README.md`](gateway/README.md). O Gateway usa somente HTTPS de saída e não requer porta inbound.
 
 ### 3. Frontend
 
@@ -276,6 +292,7 @@ supabase/
   migrations/      schema incremental, RLS, RPCs e permissions
   config.toml      configuração da stack local
 docs/              arquitetura, decisões e questões de negócio
+gateway/           worker Node/TypeScript isolado para cópia Cloud → servidor interno
 ```
 
 ## Padrão para novas funcionalidades
@@ -403,6 +420,10 @@ Confirme que `generate-report` está sendo servida, que a origem do frontend est
 
 Confirme que `document-files` está sendo servida, que `STORAGE_PUBLIC_URL` representa a origem pública da API do ambiente e que o usuário possui `files.manage` para upload ou `files.read` para download. Verifique também MIME, limite configurado e policies do bucket privado `rural-documents`.
 
+### File Gateway não sincroniza
+
+Confirme se `file-gateway` está disponível, a instância está ativa e vinculada à organização correta, o token corresponde ao hash provisionado, o caminho raiz é absoluto e dedicado e o volume suporta publicação atômica. Consulte apenas códigos sanitizados em `sync_error_code`/`file_access_log`; não registre token ou URL assinada durante o diagnóstico.
+
 ### E-mail de recuperação não aparece localmente
 
 Confirme o Mailpit em `npx supabase status` e verifique se a URL de retorno corresponde às URLs permitidas em `supabase/config.toml`.
@@ -414,7 +435,7 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 ## Limitações e roadmap
 
 - Exportação CSV; a implementação atual exporta PDF e Excel (`.xlsx`).
-- File Gateway, sincronização e segunda cópia em servidor Windows/HD corporativo.
+- Implantação e homologação do File Gateway no servidor Windows/HD real, incluindo conta de serviço e validação do volume/compartilhamento.
 - Antivírus, retenção, backup e reconciliação periódica dos objetos armazenados.
 - Hardening final para produção, incluindo headers, limites distribuídos, observabilidade e recuperação.
 - Ambiente de homologação e aceite formal.

@@ -17,7 +17,7 @@ Consulta Geral, Dashboard e Relatórios usam exclusivamente repositories reais. 
 
 Supabase/PostgreSQL é a única fonte de dados de negócio. `src/data/mock/`, seus seeds, selectors e validator foram removidos depois da auditoria final de consumidores.
 
-O schema aprovado está materializado pelas migrations `001` a `014`. O acesso remoto futuro está previsto com frontend HTTPS, backend/Edge Functions para operações privilegiadas e Supabase Cloud, mantendo secrets fora do navegador. As exportações PDF e XLSX dos sete relatórios usam Edge Function, sessão/RLS/permissions e `report_log`, sem persistir o arquivo. Arquivos documentais já usam Storage privado na Fase A; permanecem pendentes CSV, File Gateway/sincronização com servidor interno, hardening final de produção e homologação.
+O schema aprovado está materializado pelas migrations `001` a `015`. O acesso remoto futuro está previsto com frontend HTTPS, backend/Edge Functions para operações privilegiadas e Supabase Cloud, mantendo secrets fora do navegador. As exportações PDF e XLSX dos sete relatórios usam Edge Function, sessão/RLS/permissions e `report_log`, sem persistir o arquivo. Arquivos documentais usam Storage privado e o File Gateway da Fase B para cópia Cloud → diretório interno; permanecem pendentes CSV, implantação/homologação no servidor real, hardening final de produção e políticas operacionais.
 
 ## Mapeamento histórico do legado removido
 

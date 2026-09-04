@@ -1,0 +1,19 @@
+{
+  "name": "rural-files-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js --once",
+    "start:poll": "node dist/index.js --poll",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "test:integration": "npm run build && node scripts/integration-test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.15.5",
+    "pg": "^8.16.3",
+    "typescript": "~5.9.2"
+  }
+}
