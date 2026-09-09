@@ -117,6 +117,8 @@ npx supabase start
 
 Esse comando inicia a stack local configurada em `supabase/config.toml`, incluindo PostgreSQL, Auth, API, Studio, Mailpit e runtime de Edge Functions. Em uma criação limpa do banco, as migrations são aplicadas na ordem numérica.
 
+O seed automático está desabilitado. Dados sintéticos de homologação ficam separados em `supabase/staging/seed.sql` e exigem execução manual e confirmação explícita do ambiente.
+
 Comandos úteis:
 
 ```powershell
@@ -292,9 +294,12 @@ src/
 supabase/
   functions/       Edge Functions e exemplos de configuração
   migrations/      schema incremental, RLS, RPCs e permissions
+  staging/         seed sintético manual, nunca automático
+  validation/      validações SQL somente-leitura para implantação
   config.toml      configuração da stack local
 docs/              arquitetura, decisões e questões de negócio
 gateway/           worker Node/TypeScript isolado para cópia Cloud → servidor interno
+scripts/staging/   verificações estáticas de readiness
 ```
 
 ## Padrão para novas funcionalidades
@@ -341,7 +346,15 @@ O comando executa o build TypeScript e Vite. Para inspecionar o artefato localme
 npm run preview
 ```
 
-O projeto ainda não possui script `npm test`, suíte E2E padronizada ou comando único de validação do banco. Mudanças relacionais devem ser validadas contra o Supabase local com fixtures fictícias temporárias e limpeza posterior. Testes de RLS devem contemplar permissions, isolamento de tenant, concorrência e auditoria conforme o escopo alterado.
+O projeto ainda não possui script `npm test` ou suíte E2E padronizada. Mudanças relacionais devem ser validadas contra o Supabase local com fixtures fictícias temporárias e limpeza posterior. Testes de RLS devem contemplar permissions, isolamento de tenant, concorrência e auditoria conforme o escopo alterado.
+
+Para preparar homologação sem acessar serviços externos:
+
+```powershell
+npm run check:staging:static
+```
+
+Depois das migrations em um ambiente autorizado, execute também `supabase/validation/staging-readiness.sql` com uma conexão administrativa temporária. O script é somente leitura.
 
 Não execute regressão completa, automação de navegador ou screenshots em toda tarefa; faça isso somente quando solicitado ou proporcional ao risco da mudança.
 
@@ -356,9 +369,11 @@ Não execute regressão completa, automação de navegador ou screenshots em tod
 
 ### Homologação
 
-- Ainda pendente.
-- Deve usar ambiente isolado e dados sintéticos próprios.
-- Deve validar fluxos de negócio, segurança, backup/restore, navegadores e critérios de aceite.
+- Preparada para futuro projeto Supabase Cloud isolado e frontend HTTPS.
+- Deve usar exclusivamente dados sintéticos próprios e secrets distintos.
+- A sequência exata está em [`docs/cloud-staging-deployment.md`](docs/cloud-staging-deployment.md).
+- O aceite está em [`docs/cloud-staging-smoke-test.md`](docs/cloud-staging-smoke-test.md).
+- Nenhum recurso Cloud foi criado e nenhum deploy foi executado.
 
 ### Produção
 
@@ -452,3 +467,5 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 - [`docs/mock-to-postgres-mapping.md`](docs/mock-to-postgres-mapping.md): histórico da migração para Supabase e divergências de domínio.
 - [`docs/database-open-questions.md`](docs/database-open-questions.md): decisões fechadas e questões de negócio pendentes.
 - [`docs/file-gateway-homologation-checklist.md`](docs/file-gateway-homologation-checklist.md): preparação e aceite futuro do Gateway em SMB/NTFS dedicado.
+- [`docs/cloud-staging-deployment.md`](docs/cloud-staging-deployment.md): sequência de implantação isolada em homologação Cloud.
+- [`docs/cloud-staging-smoke-test.md`](docs/cloud-staging-smoke-test.md): validação funcional e de segurança após o futuro deploy.
