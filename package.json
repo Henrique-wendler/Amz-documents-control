@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --configLoader runner",
     "build": "tsc -b && vite build --configLoader runner",
-    "preview": "vite preview --configLoader runner"
+    "preview": "vite preview --configLoader runner",
+    "check:staging:static": "node scripts/staging/check-static-readiness.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.72.5",
