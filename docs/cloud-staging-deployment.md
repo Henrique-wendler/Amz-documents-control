@@ -71,7 +71,7 @@ npx supabase db push --linked
 npx supabase migration list --linked
 ```
 
-Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `016` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
+Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `017` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
 
 Depois, usando uma conexão administrativa temporária obtida no ambiente seguro:
 
@@ -79,7 +79,7 @@ Depois, usando uma conexão administrativa temporária obtida no ambiente seguro
 psql "$env:STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/validation/staging-readiness.sql
 ```
 
-O validador é somente leitura e verifica o histórico `001–016`, 30 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage e RPCs sensíveis.
+O validador é somente leitura e verifica o histórico `001–017`, 30 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway.
 
 ### 3. Configurar secrets e políticas das Edge Functions
 
@@ -162,6 +162,6 @@ Siga [`cloud-staging-smoke-test.md`](cloud-staging-smoke-test.md). O aceite exig
 ## Rollback e separação
 
 - Não execute rollback destrutivo sem plano e backup do próprio staging.
-- Corrija schema somente com migration incremental posterior à `016`.
+- Corrija schema somente com migration incremental posterior à `017`.
 - Remova fixtures temporárias de tenant B e objetos de teste ao concluir.
 - Produção exigirá novo projeto, novos secrets, nova origem HTTPS e novo ciclo completo de validação; nunca promova o banco de staging como produção.

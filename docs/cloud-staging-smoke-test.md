@@ -6,7 +6,7 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 
 - [ ] `npm run check:staging:static` aprovado.
 - [ ] `supabase/validation/staging-readiness.sql` aprovado.
-- [ ] Migrations remotas mostram exatamente `001–016` aplicadas.
+- [ ] Migrations remotas mostram exatamente `001–017` aplicadas.
 - [ ] Frontend e API usam HTTPS; navegador não apresenta mixed content.
 - [ ] CORS aceita apenas a origem HTTPS de staging.
 - [ ] Nenhum secret aparece no bundle, logs do navegador ou repositório.
@@ -75,4 +75,3 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 - [ ] Objetos e fixtures descartáveis foram removidos.
 - [ ] Não existe instância ativa do Gateway antes da homologação física SMB/NTFS.
 - [ ] Pendências, responsáveis e decisão de aceite foram registradas.
-

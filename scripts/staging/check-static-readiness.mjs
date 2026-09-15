@@ -11,11 +11,11 @@ const migrationFiles = (await readdir(migrationDirectory))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 const migrationNumbers = migrationFiles.map((name) => Number(name.match(/^(\d{12})_/)?.[1].slice(-3)));
-const expectedNumbers = Array.from({ length: 16 }, (_, index) => index + 1);
-if (migrationFiles.length === 16 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
-  pass("migrations 001-016 are present in order");
+const expectedNumbers = Array.from({ length: 17 }, (_, index) => index + 1);
+if (migrationFiles.length === 17 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
+  pass("migrations 001-017 are present in order");
 } else {
-  fail(`expected migrations 001-016; found ${migrationFiles.join(", ")}`);
+  fail(`expected migrations 001-017; found ${migrationFiles.join(", ")}`);
 }
 
 const expectedFunctions = ["admin-users", "document-files", "file-gateway", "generate-report"];

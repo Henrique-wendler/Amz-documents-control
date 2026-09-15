@@ -9,7 +9,8 @@ declare
     '202608270001', '202608270002', '202608270003', '202608270004',
     '202608270005', '202608270006', '202608280007', '202608280008',
     '202608280009', '202609010010', '202609030011', '202609030012',
-    '202609040013', '202609040014', '202609040015', '202609040016'
+    '202609040013', '202609040014', '202609040015', '202609040016',
+    '202609150017'
   ];
   applied_versions text[];
 begin
@@ -19,7 +20,7 @@ begin
   where version = any(expected_versions);
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history is incomplete or out of order. Expected 001-016.';
+    raise exception 'Migration history is incomplete or out of order. Expected 001-017.';
   end if;
 end;
 $$;
@@ -170,8 +171,35 @@ begin
 end;
 $$;
 
+do $$
+declare
+  gateway_read_table text;
+begin
+  foreach gateway_read_table in array array[
+    'organizations',
+    'file_gateway_instances',
+    'remote_copy_jobs',
+    'attachment_locations',
+    'file_access_log'
+  ] loop
+    if not has_table_privilege('service_role', format('public.%I', gateway_read_table), 'SELECT') then
+      raise exception 'service_role is missing SELECT on public.%', gateway_read_table;
+    end if;
+
+    if has_table_privilege('service_role', format('public.%I', gateway_read_table), 'INSERT')
+      or has_table_privilege('service_role', format('public.%I', gateway_read_table), 'UPDATE')
+      or has_table_privilege('service_role', format('public.%I', gateway_read_table), 'DELETE')
+      or has_table_privilege('service_role', format('public.%I', gateway_read_table), 'TRUNCATE')
+      or has_table_privilege('service_role', format('public.%I', gateway_read_table), 'REFERENCES')
+      or has_table_privilege('service_role', format('public.%I', gateway_read_table), 'TRIGGER') then
+      raise exception 'service_role has a forbidden mutation privilege on public.%', gateway_read_table;
+    end if;
+  end loop;
+end;
+$$;
+
 select
-  16 as migrations_validated,
+  17 as migrations_validated,
   30 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;
