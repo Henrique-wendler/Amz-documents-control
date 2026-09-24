@@ -10,7 +10,7 @@ declare
     '202608270005', '202608270006', '202608280007', '202608280008',
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
-    '202609150017'
+    '202609150017','202609240018'
   ];
   applied_versions text[];
 begin
@@ -20,7 +20,7 @@ begin
   where version = any(expected_versions);
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history is incomplete or out of order. Expected 001-017.';
+    raise exception 'Migration history is incomplete or out of order. Expected 001-018.';
   end if;
 end;
 $$;
@@ -199,7 +199,7 @@ end;
 $$;
 
 select
-  17 as migrations_validated,
+  18 as migrations_validated,
   30 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;
