@@ -10,7 +10,7 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 - Todos os módulos de negócio usam Supabase.
 - Autenticação, recuperação de senha e MFA TOTP estão funcionais.
 - Administração de Usuários e Administração de Catálogos estão concluídas no escopo atual.
-- O schema é reproduzido pelas migrations `001` a `016`.
+- O schema é reproduzido pelas migrations `001` a `018`.
 - A Fase A de arquivos usa Supabase Storage privado para upload e download remoto, preservando referências legadas de servidor interno.
 - A Fase B inclui um File Gateway outbound-only para cópia Cloud → diretório Windows/HD, com tenant por instância, lease, SHA-256 e idempotência.
 - A Fase C disponibiliza sob demanda referências legadas do servidor no Storage privado, sem varredura em massa ou exclusão da cópia local.
@@ -147,6 +147,8 @@ As migrations ficam em `supabase/migrations/` e atualmente vão de:
 202609040014_files_manage_attachment_visibility.sql
 202609040015_file_gateway_sync.sql
 202609040016_on_demand_remote_copy.sql
+202609150017_file_gateway_service_role_select.sql
+202609240018_admin_users_service_role_reads.sql
 ```
 
 Elas devem ser executadas na ordem existente. Alterações de schema, RLS, functions SQL ou permissions devem ser feitas em migration incremental; migrations já aplicadas não devem ser reescritas silenciosamente.

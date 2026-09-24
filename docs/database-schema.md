@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `016`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
+> Estado atual aprovado: schema versionado em migrations até `018`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -42,6 +42,8 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 14 | `202609040014_files_manage_attachment_visibility.sql` | leitura de metadados para gestão independente de acesso ao conteúdo |
 | 15 | `202609040015_file_gateway_sync.sql` | instâncias de Gateway por tenant, claim/lease, estados de sincronização, segunda localização e auditoria |
 | 16 | `202609040016_on_demand_remote_copy.sql` | jobs tenant-aware para disponibilização remota, RPCs de claim/upload/conclusão/falha e auditoria |
+| 17 | `202609150017_file_gateway_service_role_select.sql` | leitura mínima pelo `service_role` para a Edge Function do File Gateway |
+| 18 | `202609240018_admin_users_service_role_reads.sql` | leitura mínima pelo `service_role` para a Edge Function de administração de usuários |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
