@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 from amazon_agro.config.settings import AppSettings
 from amazon_agro.domain.models import PARTICIPANT_LABELS, Proposal
@@ -56,23 +56,22 @@ class ReviewPage(QWidget):
         self.validation_label = QLabel()
         self.validation_label.setWordWrap(True)
         layout.addWidget(self.validation_label)
-        actions = QHBoxLayout()
+        actions = QGridLayout()
         self.save_button = QPushButton("Salvar operação")
         self.excel_button = QPushButton("Gerar Excel")
         self.pdf_button = QPushButton("Gerar PDF")
         self.both_button = QPushButton("Gerar Excel + PDF")
-        for button in (
+        self.both_button.setObjectName("primary")
+        for index, button in enumerate((
             self.save_button, self.excel_button, self.pdf_button, self.both_button
-        ):
-            actions.addWidget(button)
-        actions.addStretch()
+        )):
+            actions.addWidget(button, index // 2, index % 2)
         layout.addLayout(actions)
         self.set_validation_errors(("Preencha os dados mínimos da proposta.",))
 
     def set_validation_errors(self, errors: tuple[str, ...]) -> None:
         enabled = not errors
-        for button in (self.excel_button, self.pdf_button, self.both_button):
-            button.setEnabled(enabled)
+        # Actions remain reachable so a click explains pending fields.
         self.validation_label.setText(
             "Pronta para exportar." if enabled
             else "Para exportar: " + " • ".join(errors)
@@ -98,7 +97,8 @@ class ReviewPage(QWidget):
         lines.extend(["", "IMÓVEIS"])
         if proposal.properties:
             for link in proposal.properties:
-                label = self.settings.property_classifications[link.classificacao.value]
+                label = (self.settings.property_classifications[link.classificacao.value]
+                         if link.classificacao is not None else "Classificação pendente")
                 registrations = ", ".join(
                     parcel.registration_snapshot for parcel in link.selected_parcels
                 ) or "—"

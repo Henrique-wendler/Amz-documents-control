@@ -58,6 +58,10 @@ class ExcelComPdfBackend:
                     if application is not None:
                         application.Quit()
                 finally:
+                    # Release COM proxies before tearing down this apartment.
+                    # Keeping them alive can stall CoUninitialize after Excel exits.
+                    workbook = None
+                    application = None
                     pythoncom.CoUninitialize()
         return destination
 

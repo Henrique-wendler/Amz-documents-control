@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from copy import deepcopy
+
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
@@ -136,6 +138,7 @@ class PropertyDetailsDialog(QDialog):
 
 
 class PropertiesPage(QWidget):
+    changed = Signal()
     def __init__(self, service: ProposalService, settings: AppSettings) -> None:
         super().__init__()
         self.service = service
@@ -312,11 +315,14 @@ class PropertiesPage(QWidget):
         for code, label in self.settings.property_classifications.items():
             choice.addItem(f"{code} — {label}", code)
         self.selected.setCellWidget(row, 4, choice)
+        choice.currentIndexChanged.connect(self.changed)
+        self.changed.emit()
 
     def remove_selected(self) -> None:
         row = self.selected.currentRow()
         if row >= 0:
             self.selected.removeRow(row)
+            self.changed.emit()
 
     def load(self, proposal: Proposal) -> None:
         self.selected.setRowCount(0)
@@ -325,15 +331,15 @@ class PropertiesPage(QWidget):
             choice = self.selected.cellWidget(self.selected.rowCount() - 1, 4)
             choice.setCurrentIndex(choice.findData(link.classificacao.value))
 
-    def collect(self, proposal_id: str) -> list[ProposalProperty]:
+    def collect(self, proposal_id: str, *, strict: bool = True) -> list[ProposalProperty]:
         links: list[ProposalProperty] = []
         for row in range(self.selected.rowCount()):
             choice = self.selected.cellWidget(row, 4)
             code = choice.currentData()
-            if code is None:
+            if code is None and strict:
                 raise ValueError("Selecione a classificação de cada imóvel adicionado.")
-            link = self.selected.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            link = deepcopy(self.selected.item(row, 0).data(Qt.ItemDataRole.UserRole))
             link.proposal_id = proposal_id
-            link.classificacao = PropertyClassification(code)
+            link.classificacao = PropertyClassification(code) if code is not None else None
             links.append(link)
         return links

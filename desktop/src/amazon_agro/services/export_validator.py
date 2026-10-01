@@ -12,6 +12,7 @@ from amazon_agro.repositories.contracts import PropertyRepository
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
     errors: tuple[str, ...]
+    pending_steps: tuple[int, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -25,10 +26,15 @@ class ProposalExportValidator:
 
     def validate(self, proposal: Proposal) -> ValidationResult:
         errors: list[str] = []
+        pending_steps: set[int] = set()
         try:
             proposal.validate()
         except ValueError as error:
             errors.append(str(error))
+            message = str(error).lower()
+            pending_steps.add(1 if "participante" in message else 3 if any(
+                word in message for word in ("imóvel", "imóveis", "matrícula")
+            ) else 2)
         for value, message in (
             (proposal.numero_proposta, "Informe o número da proposta."),
             (proposal.proponente, "Informe o proponente."),
@@ -39,18 +45,22 @@ class ProposalExportValidator:
         ):
             if not value.strip():
                 errors.append(message)
+                pending_steps.add(0)
         if (
             not isinstance(proposal.valor_total, Decimal)
             or not proposal.valor_total.is_finite()
             or proposal.valor_total <= 0
         ):
             errors.append("Informe um valor total maior que zero.")
+            pending_steps.add(2)
         if len(proposal.participants) > len(PARTICIPANT_ROWS):
+            pending_steps.add(1)
             errors.append(
                 f"O modelo suporta até {len(PARTICIPANT_ROWS)} participantes; "
                 f"a proposta possui {len(proposal.participants)}."
             )
         if len(proposal.properties) > len(PROPERTY_ROWS):
+            pending_steps.add(3)
             errors.append(
                 f"O modelo suporta até {len(PROPERTY_ROWS)} imóveis; "
                 f"a proposta possui {len(proposal.properties)}."
@@ -61,6 +71,7 @@ class ProposalExportValidator:
             )
         for link in proposal.properties:
             if len(link.selected_parcels) > 1:
+                pending_steps.add(3)
                 errors.append(
                     "A exportação de fazenda com várias matrículas selecionadas "
                     "depende de regra de negócio ainda pendente."
@@ -70,9 +81,13 @@ class ProposalExportValidator:
             else:
                 property_item = self.properties.get_by_external_id(link.property_external_id)
                 if isinstance(property_item, RuralProperty):
+                    pending_steps.add(3)
                     errors.append("Selecione as matrículas da fazenda antes de exportar.")
                 elif property_item is None:
+                    pending_steps.add(3)
                     errors.append(
                         f"Imóvel {link.property_external_id} não encontrado na fonte configurada."
                     )
-        return ValidationResult(tuple(dict.fromkeys(errors)))
+        if errors:
+            pending_steps.add(4)
+        return ValidationResult(tuple(dict.fromkeys(errors)), tuple(sorted(pending_steps)))

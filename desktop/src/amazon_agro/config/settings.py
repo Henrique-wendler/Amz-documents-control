@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -23,6 +24,8 @@ def _template_labels() -> dict[str, dict[str, str]]:
 
 @dataclass(slots=True)
 class AppSettings:
+    first_run_completed: bool = False
+    default_technician: str = ""
     xlsx_template_path: str = ""
     # Kept only to read older configuration files; directory sources supersede it.
     property_spreadsheet_path: str = ""
@@ -57,7 +60,9 @@ class AppSettings:
     def load(cls, path: Path | None = None) -> AppSettings:
         path = path or default_config_path()
         if not path.exists():
-            return cls()
+            settings = cls()
+            settings._source_path = path.resolve()
+            return settings
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("A configuração deve ser um objeto JSON.")
@@ -69,7 +74,7 @@ class AppSettings:
         if unknown:
             raise ValueError(f"Configurações desconhecidas: {', '.join(sorted(unknown))}")
         settings = cls(**raw)
-        settings._source_path = path
+        settings._source_path = path.resolve()
         settings._validate_labels()
         return settings
 
@@ -90,6 +95,8 @@ class AppSettings:
 
     def template_path(self) -> Path:
         if not self.xlsx_template_path:
+            if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+                return Path(sys._MEIPASS) / "amazon_agro" / "templates" / "modelo_proposta.xlsx"
             return Path(__file__).resolve().parents[1] / "templates" / "modelo_proposta.xlsx"
         path = Path(self.xlsx_template_path).expanduser()
         if path.is_absolute():

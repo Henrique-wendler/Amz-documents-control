@@ -144,3 +144,50 @@ def test_generate_both_publishes_nothing_if_pdf_fails(tmp_path) -> None:
         service.generate_both(proposal.id, tmp_path)
     assert not list(tmp_path.glob("*_proposta.xlsx"))
     assert not list(tmp_path.glob("*_proposta.pdf"))
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_excel_releases_com_interfaces_before_uninitializing(tmp_path, monkeypatch, fail):
+    import sys
+    from types import ModuleType
+    from amazon_agro.exporters.pdf_backends import ExcelComPdfBackend
+    events = []
+    class Book:
+        def ExportAsFixedFormat(self, *args):
+            if fail:
+                raise RuntimeError("conversion error")
+        def Close(self, **kwargs):
+            assert kwargs == {"SaveChanges": False}
+            events.append("close")
+        def __del__(self):
+            events.append("release-book")
+    class Application:
+        @property
+        def Workbooks(self): return self
+        def Open(self, *args, **kwargs): return Book()
+        def Quit(self): events.append("quit")
+        def __del__(self): events.append("release-application")
+    pythoncom = ModuleType("pythoncom")
+    pythoncom.CoInitialize = lambda: events.append("initialize")
+    def uninitialize():
+        # An exception traceback may retain the failing proxy until propagated.
+        assert "close" in events and "quit" in events
+        if not fail:
+            assert "release-book" in events
+            assert "release-application" in events
+        events.append("uninitialize")
+    pythoncom.CoUninitialize = uninitialize
+    client = ModuleType("win32com.client")
+    client.DispatchEx = lambda name: Application()
+    monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
+    monkeypatch.setitem(sys.modules, "win32com.client", client)
+    monkeypatch.setattr(ExcelComPdfBackend, "is_available", lambda self: True)
+    backend = ExcelComPdfBackend()
+    if fail:
+        with pytest.raises(RuntimeError, match="conversion error"):
+            backend.convert(tmp_path / "source.xlsx", tmp_path / "result.pdf")
+    else:
+        backend.convert(tmp_path / "source.xlsx", tmp_path / "result.pdf")
+    assert "uninitialize" in events
+    assert events.index("uninitialize") > events.index("close")
+    assert events.index("uninitialize") > events.index("quit")

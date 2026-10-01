@@ -4,7 +4,7 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-from PySide6.QtCore import QLocale
+from PySide6.QtCore import QLocale, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from amazon_agro.config.settings import AppSettings, default_data_dir
@@ -18,6 +18,7 @@ from amazon_agro.services.export_validator import ProposalExportValidator
 from amazon_agro.services.property_sync_service import PropertyCatalogSyncService
 from amazon_agro.services.proposal_service import ProposalService
 from amazon_agro.ui.main_window import MainWindow
+from amazon_agro.ui.conversion_worker import run_conversion
 
 
 def _configure_logging() -> None:
@@ -46,7 +47,7 @@ def main() -> int:
         service = ProposalService(repository, properties)
         validator = ProposalExportValidator(settings, properties)
         excel = OpenpyxlExcelProposalExporter(settings, properties)
-        pdf = SpreadsheetPdfProposalExporter(PdfBackendSelector())
+        pdf = SpreadsheetPdfProposalExporter(PdfBackendSelector(), conversion_runner=run_conversion)
         export_service = ProposalExportService(repository, validator, excel, pdf)
         app.aboutToQuit.connect(repository.engine.dispose)
         app.aboutToQuit.connect(properties.close)
@@ -54,6 +55,7 @@ def main() -> int:
             service, settings, export_service, validator, properties, sync_service
         )
         window.show()
+        QTimer.singleShot(0, window.startup)
     except Exception as error:
         QMessageBox.critical(None, "Falha ao iniciar", str(error))
         return 1

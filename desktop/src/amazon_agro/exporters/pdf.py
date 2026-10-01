@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 class SpreadsheetPdfProposalExporter:
     """Converts a filled workbook, using a print-ready temporary copy."""
 
-    def __init__(self, selector: PdfBackendSelector) -> None:
+    def __init__(self, selector: PdfBackendSelector, *, conversion_runner=None) -> None:
         self.selector = selector
+        self.conversion_runner = conversion_runner
 
     def export(self, filled_xlsx: Path, destination: Path) -> Path:
         filled_xlsx = Path(filled_xlsx)
@@ -43,7 +44,10 @@ class SpreadsheetPdfProposalExporter:
                 logger.info("Tentando backend PDF: %s", backend.name)
                 try:
                     destination.unlink(missing_ok=True)
-                    backend.convert(print_ready, destination)
+                    if self.conversion_runner is None:
+                        backend.convert(print_ready, destination)
+                    else:
+                        self.conversion_runner(backend, print_ready, destination)
                     if not destination.is_file() or destination.stat().st_size == 0:
                         raise RuntimeError("O conversor não produziu um PDF válido.")
                     with destination.open("rb") as stream:

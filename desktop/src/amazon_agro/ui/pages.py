@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QLocale, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QDateEdit, QDoubleSpinBox, QFormLayout, QGridLayout,
-    QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -16,6 +16,7 @@ from amazon_agro.domain.models import (
 
 
 class OperationPage(QWidget):
+    changed = Signal()
     LABELS = {
         "banco": "Banco", "numero_proposta": "Nº da proposta",
         "agencia": "Agência", "proponente": "Proponente",
@@ -34,8 +35,22 @@ class OperationPage(QWidget):
         title = QLabel("Operação")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        grid = QGridLayout()
-        layout.addLayout(grid)
+        groups = (
+            ("Dados bancários", ("banco", "agencia", "gerente_banco")),
+            ("Dados do proponente", ("proponente", "cpf_cnpj", "porte")),
+            ("Responsáveis", ("responsavel", "tecnico")),
+            ("Operação", ("finalidade", "atividade", "fonte", "status", "aguardando")),
+            ("Documento", ("numero_proposta", "cidade", "data_proposta")),
+        )
+        forms = {}
+        for title, names in groups:
+            group = QGroupBox(title)
+            form = QFormLayout(group)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            for name in names:
+                forms[name] = form
+            layout.addWidget(group)
         configured = {
             "banco": settings.banks, "agencia": settings.agencies,
             "tecnico": settings.technicians, "status": settings.statuses,
@@ -46,19 +61,39 @@ class OperationPage(QWidget):
                 control: QWidget = QDateEdit()
                 control.setCalendarPopup(True)
                 control.setDisplayFormat("dd/MM/yyyy")
+                control.setLocale(QLocale("pt_BR"))
+                control.dateChanged.connect(self.changed)
             elif name in configured:
                 choice = QComboBox()
                 choice.setEditable(True)
                 choice.addItem("")
                 choice.addItems(configured[name])
                 control = choice
+                choice.currentTextChanged.connect(self.changed)
             else:
                 control = QLineEdit()
+                control.textChanged.connect(self.changed)
             self.controls[name] = control
-            form = QFormLayout()
-            form.addRow(label, control)
-            grid.addLayout(form, index // 2, index % 2)
+            control.setAccessibleName(label)
+            control.setMaximumWidth(460 if name in ("proponente", "finalidade", "banco") else 300)
+            forms[name].addRow(label, control)
+        document = self.controls["cpf_cnpj"]
+        document.setPlaceholderText("CPF ou CNPJ")
+        document.textChanged.connect(self._document_feedback)
+        # Group order is also keyboard order, independent of the domain field order.
+        controls = [self.controls[name] for _, names in groups for name in names]
+        for previous, following in zip(controls, controls[1:]):
+            QWidget.setTabOrder(previous, following)
         layout.addStretch()
+
+    def _document_feedback(self, text: str) -> None:
+        control = self.controls["cpf_cnpj"]
+        digits = "".join(c for c in text if c.isdigit())
+        incomplete = bool(text) and len(digits) not in (11, 14)
+        control.setProperty("documentIncomplete", incomplete)
+        control.setToolTip("Confira o formato: CPF com 11 ou CNPJ com 14 dígitos." if incomplete else "")
+        control.style().unpolish(control)
+        control.style().polish(control)
 
     def read_into(self, proposal: Proposal) -> None:
         for name, control in self.controls.items():
@@ -82,6 +117,7 @@ class OperationPage(QWidget):
 
 
 class ParticipantsPage(QWidget):
+    changed = Signal()
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
@@ -93,6 +129,7 @@ class ParticipantsPage(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setColumnWidth(0, 290)
         self.table.setColumnWidth(1, 160)
+        self.table.itemChanged.connect(self.changed)
         layout.addWidget(self.table)
         actions = QHBoxLayout()
         for label, callback in (
@@ -121,7 +158,9 @@ class ParticipantsPage(QWidget):
         if participant:
             kind.setCurrentIndex(kind.findData(int(participant.tipo)))
         self.table.setCellWidget(row, 2, kind)
+        kind.currentIndexChanged.connect(self.changed)
         self.table.selectRow(row)
+        self.changed.emit()
 
     def edit_selected(self) -> None:
         row = self.table.currentRow()
@@ -132,6 +171,7 @@ class ParticipantsPage(QWidget):
         row = self.table.currentRow()
         if row >= 0:
             self.table.removeRow(row)
+            self.changed.emit()
 
     def load(self, proposal: Proposal) -> None:
         self.table.setRowCount(0)
@@ -156,6 +196,8 @@ class ParticipantsPage(QWidget):
 
 def _money_spin() -> QDoubleSpinBox:
     spin = QDoubleSpinBox()
+    spin.setLocale(QLocale("pt_BR"))
+    spin.setMaximumWidth(300)
     spin.setDecimals(2)
     spin.setRange(0, 999_999_999_999.99)
     spin.setPrefix("R$ ")
@@ -165,6 +207,8 @@ def _money_spin() -> QDoubleSpinBox:
 
 def _percent_spin() -> QDoubleSpinBox:
     spin = QDoubleSpinBox()
+    spin.setLocale(QLocale("pt_BR"))
+    spin.setMaximumWidth(180)
     spin.setDecimals(2)
     spin.setRange(0, 100)
     spin.setSuffix(" %")
@@ -172,6 +216,7 @@ def _percent_spin() -> QDoubleSpinBox:
 
 
 class ProposalPage(QWidget):
+    changed = Signal()
     MONEY = {
         "recursos_proprios": "Recursos próprios",
         "valor_total": "Valor total",
@@ -200,23 +245,28 @@ class ProposalPage(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.description = QPlainTextEdit()
         self.description.setPlaceholderText("Animais, culturas, equipamentos ou outras informações")
         self.description.setMaximumHeight(90)
+        self.description.textChanged.connect(self.changed)
         form.addRow("Descrição", self.description)
         for name, label in self.MONEY.items():
             spin = _money_spin()
             self.spins[name] = spin
+            spin.valueChanged.connect(self.changed)
             form.addRow(label, spin)
         for name, label in self.PERCENT.items():
             spin = _percent_spin()
             self.spins[name] = spin
+            spin.valueChanged.connect(self.changed)
             form.addRow(label, spin)
         for name, (label, percent_name) in self.FLAGS.items():
             choice = QComboBox()
             choice.addItem("Não", False)
             choice.addItem("Sim", True)
             self.flags[name] = choice
+            choice.currentIndexChanged.connect(self.changed)
             form.addRow(label, choice)
             choice.currentIndexChanged.connect(
                 lambda _index, selector=choice, target=self.spins[percent_name]:

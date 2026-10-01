@@ -80,7 +80,29 @@ Agência e fonte são exportadas quando preenchidas. Ainda não existem regras b
 
 Propostas antigas salvas antes da introdução dos snapshots continuam legíveis no SQLite, mas dependem da fonte original para completar dados que nunca foram gravados. Ao salvar uma dessas propostas enquanto a fonte ainda existir, o aplicativo preenche o snapshot; não há como reconstruir automaticamente dados ausentes de uma fonte já perdida.
 
-## Estrutura
+## Interface e primeira execução (etapa 4)
+
+Na primeira abertura, o assistente configura uma pasta local opcional do Google Drive for Desktop, a pasta das propostas, cidade e técnico padrão. A detecção de PDF respeita Excel COM → LibreOffice. Concluir salva `first_run_completed`; cancelar não grava uma configuração parcial. Em **Configurações → Geral**, é possível alterar os padrões ou executar o assistente novamente. O catálogo continua sendo atualizado explicitamente em **Configurações → Imóveis**.
+
+Sem proposta aberta, a tela inicial oferece criar ou abrir. O editor usa navegação, formulário com rolagem vertical e `ProposalSummaryPanel` lateral redimensionável/recolhível. O resumo acompanha a edição sem salvar, mascara o documento e recebe as pendências do mesmo `ProposalExportValidator` usado na exportação. A revisão completa permanece como última etapa. As preferências ficam fora das etapas. Atalhos: `Ctrl+N`, `Ctrl+O`, `Ctrl+S` e `Ctrl+,`.
+
+Os botões de geração continuam acionáveis quando existem pendências: um clique explica os campos que precisam ser preenchidos. A proposta é salva antes da geração. XLSX independe de PDF; sem conversor há a alternativa **Gerar Excel**. Erros técnicos são registrados em `exports.log`, com mensagem amigável na interface. O sucesso lista somente arquivos efetivamente produzidos, permite escolher qual abrir e oferece abrir a pasta. Arquivos existentes não são sobrescritos.
+
+A conversão Office roda em uma thread separada, mantendo o event loop Qt ativo; o formulário e as ações que trocam a proposta ficam bloqueados durante a geração. O SQLite permanece na thread principal. A janela aguarda a conversão para fechar. O backend COM libera as referências antes de `CoUninitialize`. A disponibilidade do Excel não garante tempo de resposta: add-ins ou diálogos do Office ainda podem prolongar a conversão. Não há encerramento forçado das instâncias do usuário.
+
+Para repetir a verificação optativa com janela Windows, diálogos Qt, SQLite isolado, dados sintéticos e exportadores reais:
+
+```powershell
+.\desktop\.venv\Scripts\python.exe desktop/scripts/verify_export_ui.py --output .tmp/stage4/nova-verificacao
+```
+
+A pasta de saída deve ser nova. O script confirma os cliques, os arquivos, células preenchidas, as duas resoluções, a integridade SQLite e o hash do template. Se não houver conversor, registra PDF como indisponível. Essa é uma verificação automatizada da janela real, não uma declaração de teste manual humano. A suíte normal não requer Office.
+
+### Preparação de recursos
+
+O template padrão usa o caminho do pacote; no modo frozen usa `sys._MEIPASS/amazon_agro/templates/modelo_proposta.xlsx`. No futuro empacotamento, esse arquivo deverá ser incluído nesse destino. Caminhos configurados relativos são resolvidos em relação ao JSON, inclusive quando ele ainda não existe. Configuração e bancos continuam em `%LOCALAPPDATA%/AmazonAgro`. Nenhum instalador foi criado nem dependência de empacotamento foi instalada.
+
+## Diretórios do código
 
 - src/amazon_agro/app/: inicialização e composição
 - src/amazon_agro/domain/: entidades e validação do domínio
