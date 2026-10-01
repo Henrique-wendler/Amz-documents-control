@@ -148,8 +148,9 @@ def test_unmerged_blank_owner_is_not_forward_filled(tmp_path) -> None:
             "Proprietário": None, "CPF/CNPJ": None,
         }),
     ], merges=(("Fazenda", 1, 2),))
-    with pytest.raises(NeedsConfigurationError, match="Proprietário ausente"):
-        parse(path)
+    farm = parse(path).properties[0]
+    assert len(farm.parcels) == 2
+    assert farm.owner_name == "Pessoa Exemplo"
 
 
 def test_contiguous_grouping_can_be_enabled_by_profile(tmp_path) -> None:
@@ -226,7 +227,7 @@ def test_owner_can_be_extracted_from_configured_cell(tmp_path) -> None:
 
 
 def test_incompatible_headers_need_configuration(tmp_path) -> None:
-    headers = tuple(item for item in HEADERS if item != "Proprietário")
+    headers = tuple(item for item in HEADERS if item != "Matrículas")
     path = make_book(tmp_path / "wrong.xlsx", [record()], headers=headers)
     with pytest.raises(NeedsConfigurationError, match="Cabeçalhos"):
         parse(path)
@@ -414,7 +415,7 @@ def test_corrupt_workbook_is_error_and_does_not_block_good_file(tmp_path) -> Non
 
 
 def test_incompatible_file_is_needs_configuration(tmp_path) -> None:
-    headers = tuple(item for item in HEADERS if item != "Proprietário")
+    headers = tuple(item for item in HEADERS if item != "Matrículas")
     path = make_book(tmp_path / "incompatible.xlsx", [record()], headers=headers)
     catalog, sync, settings = catalog_sync(tmp_path)
     sync.synchronize(settings)

@@ -36,7 +36,7 @@ class PropertyWorkbookProfile:
     sheet_selector: str = ""
     header_scan_rows: int = 20
     column_aliases: dict[str, tuple[str, ...]] = field(default_factory=_aliases)
-    required_fields: tuple[str, ...] = ("name", "registration", "area", "owner_name")
+    required_fields: tuple[str, ...] = ("name", "registration")
     property_identity_fields: tuple[str, ...] = ("source_file", "owner_document", "name")
     parcel_identity_fields: tuple[str, ...] = (
         "property_external_id", "registration", "previous_registration", "lot_description",

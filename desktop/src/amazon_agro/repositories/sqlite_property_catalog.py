@@ -150,7 +150,8 @@ class SQLitePropertyCatalogRepository:
     ) -> None:
         with self.connection:
             self._upsert_source(
-                file, fingerprint, "OK", parsed.profile_name, profile_signature
+                file, fingerprint, "OK", parsed.profile_name, profile_signature,
+                "\n".join(parsed.warnings),
             )
             ids = [row[0] for row in self.connection.execute(
                 "SELECT external_id FROM rural_properties WHERE source_path=?",
@@ -198,7 +199,7 @@ class SQLitePropertyCatalogRepository:
         if row is None:
             return
         parcels = self.connection.execute("""
-            SELECT registration, previous_registration, lot_description
+            SELECT registration, previous_registration, lot_description, extra_fields
             FROM property_parcels WHERE property_external_id=?
         """, (external_id,)).fetchall()
         searchable = " ".join((
@@ -206,7 +207,9 @@ class SQLitePropertyCatalogRepository:
             row["local_municipality"] or "", row["local_state"] or "",
             row["owner_name"], row["owner_document"], row["ccir"],
             row["itr"], row["car"], row["source_file"],
-            *(" ".join(parcel) for parcel in parcels),
+            *(" ".join((parcel["registration"], parcel["previous_registration"],
+                        parcel["lot_description"],
+                        *json.loads(parcel["extra_fields"]).values())) for parcel in parcels),
         ))
         self.connection.execute("DELETE FROM property_search WHERE external_id=?", (external_id,))
         self.connection.execute(
@@ -349,6 +352,7 @@ class SQLitePropertyCatalogRepository:
             warnings=connection.execute("""
                 SELECT count(*) FROM source_files
                 WHERE status IN ('ERROR', 'NEEDS_CONFIGURATION')
+                   OR (status='OK' AND last_error!='')
             """).fetchone()[0],
             synchronized_at=connection.execute(
                 "SELECT coalesce(max(synchronized_at), '') FROM source_files"

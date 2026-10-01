@@ -13,7 +13,11 @@ from amazon_agro.integrations.workbook_profile import PropertyWorkbookProfile, n
 
 
 class NeedsConfigurationError(ValueError):
-    pass
+    def __init__(self, message: str, *, diagnostics: tuple[str, ...] = (),
+                 warnings: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics or (message,)
+        self.warnings = warnings
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +68,7 @@ def select_header(workbook: object, profile: PropertyWorkbookProfile) -> tuple[W
             sheet for sheet in sheets
             if normalized(sheet.title) == normalized(profile.sheet_selector)
         ]
-    required = set(profile.required_fields)
+    required = {"name", "registration", *profile.required_fields}
     if profile.owner_name_cell:
         required.discard("owner_name")
     matches = [

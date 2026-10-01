@@ -14,7 +14,7 @@ from amazon_agro.integrations.workbook_discovery import (
     DiscoveredWorkbook, PropertyWorkbookDiscovery,
 )
 from amazon_agro.integrations.workbook_inspector import NeedsConfigurationError
-from amazon_agro.integrations.workbook_parser import PropertyWorkbookParser
+from amazon_agro.integrations.workbook_parser import PARSER_VERSION, PropertyWorkbookParser
 from amazon_agro.integrations.workbook_profile import PropertyWorkbookProfile
 from amazon_agro.repositories.sqlite_property_catalog import (
     CatalogStats, SQLitePropertyCatalogRepository,
@@ -80,7 +80,8 @@ class PropertyCatalogSyncService:
         except (TypeError, ValueError) as error:
             raise NeedsConfigurationError("Configuração de perfil inválida.") from error
         signature = hashlib.sha256(
-            json.dumps(asdict(profile), sort_keys=True, ensure_ascii=False).encode("utf-8")
+            json.dumps({"parser_version": PARSER_VERSION, "profile": asdict(profile)},
+                       sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
         return profile, signature
 
