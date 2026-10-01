@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazon-agro-desktop"
+version = "0.1.0"
+description = "Aplicação local de propostas da Amazon Agro Consultoria e Projetos"
+requires-python = ">=3.12"
+dependencies = [
+  "PySide6>=6.8,<7",
+  "SQLAlchemy>=2.0,<3",
+  "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+excel-com = ["pywin32>=306; sys_platform == 'win32'"]
+
+[project.scripts]
+amazon-agro = "amazon_agro.app.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+amazon_agro = ["templates/*.xlsx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

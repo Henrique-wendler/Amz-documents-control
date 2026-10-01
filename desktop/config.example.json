@@ -1,0 +1,37 @@
+{
+  "xlsx_template_path": "",
+  "property_source_type": "directory",
+  "source_directory": "",
+  "property_file_patterns": ["*.xlsx", "*.xlsm"],
+  "property_excluded_files": ["Demandas - Amazon Agro.xlsx"],
+  "property_recursive": false,
+  "property_profile_name": "BASA Ambiental",
+  "property_profile_options": {},
+  "property_profiles": {},
+  "property_profile_rules": [],
+  "property_file_profiles": {},
+  "default_output_dir": "",
+  "default_city": "Palmas",
+  "technicians": [],
+  "banks": ["Banco da Amazônia"],
+  "agencies": [],
+  "statuses": [],
+  "awaiting_options": [],
+  "property_classifications": {
+    "1": "Classe 1 — Garantia/Hipoteca (confirmar)",
+    "2": "Objeto de crédito",
+    "3": "Alienação fiduciária"
+  },
+  "property_classification_labels": {
+    "xlsx": {
+      "1": "GARANTIA",
+      "2": "OBJETO DE CRÉDITO",
+      "3": "ALIENAÇÃO FIDUCIÁRIA"
+    },
+    "docx": {
+      "1": "HIPOTECA",
+      "2": "OBJETO DE CRÉDITO",
+      "3": "ALIENAÇÃO FIDUCIÁRIA"
+    }
+  }
+}
