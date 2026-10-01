@@ -25,6 +25,14 @@ def _location(municipality: str, state: str) -> str:
     return f"{municipality}/{state}" if municipality and state else municipality or "—"
 
 
+def _owner_summary(property_item: RuralProperty) -> str:
+    if property_item.owner_count > 1:
+        return f"{property_item.owner_count} proprietários"
+    if property_item.owner_count == 1:
+        return short_owner_name(property_item.owners[0].name)
+    return short_owner_name(property_item.owner_name) if not property_item.owners_normalized else "—"
+
+
 class PropertyLocalEnrichmentDialog(QDialog):
     def __init__(self, property_item: RuralProperty, adding: bool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -61,34 +69,43 @@ class PropertyDetailsDialog(QDialog):
         super().__init__(parent)
         self.property_item = property_item
         self.setWindowTitle("Detalhes da fazenda")
-        self.resize(780, 460)
+        self.resize(900, 460)
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(property_item.name))
-        layout.addWidget(QLabel(
-            f"Proprietário: {short_owner_name(property_item.owner_name)}  |  "
-            f"CPF/CNPJ: {mask_document(property_item.owner_document)}"
-        ))
+        layout.addWidget(QLabel(f"Proprietários: {_owner_summary(property_item)}"))
+        if not property_item.owners_normalized and (property_item.owner_name or property_item.owner_document):
+            layout.addWidget(QLabel("Dados legados da fazenda. Atualize a fonte para consultar os titulares por matrícula."))
         layout.addWidget(QLabel(
             f"Município/UF: {_location(property_item.municipality, property_item.state)}  |  "
             f"CCIR: {property_item.ccir or '—'}  |  "
             f"ITR: {property_item.itr or '—'}  |  CAR: {property_item.car or '—'}"
         ))
-        self.table = QTableWidget(len(property_item.parcels), 4)
+        self.table = QTableWidget(len(property_item.parcels), 5)
         self.table.setHorizontalHeaderLabels([
-            "Matrícula", "Área (ha)", "Matrícula anterior", "Lote/Gleba"
+            "Matrícula", "Área (ha)", "Matrícula anterior", "Lote/Gleba", "Proprietários"
         ])
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setWordWrap(True)
         for row, parcel in enumerate(property_item.parcels):
+            owners = []
+            for link in parcel.owner_links:
+                name = " / ".join(link.source_names) or "Nome não informado"
+                documents = tuple(dict.fromkeys(mask_document(value) for value in link.source_documents))
+                owners.append(f"{name} — {', '.join(documents) if documents else 'documento não informado'}")
             values = (
                 parcel.registration, _area(parcel.area),
                 parcel.previous_registration, parcel.lot_description,
+                "\n".join(owners) or "—",
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 if column == 0:
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                     item.setCheckState(Qt.CheckState.Checked)
                 self.table.setItem(row, column, item)
+        self.table.setColumnWidth(4, 340)
+        self.table.resizeRowsToContents()
         layout.addWidget(self.table)
         actions = QHBoxLayout()
         all_button = QPushButton("Selecionar todas")
@@ -146,7 +163,7 @@ class PropertiesPage(QWidget):
         layout.addLayout(search_row)
         self.results = QTableWidget(0, 6)
         self.results.setHorizontalHeaderLabels([
-            "Fazenda", "Município/UF", "Proprietário", "Matrículas", "Área total (ha)", "Origem"
+            "Fazenda", "Município/UF", "Proprietários", "Matrículas", "Área total (ha)", "Origem"
         ])
         self.results.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.results)
@@ -186,7 +203,7 @@ class PropertiesPage(QWidget):
                     origin += " (último catálogo válido; origem com aviso)"
                 values = (
                     property_item.name, _location(property_item.municipality, property_item.state),
-                    short_owner_name(property_item.owner_name),
+                    _owner_summary(property_item),
                     str(len(property_item.parcels)), _area(property_item.total_area),
                     origin,
                 )

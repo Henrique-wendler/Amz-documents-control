@@ -10,8 +10,10 @@ from decimal import Decimal
 from pathlib import Path
 
 from amazon_agro.domain.models import (
-    BRAZILIAN_STATES, PropertyLocalEnrichment, PropertyParcel, RuralProperty,
+    BRAZILIAN_STATES, ParcelOwner, PropertyLocalEnrichment, PropertyOwner, PropertyParcel, RuralProperty,
 )
+from amazon_agro.database.catalog_migrations import migrate_catalog
+from amazon_agro.domain.owner_identity import normalized_owner_document
 from amazon_agro.integrations.workbook_discovery import DiscoveredWorkbook
 from amazon_agro.integrations.workbook_parser import ParsedWorkbook
 from amazon_agro.integrations.workbook_profile import normalized
@@ -99,6 +101,10 @@ class SQLitePropertyCatalogRepository:
                 "ALTER TABLE source_files ADD COLUMN profile_signature TEXT NOT NULL DEFAULT ''"
             )
             self.connection.commit()
+        if migrate_catalog(self.connection):
+            with self.connection:
+                for row in self.connection.execute("SELECT external_id FROM rural_properties").fetchall():
+                    self._refresh_search(row[0])
 
     def close(self) -> None:
         self.connection.close()
@@ -166,8 +172,12 @@ class SQLitePropertyCatalogRepository:
             )
             for property_item in parsed.properties:
                 self.connection.execute("""
-                    INSERT INTO rural_properties VALUES (
-                        ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    INSERT INTO rural_properties (
+                        external_id, source_path, active, name, municipality, state,
+                        owner_name, owner_document, ccir, itr, car, source_file,
+                        source_profile, extra_fields, owners_normalized
+                    ) VALUES (
+                        ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                 """, (
                     property_item.external_id, str(file.path), property_item.name,
@@ -176,7 +186,15 @@ class SQLitePropertyCatalogRepository:
                     property_item.ccir, property_item.itr, property_item.car,
                     property_item.source_file, property_item.source_profile,
                     json.dumps(property_item.extra_fields, ensure_ascii=False),
+                    int(property_item.owners_normalized),
                 ))
+                for owner in property_item.owner_records.values():
+                    self.connection.execute("""
+                        INSERT INTO property_owners VALUES (?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            name=CASE WHEN property_owners.name='' THEN excluded.name ELSE property_owners.name END,
+                            document=CASE WHEN property_owners.document='' THEN excluded.document ELSE property_owners.document END
+                    """, (owner.id, owner.name, owner.document))
                 for sequence, parcel in enumerate(property_item.parcels):
                     self.connection.execute("""
                         INSERT INTO property_parcels VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -187,7 +205,26 @@ class SQLitePropertyCatalogRepository:
                         parcel.lot_description,
                         json.dumps(parcel.extra_fields, ensure_ascii=False),
                     ))
-                self._refresh_search(property_item.external_id)
+                    for owner_sequence, link in enumerate(parcel.owner_links):
+                        if link.parcel_id != parcel.external_id or link.owner_id not in property_item.owner_records:
+                            raise ValueError("Referência de proprietário inválida no catálogo.")
+                        self.connection.execute("""
+                            INSERT INTO parcel_owners VALUES (?, ?, ?, ?, ?)
+                        """, (link.parcel_id, link.owner_id, owner_sequence,
+                              json.dumps(link.source_names, ensure_ascii=False),
+                              json.dumps(link.source_documents, ensure_ascii=False)))
+            affected = {item.external_id for item in parsed.properties}
+            for owner in parsed.owners:
+                affected.update(row[0] for row in self.connection.execute("""
+                    SELECT p.property_external_id FROM property_parcels p
+                    JOIN parcel_owners po ON po.parcel_id=p.external_id WHERE po.owner_id=?
+                """, (owner.id,)))
+            for external_id in affected:
+                self._refresh_search(external_id)
+            self.connection.execute("""
+                DELETE FROM property_owners
+                WHERE NOT EXISTS (SELECT 1 FROM parcel_owners WHERE owner_id=property_owners.id)
+            """)
 
     def _refresh_search(self, external_id: str) -> None:
         row = self.connection.execute("""
@@ -202,11 +239,27 @@ class SQLitePropertyCatalogRepository:
             SELECT registration, previous_registration, lot_description, extra_fields
             FROM property_parcels WHERE property_external_id=?
         """, (external_id,)).fetchall()
+        owner_links = self.connection.execute("""
+            SELECT po.source_names, po.source_documents, o.name, o.document
+            FROM parcel_owners po JOIN property_parcels p ON p.external_id=po.parcel_id
+            JOIN property_owners o ON o.id=po.owner_id
+            WHERE p.property_external_id=?
+        """, (external_id,)).fetchall()
+        owner_terms = []
+        if not row["owners_normalized"]:
+            owner_terms.extend((row["owner_name"], row["owner_document"],
+                                normalized_owner_document(row["owner_document"])))
+        for link in owner_links:
+            owner_terms.extend((link["name"], link["document"], normalized_owner_document(link["document"]),
+                                *json.loads(link["source_names"])))
+            for document in json.loads(link["source_documents"]):
+                owner_terms.extend((document, normalized_owner_document(document)))
         searchable = " ".join((
             row["name"], row["municipality"], row["state"],
             row["local_municipality"] or "", row["local_state"] or "",
-            row["owner_name"], row["owner_document"], row["ccir"],
+            row["ccir"],
             row["itr"], row["car"], row["source_file"],
+            *owner_terms,
             *(" ".join((parcel["registration"], parcel["previous_registration"],
                         parcel["lot_description"],
                         *json.loads(parcel["extra_fields"]).values())) for parcel in parcels),
@@ -294,6 +347,20 @@ class SQLitePropertyCatalogRepository:
             SELECT * FROM property_parcels WHERE property_external_id=?
             ORDER BY sequence
         """, (external_id,)).fetchall()
+        owner_rows = self.connection.execute("""
+            SELECT o.*, po.parcel_id, po.source_names, po.source_documents
+            FROM property_owners o JOIN parcel_owners po ON po.owner_id=o.id
+            JOIN property_parcels p ON p.external_id=po.parcel_id
+            WHERE p.property_external_id=? ORDER BY p.sequence, po.sequence
+        """, (external_id,)).fetchall()
+        owner_records = {}
+        links_by_parcel: dict[str, list[ParcelOwner]] = {}
+        for owner in owner_rows:
+            owner_records[owner["id"]] = PropertyOwner(owner["id"], owner["name"], owner["document"])
+            links_by_parcel.setdefault(owner["parcel_id"], []).append(ParcelOwner(
+                owner["parcel_id"], owner["id"], tuple(json.loads(owner["source_names"])),
+                tuple(json.loads(owner["source_documents"])),
+            ))
         return RuralProperty(
             external_id=row["external_id"], name=row["name"],
             municipality=row["local_municipality"] or row["municipality"],
@@ -303,6 +370,7 @@ class SQLitePropertyCatalogRepository:
             source_file=row["source_file"], source_profile=row["source_profile"],
             source_status=row["source_status"],
             extra_fields=json.loads(row["extra_fields"]),
+            owner_records=owner_records, owners_normalized=bool(row["owners_normalized"]),
             parcels=[PropertyParcel(
                 external_id=parcel["external_id"],
                 property_external_id=external_id,
@@ -311,13 +379,16 @@ class SQLitePropertyCatalogRepository:
                 area=Decimal(parcel["area"]) if parcel["area"] is not None else None,
                 lot_description=parcel["lot_description"],
                 extra_fields=json.loads(parcel["extra_fields"]),
+                owner_links=links_by_parcel.get(parcel["external_id"], []),
             ) for parcel in parcels],
         )
 
     def search(self, query: str) -> list[RuralProperty]:
         if not self.search_enabled:
             return []
-        words = normalized(query).split()
+        # Formatted and bare CPF/CNPJ must find the same literal association.
+        document = normalized_owner_document(query)
+        words = [document] if document else normalized(query).split()
         if words:
             expression = " AND ".join(f'"{word}"*' for word in words)
             rows = self.connection.execute("""

@@ -59,6 +59,22 @@ class Property:
 
 
 @dataclass(slots=True)
+class PropertyOwner:
+    id: str
+    name: str
+    document: str = ""
+
+
+@dataclass(slots=True)
+class ParcelOwner:
+    parcel_id: str
+    owner_id: str
+    # Literal spellings from this association, not legal names or priorities.
+    source_names: tuple[str, ...] = ()
+    source_documents: tuple[str, ...] = ()
+
+
+@dataclass(slots=True)
 class PropertyParcel:
     external_id: str
     property_external_id: str
@@ -67,6 +83,11 @@ class PropertyParcel:
     area: Decimal | None = None
     lot_description: str = ""
     extra_fields: dict[str, str] = field(default_factory=dict)
+    owner_links: list[ParcelOwner] = field(default_factory=list)
+
+    @property
+    def owner_ids(self) -> tuple[str, ...]:
+        return tuple(link.owner_id for link in self.owner_links)
 
 
 @dataclass(slots=True)
@@ -85,6 +106,17 @@ class RuralProperty:
     source_status: str = "OK"
     extra_fields: dict[str, str] = field(default_factory=dict)
     parcels: list[PropertyParcel] = field(default_factory=list)
+    owner_records: dict[str, PropertyOwner] = field(default_factory=dict)
+    owners_normalized: bool = False
+
+    @property
+    def owners(self) -> tuple[PropertyOwner, ...]:
+        ids = dict.fromkeys(owner_id for parcel in self.parcels for owner_id in parcel.owner_ids)
+        return tuple(self.owner_records[owner_id] for owner_id in ids)
+
+    @property
+    def owner_count(self) -> int:
+        return len(self.owners)
 
     @property
     def total_area(self) -> Decimal:

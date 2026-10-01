@@ -11,13 +11,14 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from amazon_agro.domain.models import PropertyParcel, RuralProperty
+from amazon_agro.domain.models import ParcelOwner, PropertyOwner, PropertyParcel, RuralProperty
+from amazon_agro.domain.owner_identity import normalized_owner_document, owner_id
 from amazon_agro.integrations.area_parser import parse_area_ha
 from amazon_agro.integrations.workbook_inspector import NeedsConfigurationError, select_header
 from amazon_agro.integrations.workbook_profile import PropertyWorkbookProfile
 
 
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 _PARCEL_FIELDS = ("area", "previous_registration", "lot_description", "ccir", "itr", "car")
 _LABELS = {
     "area": "Área", "previous_registration": "Matrícula anterior",
@@ -35,6 +36,18 @@ class ParsedWorkbook:
     properties: tuple[RuralProperty, ...]
     warnings: tuple[str, ...] = ()
 
+    @property
+    def owners(self) -> tuple[PropertyOwner, ...]:
+        return tuple({owner.id: owner for item in self.properties for owner in item.owners}.values())
+
+
+@dataclass(frozen=True)
+class _OwnerObservation:
+    name: str
+    document: str
+    name_cell: str
+    document_cell: str
+
 
 @dataclass
 class _ParcelRecord:
@@ -45,6 +58,7 @@ class _ParcelRecord:
     values: dict[str, str] = field(default_factory=dict)
     owners: set[tuple[str, str]] = field(default_factory=set)
     last_row: int = 0
+    owner_observations: list[_OwnerObservation] = field(default_factory=list)
 
 
 def _text(value: object, number_format: str = "") -> str:
@@ -71,13 +85,8 @@ def _id(prefix: str, fields: tuple[str, ...], values: dict[str, str]) -> str:
     return prefix + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
-def _distinct_owners(owners: set[tuple[str, str]]) -> set[tuple[str, str]]:
-    """Collapse formatting differences and explicitly matching partial records.
-
-    A blank document for the same name is not a second owner. Distinct supplied
-    documents remain distinct; unrelated name-only/document-only rows are never
-    paired by proximity.
-    """
+def _legacy_identity_owners(owners: set[tuple[str, str]]) -> set[tuple[str, str]]:
+    """Reproduce old property ID inputs, never normalized owner membership."""
     canonical = {}
     for name, document in sorted(owners):
         key = (name.casefold(), re.sub(r"\D", "", document) or document.casefold())
@@ -130,6 +139,18 @@ class PropertyWorkbookParser:
 
             def registration_anchor(row: int) -> int:
                 return merges.get((row, registration_column), (row, registration_column))[0]
+
+            def owner_observation(row: int) -> _OwnerObservation:
+                def value_and_cell(key: str, fallback: str) -> tuple[str, str]:
+                    value = read(row, key)
+                    column = columns.get(key)
+                    coordinate = sheet.cell(*merges.get((row, column), (row, column))).coordinate if column else ""
+                    if not value and fallback:
+                        return _text(sheet[fallback].value), sheet[fallback].coordinate
+                    return value, coordinate
+                name, name_cell = value_and_cell("owner_name", profile.owner_name_cell)
+                document, document_cell = value_and_cell("owner_document", profile.owner_document_cell)
+                return _OwnerObservation(name, document, name_cell, document_cell)
 
             def merged_targets(row: int, key: str) -> set[int]:
                 """Registration anchors explicitly covered by this field's merge."""
@@ -237,14 +258,10 @@ class PropertyWorkbookParser:
                                       f"iniciada na linha {anchor}.")
                     else:
                         record.values[key] = incoming
-                owner_name = read(row, "owner_name")
-                owner_document = read(row, "owner_document")
-                if not owner_name and profile.owner_name_cell:
-                    owner_name = _text(sheet[profile.owner_name_cell].value)
-                if not owner_document and profile.owner_document_cell:
-                    owner_document = _text(sheet[profile.owner_document_cell].value)
-                if owner_name or owner_document:
-                    record.owners.add((owner_name, owner_document))
+                observation = owner_observation(row)
+                if observation.name or observation.document:
+                    record.owners.add((observation.name, observation.document))
+                    record.owner_observations.append(observation)
 
             # Only a real name merge may connect property-level rows to parcels.
             for row in property_rows:
@@ -264,6 +281,19 @@ class PropertyWorkbookParser:
                     owner = (read(row, "owner_name", False), read(row, "owner_document", False))
                     if any(owner):
                         record.owners.add(owner)
+                        owner_targets = merged_targets(row, "owner_name") | merged_targets(row, "owner_document")
+                        if target in owner_targets:
+                            record.owner_observations.append(owner_observation(row))
+
+            # A name-only continuation of the same physical merged name cell may
+            # use its sole documented identity. Separate equal names never join.
+            documents_by_name_cell: dict[str, set[str]] = {}
+            for record in records.values():
+                for observation in record.owner_observations:
+                    document = normalized_owner_document(observation.document)
+                    if observation.name and document:
+                        documents_by_name_cell.setdefault(observation.name_cell, set()).add(document)
+            owner_records: dict[str, PropertyOwner] = {}
 
             # Keep contiguous physical farm groups together, including optional
             # owner gaps. Never split a real name merge by changing owners.
@@ -274,33 +304,11 @@ class PropertyWorkbookParser:
                 groups[-1].append(record)
             properties: dict[str, RuralProperty] = {}
             parcel_ids: set[str] = set()
-            owner_names: set[str] = set()
-            owner_documents: set[str] = set()
             for group in groups:
-                owners = _distinct_owners(set().union(*(record.owners for record in group)))
-                multiple_parcel_owners = False
-                for record in group:
-                    parcel_owners = _distinct_owners(record.owners)
-                    if len(parcel_owners) > 1:
-                        multiple_parcel_owners = True
-                        errors.append(
-                            f"Linhas {record.row}–{record.last_row}: {len(parcel_owners)} proprietários "
-                            "associados à mesma matrícula por mesclagem. O modelo atual aceita "
-                            "um proprietário por fazenda; nenhum foi escolhido ou descartado."
-                        )
-                if len(owners) > 1:
-                    if not multiple_parcel_owners:
-                        errors.append(
-                            f"Linhas {group[0].row}–{group[-1].last_row}: proprietários distintos "
-                            "nas matrículas do mesmo grupo de fazenda. O modelo atual aceita "
-                            "um proprietário por fazenda; configure a representação antes de importar."
-                        )
-                    continue
-                owner_name, owner_document = next(iter(owners), ("", ""))
-                if owner_name:
-                    owner_names.add(owner_name)
-                if owner_document:
-                    owner_documents.add(owner_document)
+                owners = _legacy_identity_owners(set().union(*(record.owners for record in group)))
+                # Retain the old identity inputs for previously valid single-owner
+                # groups; multiple owners never select a first/principal person.
+                owner_name, owner_document = next(iter(owners)) if len(owners) == 1 else ("", "")
                 details = {}
                 for key in ("municipality", "state", "ccir", "itr", "car"):
                     incoming = {record.values[key] for record in group if record.values.get(key)}
@@ -322,6 +330,7 @@ class PropertyWorkbookParser:
                     external_id=property_id, name=group[0].name,
                     owner_name=owner_name, owner_document=owner_document,
                     source_file=relative_path, source_profile=profile.name, **details,
+                    owners_normalized=True,
                 )
                 properties[property_id] = property_item
                 for record in group:
@@ -340,14 +349,49 @@ class PropertyWorkbookParser:
                     except ValueError as error:
                         errors.append(f"Linha {record.row}: {error}")
                         continue
-                    property_item.parcels.append(PropertyParcel(
+                    parcel = PropertyParcel(
                         external_id=parcel_id, property_external_id=property_id,
                         registration=record.registration,
                         previous_registration=record.values.get("previous_registration", ""),
                         area=area, lot_description=record.values.get("lot_description", ""),
                         extra_fields={key: record.values[key] for key in ("ccir", "itr", "car")
                                       if record.values.get(key)},
-                    ))
+                    )
+                    links: dict[str, ParcelOwner] = {}
+                    for observation in record.owner_observations:
+                        identity_document = observation.document
+                        if not identity_document and observation.name:
+                            documented = documents_by_name_cell.get(observation.name_cell, set())
+                            if len(documented) == 1:
+                                identity_document = next(iter(documented))
+                            elif len(documented) > 1:
+                                errors.append(f"Linha {record.row}: proprietário sem documento em célula "
+                                              "compartilhada por documentos distintos; associação ambígua.")
+                                continue
+                        source_cell = observation.name_cell if observation.name else observation.document_cell
+                        identifier = owner_id(identity_document, (
+                            relative_path, sheet.title, source_cell,
+                            observation.document_cell if observation.document else "",
+                        ))
+                        stored_owner = owner_records.setdefault(identifier, PropertyOwner(
+                            identifier, observation.name, identity_document,
+                        ))
+                        if not stored_owner.name:
+                            stored_owner.name = observation.name
+                        property_item.owner_records[identifier] = owner_records[identifier]
+                        link = links.setdefault(identifier, ParcelOwner(parcel_id, identifier))
+                        if observation.name and observation.name not in link.source_names:
+                            link.source_names += (observation.name,)
+                        if observation.document and observation.document not in link.source_documents:
+                            link.source_documents += (observation.document,)
+                    parcel.owner_links = list(links.values())
+                    property_item.parcels.append(parcel)
+                if property_item.owner_count > 1:
+                    property_item.owner_name = property_item.owner_document = ""
+                elif property_item.owner_count == 1:
+                    only_owner = property_item.owners[0]
+                    property_item.owner_name = only_owner.name
+                    property_item.owner_document = only_owner.document
             if errors:
                 diagnostics = tuple(dict.fromkeys(errors))
                 raise NeedsConfigurationError("\n".join((*diagnostics, *warnings)),
@@ -355,10 +399,11 @@ class PropertyWorkbookParser:
             if not properties:
                 raise NeedsConfigurationError("Nenhuma fazenda com matrícula encontrada para o perfil.",
                                               warnings=tuple(warnings))
+            only_owner = next(iter(owner_records.values())) if len(owner_records) == 1 else None
             return ParsedWorkbook(
                 source_file=relative_path, profile_name=profile.name,
-                owner_name=next(iter(owner_names)) if len(owner_names) == 1 else "",
-                owner_document=next(iter(owner_documents)) if len(owner_documents) == 1 else "",
+                owner_name=only_owner.name if only_owner else "",
+                owner_document=only_owner.document if only_owner else "",
                 properties=tuple(properties.values()), warnings=tuple(warnings),
             )
         finally:

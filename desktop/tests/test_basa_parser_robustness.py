@@ -125,10 +125,10 @@ def test_multiple_owners_in_registration_merge_are_not_discarded(tmp_path):
         {"Proprietário": "Pessoa Beta"}, {"Proprietário": "Pessoa Gama"},
         {"Proprietário": "Pessoa Delta"},
     ], merges=(("Fazenda", 1, 4), ("Matrículas", 1, 4)))
-    with pytest.raises(NeedsConfigurationError, match="4 proprietários") as error:
-        parse(path)
-    assert len(error.value.diagnostics) == 1
-    assert "Pessoa" not in str(error.value)
+    farm = parse(path).properties[0]
+    assert len(farm.parcels) == 1
+    assert farm.owner_count == len(farm.parcels[0].owner_links) == 4
+    assert farm.owner_name == farm.owner_document == ""
 
 
 def test_different_owners_do_not_split_one_physical_farm(tmp_path):
@@ -136,8 +136,9 @@ def test_different_owners_do_not_split_one_physical_farm(tmp_path):
         {"Fazenda": "Fazenda Alfa", "Matrículas": "MAT-1", "Proprietário": "Pessoa Alfa"},
         {"Matrículas": "MAT-2", "Proprietário": "Pessoa Beta"},
     ], merges=(("Fazenda", 1, 2),))
-    with pytest.raises(NeedsConfigurationError, match="proprietários distintos"):
-        parse(path)
+    farm = parse(path).properties[0]
+    assert len(farm.parcels) == farm.owner_count == 2
+    assert set(farm.parcels[0].owner_ids).isdisjoint(farm.parcels[1].owner_ids)
 
 
 def test_registration_complement_conflict_is_diagnosed(tmp_path):
@@ -303,15 +304,18 @@ def test_full_multi_owner_layout_reports_all_28_complement_rows(tmp_path):
                 "Matrículas": f"MAT-{index + 1}" if owner == 0 else None,
                 "Área (ha)": 10.25 if owner == 0 else None,
                 "Proprietário": f"Pessoa {owner}",
+                "CPF/CNPJ": f"00000000{owner:03d}",
                 "CCIR": f"CCIR-{index}" if owner == 0 else None,
             })
         merges.extend((key, first, first + 3) for key in ("Matrículas", "Área (ha)", "CCIR"))
     for index in range(3):
         rows.append({"Fazenda": "Fazenda 2", "Matrículas": f"MAT-{index + 10}",
-                     "Área (ha)": 10.25, "Proprietário": f"Pessoa {index + 4}"})
+                     "Área (ha)": 10.25, "Proprietário": f"Pessoa {index + 4}",
+                     "CPF/CNPJ": f"00000000{index + 4:03d}"})
     rows.extend((
-        {"Fazenda": "Fazenda 3", "Matrículas": "MAT-13", "Área (ha)": 10.25, "Proprietário": "Pessoa 7"},
-        {"Proprietário": "Pessoa 8"},
+        {"Fazenda": "Fazenda 3", "Matrículas": "MAT-13", "Área (ha)": 10.25,
+         "Proprietário": "Pessoa 7", "CPF/CNPJ": "00000000007"},
+        {"Proprietário": "Pessoa 8", "CPF/CNPJ": "00000000008"},
     ))
     merges.extend((("Fazenda", 1, 28), ("Fazenda", 29, 36), ("Fazenda", 37, 39),
                    ("Fazenda", 40, 41), ("Matrículas", 40, 41), ("Área (ha)", 40, 41)))
@@ -322,11 +326,11 @@ def test_full_multi_owner_layout_reports_all_28_complement_rows(tmp_path):
         workbook.active.cell(row, 10, "Anotação externa")
     workbook.save(path)
     before = sha256(path.read_bytes()).digest()
-    with pytest.raises(NeedsConfigurationError) as error:
-        parse(path)
-    assert len(error.value.diagnostics) == 11
-    assert sum("4 proprietários" in message for message in error.value.diagnostics) == 9
-    assert sum("2 proprietários" in message for message in error.value.diagnostics) == 1
-    assert sum("proprietários distintos" in message for message in error.value.diagnostics) == 1
-    assert len(error.value.warnings) == 4
+    parsed = parse(path)
+    assert len(parsed.properties) == 4
+    assert sum(len(f.parcels) for f in parsed.properties) == 13
+    assert len(parsed.owners) == 9
+    assert sum(len(p.owner_links) for f in parsed.properties for p in f.parcels) == 41
+    assert [f.owner_count for f in parsed.properties] == [4, 4, 3, 2]
+    assert len(parsed.warnings) == 4
     assert sha256(path.read_bytes()).digest() == before
