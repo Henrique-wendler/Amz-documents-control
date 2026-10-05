@@ -104,6 +104,38 @@ O template padrão usa o caminho do pacote; no modo frozen usa `sys._MEIPASS/ama
 
 ## Diretórios do código
 
+## BUILD WINDOWS
+
+Quem gera o pacote precisa de Windows x64, Python 3.12 x64 e Inno Setup. Execute
+na raiz do repositório:
+
+```powershell
+.\desktop\scripts\build_windows.ps1 -PrepareEnvironment -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -TestPdf
+```
+
+O comando gera `desktop/dist/AmazonAgroPropostas/AmazonAgroPropostas.exe` e
+`desktop/installer-output/AmazonAgroPropostas-Setup-0.1.0.exe`, com SHA-256.
+Versão central em `src/amazon_agro/version.py`. SQLAlchemy é construído em Python
+puro; configurações, bancos e logs continuam em LOCALAPPDATA. Excel/LibreOffice
+e Drive for Desktop permanecem opcionais e externos ao pacote.
+
+Preparação, testes, política de dados, ícone oficial pendente, assinatura e
+validação no segundo computador: [guia de build](packaging/README.md).
+
+## INSTALAÇÃO PARA USUÁRIO FINAL
+
+1. Execute `AmazonAgroPropostas-Setup-0.1.0.exe`.
+2. Avance com **Próximo**.
+3. Clique em **Instalar**.
+4. Abra **Amazon Agro Propostas** pelo Menu Iniciar.
+5. Conclua a configuração inicial; a pasta de imóveis pode ser escolhida depois.
+
+Não é necessário instalar Python nem ferramentas de desenvolvimento. A geração
+de PDF usa Excel ou LibreOffice quando disponível. Desinstalar preserva suas
+propostas e configurações em LOCALAPPDATA.
+
+## Estrutura do código
+
 - src/amazon_agro/app/: inicialização e composição
 - src/amazon_agro/domain/: entidades e validação do domínio
 - src/amazon_agro/services/: operações, validação e orquestração da exportação

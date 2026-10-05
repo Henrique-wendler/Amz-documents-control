@@ -1,0 +1,6 @@
+"""Canonical release identity used by the app, build and installer."""
+__version__ = "0.1.0"
+APP_NAME = "Amazon Agro Propostas"
+EXECUTABLE_NAME = "AmazonAgroPropostas"
+PUBLISHER = "Amazon Agro Consultoria e Projetos"
+APP_ID = "{3590E8D8-D4A1-4B90-A182-3E9E5B7D5FA8}"

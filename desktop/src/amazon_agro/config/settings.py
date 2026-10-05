@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+from amazon_agro.config.resources import resource_path
 
 
 def _template_labels() -> dict[str, dict[str, str]]:
@@ -95,9 +95,7 @@ class AppSettings:
 
     def template_path(self) -> Path:
         if not self.xlsx_template_path:
-            if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-                return Path(sys._MEIPASS) / "amazon_agro" / "templates" / "modelo_proposta.xlsx"
-            return Path(__file__).resolve().parents[1] / "templates" / "modelo_proposta.xlsx"
+            return resource_path("templates", "modelo_proposta.xlsx")
         path = Path(self.xlsx_template_path).expanduser()
         if path.is_absolute():
             return path
