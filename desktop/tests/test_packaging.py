@@ -1,8 +1,10 @@
 """Portable build-contract tests. No compiler or Office required for the suite."""
 import importlib.util
+from importlib import metadata
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -28,6 +30,42 @@ def test_release_identity_is_shared_and_version_is_dynamic():
     assert identity["version"] == __version__
     assert identity["app_id"] == APP_ID
     assert identity["executable"] == "AmazonAgroPropostas"
+
+
+def test_build_script_queries_sqlalchemy_version_through_powershell():
+    """Execute only the actual version assignment, never the packaging script."""
+    powershell = shutil.which("powershell.exe") if os.name == "nt" else None
+    if powershell is None:
+        pytest.skip("PowerShell is required for the Windows build-script regression")
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:AMAZON_AGRO_BUILD_SCRIPT, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count -ne 0) { throw 'Invalid build-script syntax.' }
+$assignments = $ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left.Extent.Text -eq '$sqlalchemyVersion'
+}, $true)
+if ($assignments.Count -ne 1) { throw 'Expected one SQLAlchemy version assignment.' }
+$PythonPath = $env:AMAZON_AGRO_TEST_PYTHON
+Invoke-Expression $assignments[0].Extent.Text
+if ($LASTEXITCODE -ne 0 -or -not $sqlalchemyVersion) {
+    throw 'SQLAlchemy version query failed.'
+}
+Write-Output $sqlalchemyVersion
+"""
+    environment = os.environ.copy()
+    environment["AMAZON_AGRO_BUILD_SCRIPT"] = str(DESKTOP / "scripts/build_windows.ps1")
+    environment["AMAZON_AGRO_TEST_PYTHON"] = sys.executable
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+        env=environment, capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == metadata.version("SQLAlchemy")
 
 
 def test_frozen_resources_ignore_current_directory(tmp_path, monkeypatch):

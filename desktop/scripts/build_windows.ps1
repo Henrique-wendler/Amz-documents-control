@@ -58,8 +58,10 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Could not create build venv.' }
         }
         Invoke-Python @('-m', 'pip', 'install', '-e', ($desktopRoot + '[dev,excel-com,packaging]'))
-        $sqlalchemyVersion = & $PythonPath -c 'import importlib.metadata; print(importlib.metadata.version("SQLAlchemy"))'
-        $previousCext = $env:DISABLE_SQLALCHEMY_CEXT
+$sqlalchemyVersion = (& $PythonPath -c "import importlib.metadata as metadata; print(metadata.version('SQLAlchemy'))").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $sqlalchemyVersion) {
+    throw 'Could not determine SQLAlchemy version.'}
+            $previousCext = $env:DISABLE_SQLALCHEMY_CEXT
         try {
             $env:DISABLE_SQLALCHEMY_CEXT = '1'
             Invoke-Python @('-m', 'pip', 'install', '--force-reinstall', '--no-binary=SQLAlchemy', '--no-cache-dir', ('SQLAlchemy==' + $sqlalchemyVersion))
