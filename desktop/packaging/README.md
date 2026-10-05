@@ -55,10 +55,13 @@ e registros do ambiente editable são omitidos. A lista de dados da aplicação
 permite somente o template autorizado e o ícone opcional. A auditoria verifica
 hash do template e recusa dados privados e extensões C opcionais do SQLAlchemy.
 
-Não há `.ico` oficial aprovado no repositório. O build usa o ícone genérico das
-ferramentas. Quando o ícone aprovado estiver disponível, coloque-o em
-`packaging/resources/AmazonAgro.ico`: será incluído na janela, EXE, Setup e
-atalhos. Nenhuma marca foi criada ou redesenhada.
+O ícone em `packaging/resources/AmazonAgro.svg` é **provisório**, pois não foi
+fornecido um asset oficial. `AmazonAgro.png` e `AmazonAgro.ico` são recursos
+derivados; o ICO inclui 16, 24, 32, 48, 64, 128 e 256 px. Depois de substituir
+o SVG por um ícone oficial, execute `packaging/resources/generate_icon.py` com
+o Python do ambiente de build e reconstrua o Setup. O mesmo ICO é aplicado à
+janela, barra de tarefas, EXE, Setup, Menu Iniciar, atalho opcional da Área de
+Trabalho e entrada de Adicionar/Remover Programas.
 
 O resolvedor usa o pacote em desenvolvimento e
 `sys._MEIPASS/amazon_agro` no executável. O template permanece somente leitura
@@ -157,6 +160,7 @@ de bibliotecas de terceiros, assinar o Setup final com timestamp e conferir
 `Get-AuthenticodeSignature`. Gere o SHA-256 **após** assinar. Não use certificado
 falso ou autoassinado para produção.
 
-O estado real desta execução está em `../STAGE5_VALIDATION.md`. Scripts e
-checklists descrevem o procedimento; não significam que a instalação ou o
-segundo computador já tenham sido validados.
+O histórico validado do Setup anterior está em `../STAGE5_VALIDATION.md`.
+O estado do novo ícone, das correções visuais e do gate de execução está em
+`../STAGE6_QA.md`. Scripts e checklists não substituem a validação real do
+aplicativo instalado em uma máquina que permita executar o pacote atual.

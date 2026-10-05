@@ -8,7 +8,7 @@ from openpyxl import load_workbook
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtTest import QTest, QSignalSpy
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QWizard
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QTabWidget, QWizard
 
 from amazon_agro.config.settings import AppSettings, default_data_dir
 from amazon_agro.domain.models import (
@@ -103,6 +103,40 @@ def test_summary_live_without_saving_and_uses_validator(ui):
     errors = window.export_validator.validate(window._collect()).errors
     assert all(error in window.summary.pending.text() for error in errors)
     assert "Informe a finalidade." in window.summary.pending.text()
+
+
+def test_summary_sections_and_status_follow_live_validation(ui):
+    window, app = ui
+    window.new_proposal()
+    app.processEvents()
+    assert window.summary.identification.text().startswith("Proposta:")
+    assert "Banco:" in window.summary.operation.text()
+    assert "Participantes (0)" in window.summary.items.text()
+    assert window.summary.status.property("ready") is False
+    fill(window)
+    app.processEvents()
+    assert window.summary.status.property("ready") is True
+    assert not window.summary.pending.isVisible()
+
+
+def test_settings_tabs_keep_a_light_readable_background(ui):
+    window, app = ui
+    assert window.steps.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    dialog = SettingsDialog(window.settings, window.catalog, window.sync_service, window)
+    dialog.show()
+    app.processEvents()
+    tabs = dialog.findChild(QTabWidget)
+    assert tabs is not None
+    assert tabs.widget(1).horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Geral", "Imóveis"]
+    for index in range(tabs.count()):
+        tabs.setCurrentIndex(index)
+        app.processEvents()
+        image = dialog.grab().toImage()
+        # Lower-right inside the tab pane is deliberately free of labels/controls.
+        color = image.pixelColor(min(700, image.width() - 40), min(360, image.height() - 80))
+        assert min(color.red(), color.green(), color.blue()) >= 210
+    dialog.close()
 
 
 def test_summary_tracks_participants_properties_and_removal(ui):

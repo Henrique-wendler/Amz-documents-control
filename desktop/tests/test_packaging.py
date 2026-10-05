@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import sys
 import tomllib
@@ -30,6 +31,29 @@ def test_release_identity_is_shared_and_version_is_dynamic():
     assert identity["version"] == __version__
     assert identity["app_id"] == APP_ID
     assert identity["executable"] == "AmazonAgroPropostas"
+
+
+def test_provisional_icon_contains_windows_sizes_and_is_wired_to_setup():
+    resources = DESKTOP / "packaging/resources"
+    svg = (resources / "AmazonAgro.svg").read_text(encoding="utf-8")
+    assert "<svg" in svg and "provisório" in svg
+    png = (resources / "AmazonAgro.png").read_bytes()
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    icon = (resources / "AmazonAgro.ico").read_bytes()
+    reserved, kind, count = struct.unpack_from("<HHH", icon)
+    assert (reserved, kind, count) == (0, 1, 7)
+    sizes = []
+    for index in range(count):
+        width, height, _, _, _, _, length, offset = struct.unpack_from(
+            "<BBBBHHII", icon, 6 + 16 * index
+        )
+        sizes.append((width or 256, height or 256))
+        assert icon[offset:offset + length].startswith(b"\x89PNG\r\n\x1a\n")
+    assert sizes == [(size, size) for size in (16, 24, 32, 48, 64, 128, 256)]
+    installer = (DESKTOP / "packaging/AmazonAgroPropostas.iss").read_text(encoding="utf-8")
+    assert "SetupIconFile={#AppIcon}" in installer
+    assert "UninstallDisplayIcon={app}\\{#ExeName}.exe" in installer
+    assert installer.count('IconFilename: "{app}\\{#ExeName}.exe"') == 2
 
 
 def test_build_script_queries_sqlalchemy_version_through_powershell():

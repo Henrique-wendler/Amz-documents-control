@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
     QListWidget, QMainWindow, QMessageBox, QPushButton, QScrollArea,
@@ -57,7 +57,10 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
+        outer.setContentsMargins(14, 10, 14, 10)
+        outer.setSpacing(10)
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(9)
         brand = QLabel("Amazon Agro\nGerador de Propostas")
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
@@ -89,6 +92,8 @@ class MainWindow(QMainWindow):
         welcome.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
         for label, callback in (("+ Criar proposta", self.new_proposal), ("Abrir proposta existente", self.open_proposal)):
             button = QPushButton(label)
+            if label.startswith("+"):
+                button.setObjectName("primary")
             button.clicked.connect(callback)
             button.setMaximumWidth(300)
             welcome.addWidget(button, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -97,10 +102,14 @@ class MainWindow(QMainWindow):
         editor = QWidget()
         edit_layout = QVBoxLayout(editor)
         edit_layout.setContentsMargins(0, 0, 0, 0)
+        edit_layout.setSpacing(9)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.steps = QListWidget()
+        self.steps.setObjectName("proposalSteps")
+        self.steps.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.steps.addItems(self.STEPS)
         self.steps.setMinimumWidth(155)
+        self.steps.setMaximumWidth(210)
         self.splitter.addWidget(self.steps)
         self.stack = QStackedWidget()
         self.operation_page = OperationPage(settings)
@@ -115,25 +124,29 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.stack)
         self.summary = ProposalSummaryPanel()
         self.summary_scroll = self._scroll(self.summary)
-        self.summary_scroll.setMinimumWidth(240)
+        self.summary_scroll.setMinimumWidth(260)
         self.splitter.addWidget(self.summary_scroll)
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, False)
         self.splitter.setCollapsible(2, True)
-        self.splitter.setSizes([190, 720, 340])
-        for i, stretch in enumerate((15, 58, 27)):
+        self.splitter.setSizes([180, 740, 330])
+        for i, stretch in enumerate((14, 59, 27)):
             self.splitter.setStretchFactor(i, stretch)
         edit_layout.addWidget(self.splitter, 1)
         navigation = QHBoxLayout()
-        self.summary_toggle = QPushButton("Recolher resumo")
-        self.summary_toggle.clicked.connect(self.toggle_summary)
-        navigation.addWidget(self.summary_toggle)
-        navigation.addStretch()
+        navigation.setSpacing(8)
         for label, delta in (("Anterior", -1), ("Próximo", 1)):
             button = QPushButton(label)
+            if delta == 1:
+                button.setObjectName("primary")
             button.clicked.connect(lambda _checked=False, offset=delta: self.steps.setCurrentRow(
                 max(0, min(len(self.STEPS) - 1, self.steps.currentRow() + offset))))
             navigation.addWidget(button)
+        navigation.addStretch()
+        self.summary_toggle = QPushButton("← Recolher resumo")
+        self.summary_toggle.setToolTip("Mostrar ou ocultar o resumo da proposta")
+        self.summary_toggle.clicked.connect(self.toggle_summary)
+        navigation.addWidget(self.summary_toggle)
         edit_layout.addLayout(navigation)
         self.workspace.addWidget(editor)
         self.refresh_timer = QTimer(self)
@@ -177,7 +190,7 @@ class MainWindow(QMainWindow):
         self.summary_scroll.setVisible(not visible)
         if not visible:
             self.splitter.setSizes([190, max(440, self.width() - 530), 300])
-        self.summary_toggle.setText("Mostrar resumo" if visible else "Recolher resumo")
+        self.summary_toggle.setText("Mostrar resumo →" if visible else "← Recolher resumo")
 
     def _collect(self) -> Proposal:
         proposal = deepcopy(self.current)
@@ -199,6 +212,9 @@ class MainWindow(QMainWindow):
         self.summary.update_proposal(proposal, validation)
         self.review_page.set_validation_errors(validation.errors)
         self.badge.setText("Com pendências" if not validation.ok else "Pronta para gerar")
+        self.badge.setProperty("ready", validation.ok)
+        self.badge.style().unpolish(self.badge)
+        self.badge.style().polish(self.badge)
         for index, name in enumerate(self.STEPS):
             if index == self.steps.currentRow():
                 state = "Atual"
@@ -208,7 +224,12 @@ class MainWindow(QMainWindow):
                 state = "Com pendência"
             else:
                 state = "Completa"
-            self.steps.item(index).setText(f"{index + 1}. {name}\n{state}")
+            item = self.steps.item(index)
+            item.setText(f"{index + 1}. {name}\n{state}")
+            item.setForeground(QColor({
+                "Atual": "#20563b", "Completa": "#38664b",
+                "Com pendência": "#8a4d17", "Não visitada": "#637068",
+            }[state]))
         if self.steps.currentRow() == 4:
             self.review_page.load(proposal)
 

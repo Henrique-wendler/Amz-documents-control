@@ -83,6 +83,7 @@ def main() -> int:
         window = MainWindow(
             service, settings, export_service, validator, properties, sync_service
         )
+        window.setWindowIcon(app.windowIcon())
         window.show()
         if smoke_options:
             smoke_driver = SmokeDriver(window, smoke_options, app)

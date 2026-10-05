@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Amazon Agro Propostas — ícone provisório</title>
+  <rect x="8" y="8" width="240" height="240" rx="50" fill="#20563b"/>
+  <path d="M70 42h83l37 37v130c0 7-6 13-13 13H70c-7 0-13-6-13-13V55c0-7 6-13 13-13z" fill="#ffffff"/>
+  <path d="M153 42v35c0 6 5 11 11 11h26z" fill="#cfe3d1"/>
+  <path d="M83 173h82M83 190h64" stroke="#c5d9c8" stroke-width="9" stroke-linecap="round"/>
+  <path d="M122 151c1-28 11-48 31-63" fill="none" stroke="#20563b" stroke-width="10" stroke-linecap="round"/>
+  <path d="M123 138c-31 3-44-10-42-34 21-7 42 4 42 34z" fill="#63a568"/>
+  <path d="M134 112c-1-27 12-43 38-44 5 22-8 40-38 44z" fill="#2c7a48"/>
+</svg>

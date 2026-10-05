@@ -50,8 +50,8 @@ Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDesc
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#ExeName}.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\{#ExeName}.exe"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#ExeName}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\{#ExeName}.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#ExeName}.exe"; Description: "Abrir {#AppName}"; Flags: nowait postinstall skipifsilent

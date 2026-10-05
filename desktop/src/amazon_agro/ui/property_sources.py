@@ -38,6 +38,7 @@ class PropertySourcesPage(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         folder_row = QHBoxLayout()
         self.directory = QLineEdit(settings.property_source_directory)
         self.directory.setPlaceholderText("Pasta sincronizada pelo Google Drive for Desktop")

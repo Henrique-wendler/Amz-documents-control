@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QDialog, QFormLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
     QScrollArea, QTabWidget, QVBoxLayout, QWidget,
 )
+from PySide6.QtCore import Qt
 
 from amazon_agro.ui.onboarding import FirstRunWizard, FolderField, folder_row
 from amazon_agro.ui.property_sources import PropertySourcesPage
@@ -20,7 +21,9 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
         general = QWidget()
-        form = QFormLayout(general)
+        general.setObjectName("settingsPage")
+        general_layout = QVBoxLayout(general)
+        form = QFormLayout()
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.output = FolderField(str(settings.output_dir()))
         self.city = QLineEdit(settings.default_city)
@@ -37,10 +40,14 @@ class SettingsDialog(QDialog):
         self.repeat = QPushButton("Executar configuração inicial novamente")
         self.repeat.clicked.connect(self.run_wizard)
         form.addRow(self.repeat)
+        general_layout.addLayout(form)
+        general_layout.addStretch()
         tabs.addTab(general, "Geral")
         self.sources = PropertySourcesPage(settings, catalog, sync)
+        self.sources.setObjectName("settingsPage")
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(self.sources)
         tabs.addTab(scroll, "Imóveis")
         layout.addWidget(tabs)
