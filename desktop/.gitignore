@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 *.pyc
 build/
+.build-work/
 dist/
 installer-output/
 logs/

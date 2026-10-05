@@ -1,6 +1,6 @@
 # Etapa 6A — QA visual e funcional do Amazon Agro Propostas
 
-**Status em 05/10/2026: NÃO CONCLUÍDA; NO-GO para o novo pacote.** A correção visual e o ícone provisório estão no código, mas a política de Controle de Aplicativo deste Windows bloqueou o novo EXE não assinado antes do smoke. Por isso, o fluxo manual no aplicativo instalado e a geração de um novo Setup não puderam ser aceitos. As evidências da Etapa 5 continuam válidas somente para o Setup anterior.
+**Estado após a Etapa 6B em 05/10/2026: RC não assinada gerada; PACKAGE QA = BLOCKED/PENDING; NO-GO para piloto.** A seção 6A abaixo preserva o resultado histórico daquela tentativa, quando App Control bloqueou o EXE. A seção 6B no fim do documento registra o build e smoke posteriores. Nenhuma execução instalada da RC foi aceita.
 
 ## Ambiente e versão
 
@@ -63,3 +63,35 @@ Continuam `BUSINESS_DECISION_PENDING`: várias matrículas no documento final; l
 | Diretório antigo de build com acesso de remoção negado | MEDIUM de infraestrutura | Aberto; build isolado e auditado funcionou, script padrão continua bloqueado nesse diretório |
 
 **NO-GO para piloto do novo pacote da Etapa 6A.** Faltam smoke do EXE, Setup reconstruído, instalação e fluxo manual completo da versão alterada. O Setup anterior continua não assinado e não contém estas correções. Máquinas que exigem publisher/certificado confiável permanecem fora da aceitação até assinatura Authenticode; não se deve desativar a política para obter um resultado positivo.
+
+## Etapa 6B — release candidate não assinada
+
+O modo explícito `-AllowUnsignedRcWhenSmokeBlocked` mantém o gate normal sem a flag. Ele permite seguir ao Inno Setup **somente** quando `Start-Process` não devolve processo e a exceção contém evidência específica de bloqueio por política. Nesse caso registra `SMOKE_BLOCKED_BY_POLICY` e tenta coletar eventos Code Integrity 3033/3077 quando disponíveis. Crash, erro de importação, Qt, template, SQLAlchemy, timeout e relatório de smoke inválido continuam falhando. O teste de regressão exercita as duas rotas e um erro comum.
+
+O build RC utiliza uma pasta exclusiva em `desktop/.build-work/`, dentro do projeto, sem limpar o `desktop/build/pytest` antigo nem remover o Setup validado anterior. No primeiro ensaio, um teste de substituição de arquivo temporário teve `WinError 5` nessa pasta; a repetição em outra pasta isolada passou integralmente. Classificação: **MEDIUM de infraestrutura, mitigado por isolamento, com uma falha transitória ainda a observar**. Não houve alteração de permissões ou exclusão de diretórios do usuário.
+
+| Verificação do primeiro build 6B, antes do commit | Resultado histórico |
+|---|---|
+| `pytest` | **264 passed**; 259 anteriores preservados e cinco testes de release adicionados |
+| `npm run build` | PASS |
+| `git diff --check` | PASS |
+| PyInstaller ONEDIR | PASS |
+| Auditoria estática | PASS; 222 arquivos, template inalterado, sem dados reais no pacote |
+| Ícone | Presente no recurso empacotado; spec, Inno, janela e atalhos verificados estaticamente. Aparência instalada pendente. |
+| Smoke do EXE desta execução | **PASS**: `ok=true`, `frozen=true`, `xlsx_ok=true`, `pdf_ok=true`, backend `Excel COM`, nenhum processo Excel novo remanescente, SQLite íntegro |
+| Bloqueio anterior por App Control | Permanece documentado: `Start-Process` informou “Uma política de Controle de Aplicativo bloqueou este arquivo.” Nenhuma proteção foi alterada. |
+| Setup RC | Gerado; `AmazonAgroPropostas-Setup-0.1.0-unsigned-rc.exe`, **39.452.435 bytes** |
+| SHA-256 da RC anterior ao commit | `5599AF5913E7CBB5F622EF854D26037AF47BFA9C7F7CFCEA26B34C3449D24527` |
+| Authenticode | EXE e Setup RC: `NotSigned` |
+| Manifesto | `AmazonAgroPropostas-Setup-0.1.0-unsigned-rc.manifest.json` com `release_type=UNSIGNED_RC`, `signed=false`, `smoke_status=PASS`, 264 testes, build/auditoria PASS, commit base, SHA e horário |
+| Setup anterior | Preservado com SHA-256 `F4C9D01803459EFD5BC645BEF2437715864A4E4A6097B93ED2BAE4B6CAEE2AC7` |
+
+O manifesto daquele build registra `smoke_status=PASS` porque **a tentativa final realmente passou**. Não se substituiu esse fato pelo bloqueio da tentativa anterior. O campo `git_commit` identifica o commit base `c4104a7c77bd6981024dc54842554a6168597c83`; as alterações 6B estavam não commitadas no momento do build. Esse artefato fica registrado apenas como evidência histórica e deve ser substituído pelo build do HEAD limpo antes do QA externo.
+
+### Consolidação Git antes do QA externo
+
+A Etapa 6A já foi commitada em `c4104a7c77bd6981024dc54842554a6168597c83`. A consolidação 6B inclui somente `.gitignore`, este relatório, `packaging/AmazonAgroPropostas.iss`, `packaging/README.md`, `packaging/UNSIGNED_RC_QA.md`, `scripts/build_windows.ps1` e `tests/test_release_rc.py`. Build, distribuição, instaladores, bancos, planilhas reais, logs e dados pessoais permanecem fora do commit. O template do aplicativo já versionado não foi alterado.
+
+O procedimento de entrega exige reexecutar os testes, `npm run build` e `git diff --check`, fazer o commit local, confirmar `git status --porcelain` vazio e reconstruir a RC desse HEAD. O novo `.manifest.json` e o `.exe.sha256`, gerados fora do Git, são a referência da entrega: o `git_commit` deve corresponder exatamente ao HEAD usado e o SHA-256 deve corresponder ao novo Setup. Para esta entrega, os valores exigidos são `release_type=UNSIGNED_RC`, `signed=false` e `smoke_status=PASS`. O commit completo e o novo hash são informados junto aos artefatos, sem editar arquivos versionados depois do build. Não há push nesta consolidação.
+
+**PACKAGE QA = BLOCKED/PENDING.** A RC ainda precisa ser instalada e testada manualmente em outro Windows permissivo, conforme [roteiro de QA externo](packaging/UNSIGNED_RC_QA.md). Permanecem pendentes aparência real do ícone e Configurações, salvar/fechar/reabrir/editar, XLSX, PDF, ambos, pasta local do Google Drive for Desktop, reinstalação, desinstalação e preservação de `LOCALAPPDATA`. O smoke e o Setup não transformam os casos manuais bloqueados da 6A em PASS. **NO-GO para piloto** até essas verificações e a ausência de defeitos BLOCKER/HIGH.

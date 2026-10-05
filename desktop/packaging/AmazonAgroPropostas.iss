@@ -8,6 +8,9 @@
 #ifndef InstallerOutput
   #error InstallerOutput is required.
 #endif
+#ifndef InstallerSuffix
+  #define InstallerSuffix ""
+#endif
 
 [Setup]
 AppId={#InstallerAppId}
@@ -21,7 +24,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#ExeName}.exe
 OutputDir={#InstallerOutput}
-OutputBaseFilename={#ExeName}-Setup-{#AppVersion}
+OutputBaseFilename={#ExeName}-Setup-{#AppVersion}{#InstallerSuffix}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

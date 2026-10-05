@@ -37,6 +37,39 @@ Saídas:
 - o arquivo `.exe.sha256` correspondente
 - `desktop/build/distribution-manifest.json` e `desktop/build/smoke-onedir/report.json`
 
+### Release candidate não assinada para QA externo
+
+Quando **somente o início do EXE** for bloqueado por Windows App Control neste
+computador, use o modo explícito abaixo. Ele não altera nem contorna a política:
+
+```powershell
+.\desktop\scripts\build_windows.ps1 -AllowUnsignedRcWhenSmokeBlocked -IsccPath "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" -TestPdf
+```
+
+O modo executa `pytest`, `npm run build`, `git diff --check`, PyInstaller e a
+auditoria estática. Ele tenta o smoke normalmente. Apenas uma falha de
+`Start-Process` com evidência específica de bloqueio por política recebe o
+estado `SMOKE_BLOCKED_BY_POLICY`; crash, importação, Qt, template, SQLAlchemy,
+timeout e relatório de smoke inválido continuam impedindo o Setup. O modo
+normal, sem essa opção, sempre exige smoke aprovado.
+
+O resultado é `desktop/installer-output/AmazonAgroPropostas-Setup-0.1.0-unsigned-rc.exe`,
+acompanhado de `.sha256` e `.manifest.json`. O manifesto registra o resultado
+real do smoke e **não é uma aprovação de QA**. O Setup continua sem assinatura;
+teste a RC somente em uma máquina autorizada a executar software não assinado.
+O build da RC usa uma pasta nova em `desktop/.build-work/` para não tocar nos
+artefatos antigos. Se uma limpeza do build normal falhar especificamente por
+permissão, ele também recorre a essa pasta isolada, sem apagar diretórios do
+usuário. O Setup anterior permanece em `installer-output` com seu nome normal.
+
+Antes de gerar a RC para transferência, valide e commite somente fontes,
+documentação e testes. Confirme que `git status --porcelain` está vazio antes
+do build e depois dele. Compare o `git_commit` do novo manifesto com
+`git rev-parse HEAD` e o `sha256` com o hash do Setup. Um build feito com
+alterações não commitadas deve ser reconstruído após o commit; o hash do
+artefato anterior não identifica essa nova entrega. Neste fechamento da 6B,
+o smoke deve passar e o manifesto deve registrar `smoke_status=PASS`.
+
 O diretório inteiro da distribuição é necessário para executar o EXE fora do
 instalador. Não copie apenas o executável. Os artefatos gerados não são versionados.
 
