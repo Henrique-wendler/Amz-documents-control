@@ -118,7 +118,11 @@ def test_ui_requires_missing_information_and_reuses_it(tmp_path, monkeypatch):
     proposals = SQLiteProposalRepository(tmp_path / "proposals.sqlite3")
     page = PropertiesPage(ProposalService(proposals, catalog), settings)
     page.results.setCurrentCell(0, 0)
-    monkeypatch.setattr(PropertyDetailsDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    def select_parcels(self):
+        from PySide6.QtCore import Qt
+        self._set_all(Qt.CheckState.Checked)
+        return QDialog.DialogCode.Accepted
+    monkeypatch.setattr(PropertyDetailsDialog, "exec", select_parcels)
     calls = []
     def complete(self):
         calls.append(self.property_item.external_id)

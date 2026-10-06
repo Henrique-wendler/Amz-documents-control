@@ -153,10 +153,13 @@ class ParticipantsPage(QWidget):
             row, 1, QTableWidgetItem(participant.cpf_cnpj if participant else "")
         )
         kind = QComboBox()
+        kind.addItem("Selecione o tipo (provisório)", None)
         for value, label in PARTICIPANT_LABELS.items():
             kind.addItem(f"{int(value)} — {label}", int(value))
         if participant:
-            kind.setCurrentIndex(kind.findData(int(participant.tipo)))
+            kind.setCurrentIndex(kind.findData(int(participant.tipo) if participant.tipo is not None else None))
+        else:
+            kind.setCurrentIndex(kind.findData(int(ParticipantType.MAIN_ISSUER)))
         self.table.setCellWidget(row, 2, kind)
         kind.currentIndexChanged.connect(self.changed)
         self.table.selectRow(row)
@@ -189,7 +192,7 @@ class ParticipantsPage(QWidget):
                 proposal_id=proposal_id,
                 nome=name_item.text().strip(),
                 cpf_cnpj=tax_item.text().strip(),
-                tipo=ParticipantType(kind.currentData()),
+                tipo=ParticipantType(kind.currentData()) if kind.currentData() is not None else None,
             ))
         return participants
 

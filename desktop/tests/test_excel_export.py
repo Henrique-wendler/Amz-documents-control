@@ -104,7 +104,7 @@ def test_xlsx_integration_fills_mapped_cells_and_preserves_template(tmp_path) ->
     assert sheet["I28"].value == "MAT-001"
     assert sheet["K28"].value == 1
     assert sheet["K29"].value == 2
-    assert sheet["A32"].value == "1 - GARANTIA"
+    assert sheet["A32"].value == "1 - HIPOTECA"
     assert sheet["A33"].value is None
     assert sheet["A34"].value == "TÉCNICO RESPONSÁVEL: Maria Técnica"
     assert sheet["A35"].value == "Palmas, 29 de setembro de 2026"
@@ -194,16 +194,21 @@ def test_xlsx_keeps_recursos_proprios_as_indicator_without_monetary_footer(tmp_p
     )
 
 
-def test_xlsx_rejects_more_than_four_properties(tmp_path) -> None:
+def test_xlsx_paginates_more_than_four_properties(tmp_path) -> None:
+    from amazon_agro.domain.models import ProposalPropertyParcel
     proposal = filled_proposal()
     proposal.properties = [
-        ProposalProperty(proposal.id, f"X-{index}", PropertyClassification.CLASS_1)
+        ProposalProperty(proposal.id, f"X-{index}", PropertyClassification.CLASS_1,
+                         property_name_snapshot=f"Farm {index}",
+                         selected_parcels=[ProposalPropertyParcel(f"P-{index}", f"MAT-{index}")])
         for index in range(5)
     ]
-    with pytest.raises(ValueError, match="até 4 imóveis"):
-        OpenpyxlExcelProposalExporter(
-            AppSettings(), FakePropertyRepository()
-        ).export(proposal, tmp_path / "overflow.xlsx")
+    path = OpenpyxlExcelProposalExporter(
+        AppSettings(), FakePropertyRepository()
+    ).export(proposal, tmp_path / "overflow.xlsx")
+    sheet = load_workbook(path).active
+    assert sheet["I44"].value == "MAT-4"
+    assert len(sheet.row_breaks.brk) == 1
 
 
 

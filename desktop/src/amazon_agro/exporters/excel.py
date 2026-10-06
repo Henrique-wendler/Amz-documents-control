@@ -14,6 +14,7 @@ from amazon_agro.exporters.excel_map import (
     PARTICIPANT_ROWS, PROPERTY_COLUMNS, PROPERTY_ROWS, TEMPLATE_MARKERS,
 )
 from amazon_agro.exporters.formatting import format_brl, format_date_pt_br
+from amazon_agro.exporters.excel_pagination import property_page_rows
 from amazon_agro.repositories.contracts import PropertyRepository
 
 
@@ -63,8 +64,6 @@ class OpenpyxlExcelProposalExporter:
             raise ValueError(
                 f"O modelo suporta até {len(PARTICIPANT_ROWS)} participantes."
             )
-        if len(proposal.properties) > len(PROPERTY_ROWS):
-            raise ValueError(f"O modelo suporta até {len(PROPERTY_ROWS)} imóveis.")
         template = self.settings.template_path()
         destination = Path(destination)
         if not template.is_file():
@@ -140,23 +139,29 @@ class OpenpyxlExcelProposalExporter:
         labels = self.settings.classification_labels("xlsx")
         for code, address in CLASSIFICATION_LEGEND_CELLS.items():
             sheet[address] = f"{code} - {labels[code]}"
-        for row, link in zip(PROPERTY_ROWS, proposal.properties, strict=False):
-            if len(link.selected_parcels) > 1:
-                raise ValueError("Exportação de múltiplas matrículas ainda pendente.")
-            if link.property_name_snapshot and len(link.selected_parcels) == 1:
-                name = link.property_name_snapshot
-                municipality = link.municipality_snapshot
-                registration = link.selected_parcels[0].registration_snapshot
+        lines = []
+        for link in proposal.properties:
+            if link.property_name_snapshot and link.selected_parcels:
+                lines.extend((
+                    link.property_name_snapshot, link.municipality_snapshot,
+                    parcel.registration_snapshot, parcel.classificacao,
+                ) for parcel in link.selected_parcels)
             else:
                 property_item = self.properties.get_by_external_id(link.property_external_id)
                 if property_item is None or isinstance(property_item, RuralProperty):
                     raise ValueError(
                         f"Imóvel {link.property_external_id} sem snapshot exportável."
                     )
-                name = property_item.nome
-                municipality = property_item.municipio
-                registration = property_item.matricula
+                lines.append((property_item.nome, property_item.municipio,
+                              property_item.matricula, link.classificacao))
+        pages = property_page_rows(sheet, len(lines))
+        for row in (row for page in pages for row in page):
+            for column in PROPERTY_COLUMNS:
+                sheet[f"{column}{row}"] = None
+        for row, (name, municipality, registration, classification) in zip(
+            (row for page in pages for row in page), lines, strict=False,
+        ):
             sheet[f"A{row}"] = name
             sheet[f"E{row}"] = municipality
             sheet[f"I{row}"] = registration
-            sheet[f"K{row}"] = int(link.classificacao.value)
+            sheet[f"K{row}"] = int(classification.value)

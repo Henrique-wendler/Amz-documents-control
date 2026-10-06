@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from amazon_agro.config.settings import AppSettings
+
 from amazon_agro.domain.models import (
-    Proposal, ProposalPropertyParcel, Property, PropertyLocalEnrichment, RuralProperty,
+    Participant, Proposal, ProposalPropertyParcel, Property, PropertyLocalEnrichment, RuralProperty,
 )
 from amazon_agro.repositories.contracts import (
     PropertyRepository, ProposalRepository, ProposalSummary,
@@ -18,6 +20,17 @@ class ProposalService:
         self._proposals = proposals
         self._properties = properties
         self._search = PropertySearchService(properties)
+
+    def new_proposal(self, settings: AppSettings) -> Proposal:
+        proposal = Proposal(
+            banco=settings.banks[0] if settings.banks else "",
+            cidade=settings.default_city, tecnico=settings.default_technician,
+        )
+        proposal.participants.append(Participant(
+            proposal.id, settings.default_consultancy_name,
+            settings.default_consultancy_document, tipo=None,
+        ))
+        return proposal
 
     def save(self, proposal: Proposal) -> None:
         proposal.validate()
@@ -37,6 +50,7 @@ class ProposalService:
                 link.selected_parcels = [ProposalPropertyParcel(
                     parcel_external_id=f"legacy:{property_item.external_id}:{property_item.matricula}",
                     registration_snapshot=property_item.matricula,
+                    classificacao=link.classificacao,
                 )]
         proposal.updated_at = datetime.now(timezone.utc)
         self._proposals.save(proposal)

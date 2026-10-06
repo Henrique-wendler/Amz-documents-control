@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from amazon_agro.config.settings import AppSettings
 from amazon_agro.domain.models import Proposal, RuralProperty
-from amazon_agro.exporters.excel_map import PARTICIPANT_ROWS, PROPERTY_ROWS
+from amazon_agro.exporters.excel_map import PARTICIPANT_ROWS
 from amazon_agro.repositories.contracts import PropertyRepository
 
 
@@ -59,24 +59,12 @@ class ProposalExportValidator:
                 f"O modelo suporta até {len(PARTICIPANT_ROWS)} participantes; "
                 f"a proposta possui {len(proposal.participants)}."
             )
-        if len(proposal.properties) > len(PROPERTY_ROWS):
-            pending_steps.add(3)
-            errors.append(
-                f"O modelo suporta até {len(PROPERTY_ROWS)} imóveis; "
-                f"a proposta possui {len(proposal.properties)}."
-            )
         if not self.settings.template_path().is_file():
             errors.append(
                 f"Template XLSX não encontrado: {self.settings.template_path()}"
             )
         for link in proposal.properties:
-            if len(link.selected_parcels) > 1:
-                pending_steps.add(3)
-                errors.append(
-                    "A exportação de fazenda com várias matrículas selecionadas "
-                    "depende de regra de negócio ainda pendente."
-                )
-            elif link.property_name_snapshot and link.selected_parcels:
+            if link.property_name_snapshot and link.selected_parcels:
                 continue
             else:
                 property_item = self.properties.get_by_external_id(link.property_external_id)

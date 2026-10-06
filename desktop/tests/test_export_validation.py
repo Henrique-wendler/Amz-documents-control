@@ -35,7 +35,7 @@ def test_validator_does_not_invent_bank_specific_requirements() -> None:
 
 def test_template_specific_classification_labels() -> None:
     settings = AppSettings()
-    assert settings.classification_labels("xlsx")["1"] == "GARANTIA"
+    assert settings.classification_labels("xlsx")["1"] == "HIPOTECA"
     assert settings.classification_labels("docx")["1"] == "HIPOTECA"
     assert PropertyClassification.CLASS_1.value == "1"
 
@@ -53,7 +53,7 @@ def test_validator_enforces_template_capacity() -> None:
         AppSettings(), FakePropertyRepository()
     ).validate(proposal)
     assert any("até 7 participantes" in error for error in result.errors)
-    assert any("até 4 imóveis" in error for error in result.errors)
+    assert not any("até 4 imóveis" in error for error in result.errors)
 
 
 def test_template_path_relative_to_config_file(tmp_path) -> None:

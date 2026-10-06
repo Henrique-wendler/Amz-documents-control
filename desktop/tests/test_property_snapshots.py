@@ -71,12 +71,12 @@ def test_multiple_selected_registrations_round_trip_in_proposal_snapshot(tmp_pat
     assert reopened.properties[0].property_name_snapshot == "Fazenda Exemplo"
     with repository.engine.connect() as connection:
         assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
-    assert any("regra de negócio" in error for error in
-               ProposalExportValidator(settings, catalog).validate(reopened).errors)
-    with pytest.raises(ValueError, match="múltiplas matrículas"):
-        OpenpyxlExcelProposalExporter(settings, catalog).export(
-            reopened, tmp_path / "blocked.xlsx"
-        )
+    assert ProposalExportValidator(settings, catalog).validate(reopened).ok
+    output = OpenpyxlExcelProposalExporter(settings, catalog).export(
+        reopened, tmp_path / "selected.xlsx"
+    )
+    sheet = load_workbook(output).active
+    assert [sheet[f"I{row}"].value for row in (28, 29)] == ["MAT-1", "MAT-2"]
     catalog.close()
     repository.engine.dispose()
 

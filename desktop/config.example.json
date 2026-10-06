@@ -12,19 +12,21 @@
   "property_file_profiles": {},
   "default_output_dir": "",
   "default_city": "Palmas",
+  "default_consultancy_name": "Amazon Agro Consultoria e Projetos LTDA",
+  "default_consultancy_document": "",
   "technicians": [],
   "banks": ["Banco da Amazônia"],
   "agencies": [],
   "statuses": [],
   "awaiting_options": [],
   "property_classifications": {
-    "1": "Classe 1 — Garantia/Hipoteca (confirmar)",
+    "1": "Hipoteca",
     "2": "Objeto de crédito",
     "3": "Alienação fiduciária"
   },
   "property_classification_labels": {
     "xlsx": {
-      "1": "GARANTIA",
+      "1": "HIPOTECA",
       "2": "OBJETO DE CRÉDITO",
       "3": "ALIENAÇÃO FIDUCIÁRIA"
     },

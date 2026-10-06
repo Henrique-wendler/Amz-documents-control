@@ -4,6 +4,7 @@ import sqlite3
 from hashlib import sha256
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from amazon_agro.config.settings import AppSettings
@@ -178,7 +179,9 @@ def test_owner_ui_shows_all_members_and_masks_documents(tmp_path, monkeypatch):
             document = f"00000000{index:03d}"
             assert f"Pessoa Exemplo {index}" in text
             assert document not in text and mask_document(document) in text
-        assert dialog.table.rowCount() == 1 and dialog.table.columnCount() == 5
+        assert dialog.table.rowCount() == 1 and dialog.table.columnCount() == 6
+        assert dialog.selected_parcels() == []
+        dialog._set_all(Qt.CheckState.Checked)
         assert dialog.selected_parcels() == farm.parcels
         assert dialog.table.rowHeight(0) >= 4 * dialog.table.fontMetrics().height()
     finally:

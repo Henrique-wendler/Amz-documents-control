@@ -45,7 +45,7 @@ class Participant:
     proposal_id: str
     nome: str = ""
     cpf_cnpj: str = ""
-    tipo: ParticipantType = ParticipantType.MAIN_ISSUER
+    tipo: ParticipantType | None = ParticipantType.MAIN_ISSUER
     id: str = field(default_factory=new_id)
 
 
@@ -145,19 +145,27 @@ class ProposalPropertyParcel:
     previous_registration_snapshot: str = ""
     area_snapshot: Decimal | None = None
     lot_description_snapshot: str = ""
+    classificacao: PropertyClassification | None = None
 
 
 @dataclass(slots=True)
 class ProposalProperty:
     proposal_id: str
     property_external_id: str
-    classificacao: PropertyClassification
+    # Legacy farm-level value: only a fallback for pre-parcel snapshots.
+    classificacao: PropertyClassification | None
     property_name_snapshot: str = ""
     municipality_snapshot: str = ""
     state_snapshot: str = ""
     source_file_snapshot: str = ""
     owner_name_snapshot: str = ""
     selected_parcels: list[ProposalPropertyParcel] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Interpret legacy in-memory snapshots once, before later draft edits.
+        for parcel in self.selected_parcels:
+            if parcel.classificacao is None and self.classificacao is not None:
+                parcel.classificacao = self.classificacao
 
 
 @dataclass(slots=True)
@@ -231,7 +239,7 @@ class Proposal:
         for link in self.properties:
             if link.proposal_id != self.id or not link.property_external_id.strip():
                 raise ValueError("Referência inválida em imóvel.")
-            if not isinstance(link.classificacao, PropertyClassification):
+            if not link.selected_parcels and not isinstance(link.classificacao, PropertyClassification):
                 raise ValueError("Classificação de imóvel inválida.")
             if link.property_external_id in property_ids:
                 raise ValueError("Imóvel duplicado na proposta.")
@@ -241,5 +249,7 @@ class Proposal:
                     raise ValueError("Matrícula duplicada ou sem ID na proposta.")
                 if not parcel.registration_snapshot.strip():
                     raise ValueError("Matrícula selecionada sem número no snapshot.")
+                if not isinstance(parcel.classificacao, PropertyClassification):
+                    raise ValueError("Classificação de matrícula inválida.")
                 parcel_ids.add(parcel.parcel_external_id)
             property_ids.add(link.property_external_id)

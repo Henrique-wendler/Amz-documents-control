@@ -67,9 +67,13 @@ class PropertyLocalEnrichmentDialog(QDialog):
 
 
 class PropertyDetailsDialog(QDialog):
-    def __init__(self, property_item: RuralProperty, parent: QWidget | None = None) -> None:
+    def __init__(self, property_item: RuralProperty, parent: QWidget | None = None, *,
+                 settings: AppSettings | None = None,
+                 selected: list[ProposalPropertyParcel] | None = None) -> None:
         super().__init__(parent)
         self.property_item = property_item
+        self.settings = settings or AppSettings()
+        saved = {parcel.parcel_external_id: parcel for parcel in selected or []}
         self.setWindowTitle("Detalhes da fazenda")
         self.resize(900, 460)
         layout = QVBoxLayout(self)
@@ -82,9 +86,10 @@ class PropertyDetailsDialog(QDialog):
             f"CCIR: {property_item.ccir or '—'}  |  "
             f"ITR: {property_item.itr or '—'}  |  CAR: {property_item.car or '—'}"
         ))
-        self.table = QTableWidget(len(property_item.parcels), 5)
+        self.table = QTableWidget(len(property_item.parcels), 6)
         self.table.setHorizontalHeaderLabels([
-            "Matrícula", "Área (ha)", "Matrícula anterior", "Lote/Gleba", "Proprietários"
+            "Matrícula", "Área (ha)", "Matrícula anterior", "Lote/Gleba", "Proprietários",
+            "Classificação por matrícula",
         ])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setWordWrap(True)
@@ -104,8 +109,17 @@ class PropertyDetailsDialog(QDialog):
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 if column == 0:
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    item.setCheckState(Qt.CheckState.Checked)
+                    item.setCheckState(Qt.CheckState.Checked if parcel.external_id in saved
+                                       else Qt.CheckState.Unchecked)
                 self.table.setItem(row, column, item)
+            choice = QComboBox()
+            choice.addItem("Selecione...", None)
+            for code, label in self.settings.property_classifications.items():
+                choice.addItem(f"{code} — {label}", code)
+            classification = (saved[parcel.external_id].classificacao
+                              if parcel.external_id in saved else PropertyClassification.CLASS_1)
+            choice.setCurrentIndex(choice.findData(classification.value if classification else None))
+            self.table.setCellWidget(row, 5, choice)
         self.table.setColumnWidth(4, 340)
         self.table.resizeRowsToContents()
         layout.addWidget(self.table)
@@ -135,6 +149,21 @@ class PropertyDetailsDialog(QDialog):
             for row in range(self.table.rowCount())
             if self.table.item(row, 0).checkState() == Qt.CheckState.Checked
         ]
+
+    def selected_snapshots(self) -> list[ProposalPropertyParcel]:
+        classifications = {
+            parcel.external_id: self.table.cellWidget(row, 5).currentData()
+            for row, parcel in enumerate(self.property_item.parcels)
+        }
+        return [ProposalPropertyParcel(
+            parcel_external_id=parcel.external_id,
+            registration_snapshot=parcel.registration,
+            previous_registration_snapshot=parcel.previous_registration,
+            area_snapshot=parcel.area,
+            lot_description_snapshot=parcel.lot_description,
+            classificacao=PropertyClassification(classifications[parcel.external_id])
+            if classifications[parcel.external_id] is not None else None,
+        ) for parcel in self.selected_parcels()]
 
 
 class PropertiesPage(QWidget):
@@ -185,7 +214,7 @@ class PropertiesPage(QWidget):
         layout.addWidget(QLabel("Fazendas adicionadas à proposta"))
         self.selected = QTableWidget(0, 5)
         self.selected.setHorizontalHeaderLabels([
-            "Fazenda", "Município", "Matrículas selecionadas", "Origem", "Classificação"
+            "Fazenda", "Município", "Matrículas selecionadas", "Origem", "Classificação por matrícula"
         ])
         self.selected.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.selected)
@@ -252,10 +281,10 @@ class PropertiesPage(QWidget):
         if property_item is None:
             return
         if isinstance(property_item, RuralProperty):
-            dialog = PropertyDetailsDialog(property_item, self)
+            dialog = PropertyDetailsDialog(property_item, self, settings=self.settings)
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
-            parcels = dialog.selected_parcels()
+            parcels = dialog.selected_snapshots()
             if not parcels:
                 QMessageBox.warning(self, "Matrículas", "Selecione pelo menos uma matrícula.")
                 return
@@ -265,29 +294,24 @@ class PropertiesPage(QWidget):
                     return
             link = ProposalProperty(
                 proposal_id="", property_external_id=property_item.external_id,
-                classificacao=PropertyClassification.CLASS_1,
+                classificacao=None,
                 property_name_snapshot=property_item.name,
                 municipality_snapshot=property_item.municipality,
                 state_snapshot=property_item.state,
                 source_file_snapshot=property_item.source_file,
                 owner_name_snapshot=property_item.owner_name,
-                selected_parcels=[ProposalPropertyParcel(
-                    parcel_external_id=parcel.external_id,
-                    registration_snapshot=parcel.registration,
-                    previous_registration_snapshot=parcel.previous_registration,
-                    area_snapshot=parcel.area,
-                    lot_description_snapshot=parcel.lot_description,
-                ) for parcel in parcels],
+                selected_parcels=parcels,
             )
         else:
             link = ProposalProperty(
                 proposal_id="", property_external_id=property_item.external_id,
-                classificacao=PropertyClassification.CLASS_1,
+                classificacao=None,
                 property_name_snapshot=property_item.nome,
                 municipality_snapshot=property_item.municipio,
                 selected_parcels=[ProposalPropertyParcel(
                     parcel_external_id=f"legacy:{property_item.external_id}:{property_item.matricula}",
                     registration_snapshot=property_item.matricula,
+                    classificacao=PropertyClassification.CLASS_1,
                 )] if property_item.matricula else [],
             )
         self._add_link(link)
@@ -302,7 +326,7 @@ class PropertiesPage(QWidget):
         values = (
             link.property_name_snapshot or link.property_external_id,
             _location(link.municipality_snapshot, link.state_snapshot),
-            f"{len(link.selected_parcels)} matrícula(s)",
+            self._parcel_summary(link),
             link.source_file_snapshot or "Demonstração/legado",
         )
         for column, value in enumerate(values):
@@ -310,12 +334,64 @@ class PropertiesPage(QWidget):
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.selected.setItem(row, column, item)
         self.selected.item(row, 0).setData(Qt.ItemDataRole.UserRole, link)
-        choice = QComboBox()
-        choice.addItem("Selecione...", None)
-        for code, label in self.settings.property_classifications.items():
-            choice.addItem(f"{code} — {label}", code)
-        self.selected.setCellWidget(row, 4, choice)
-        choice.currentIndexChanged.connect(self.changed)
+        edit = QPushButton("Selecionar / classificar")
+        edit.clicked.connect(lambda _checked=False, item=self.selected.item(row, 0):
+                             self.edit_parcels(self.selected.row(item)))
+        self.selected.setCellWidget(row, 4, edit)
+        self.selected.resizeRowsToContents()
+        self.changed.emit()
+
+    def _parcel_summary(self, link: ProposalProperty) -> str:
+        return "\n".join(
+            f"{parcel.registration_snapshot} — " + (
+                self.settings.property_classifications[parcel.classificacao.value]
+                if parcel.classificacao is not None else "Classificação pendente"
+            ) for parcel in link.selected_parcels
+        ) or "Snapshot legado"
+
+    def edit_parcels(self, row: int) -> None:
+        if row < 0:
+            return
+        link = self.selected.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        source = self.service.get_property(link.property_external_id)
+        if isinstance(source, RuralProperty):
+            farm = deepcopy(source)
+        else:
+            farm = RuralProperty(link.property_external_id, link.property_name_snapshot,
+                                 link.municipality_snapshot, link.state_snapshot)
+            if isinstance(source, Property) and source.matricula and not link.selected_parcels:
+                farm.name = source.nome
+                farm.municipality = source.municipio
+                farm.parcels.append(PropertyParcel(
+                    f"legacy:{source.external_id}:{source.matricula}",
+                    source.external_id, source.matricula,
+                ))
+        saved = {parcel.parcel_external_id: parcel for parcel in link.selected_parcels}
+        # Selected historic values remain editable even after source removal or changes.
+        for parcel_id, snapshot in saved.items():
+            old = next((parcel for parcel in farm.parcels if parcel.external_id == parcel_id), None)
+            parcel = PropertyParcel(
+                parcel_id, farm.external_id, snapshot.registration_snapshot,
+                snapshot.previous_registration_snapshot, snapshot.area_snapshot,
+                snapshot.lot_description_snapshot,
+                owner_links=old.owner_links if old else [],
+            )
+            if old:
+                farm.parcels[farm.parcels.index(old)] = parcel
+            else:
+                farm.parcels.append(parcel)
+        dialog = PropertyDetailsDialog(farm, self, settings=self.settings, selected=link.selected_parcels)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        parcels = dialog.selected_snapshots()
+        if not parcels:
+            QMessageBox.warning(self, "Matrículas", "Selecione pelo menos uma matrícula ou remova a fazenda.")
+            return
+        link.selected_parcels = parcels
+        link.classificacao = None
+        self.selected.item(row, 0).setData(Qt.ItemDataRole.UserRole, link)
+        self.selected.item(row, 2).setText(self._parcel_summary(link))
+        self.selected.resizeRowsToContents()
         self.changed.emit()
 
     def remove_selected(self) -> None:
@@ -327,19 +403,14 @@ class PropertiesPage(QWidget):
     def load(self, proposal: Proposal) -> None:
         self.selected.setRowCount(0)
         for link in proposal.properties:
-            self._add_link(link)
-            choice = self.selected.cellWidget(self.selected.rowCount() - 1, 4)
-            choice.setCurrentIndex(choice.findData(link.classificacao.value))
+            self._add_link(deepcopy(link))
 
     def collect(self, proposal_id: str, *, strict: bool = True) -> list[ProposalProperty]:
         links: list[ProposalProperty] = []
         for row in range(self.selected.rowCount()):
-            choice = self.selected.cellWidget(row, 4)
-            code = choice.currentData()
-            if code is None and strict:
-                raise ValueError("Selecione a classificação de cada imóvel adicionado.")
             link = deepcopy(self.selected.item(row, 0).data(Qt.ItemDataRole.UserRole))
+            if strict and any(parcel.classificacao is None for parcel in link.selected_parcels):
+                raise ValueError("Selecione a classificação de cada matrícula adicionada.")
             link.proposal_id = proposal_id
-            link.classificacao = PropertyClassification(code) if code is not None else None
             links.append(link)
         return links

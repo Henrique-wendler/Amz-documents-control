@@ -56,6 +56,8 @@ def ui(tmp_path, monkeypatch):
 
 def fill(window):
     window.new_proposal()
+    kind = window.participants_page.table.cellWidget(0, 2)
+    kind.setCurrentIndex(kind.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
     for field, value in {
         "numero_proposta": "TEST-004", "proponente": "Proponente Exemplo",
         "cpf_cnpj": "000.000.000-00", "tecnico": "Técnico Exemplo",
@@ -111,7 +113,7 @@ def test_summary_sections_and_status_follow_live_validation(ui):
     app.processEvents()
     assert window.summary.identification.text().startswith("Proposta:")
     assert "Banco:" in window.summary.operation.text()
-    assert "Participantes (0)" in window.summary.items.text()
+    assert "Participantes (1)" in window.summary.items.text()
     assert window.summary.status.property("ready") is False
     fill(window)
     app.processEvents()
@@ -142,19 +144,25 @@ def test_settings_tabs_keep_a_light_readable_background(ui):
 def test_summary_tracks_participants_properties_and_removal(ui):
     window, app = ui
     fill(window)
+    window.participants_page.remove_selected()
     window.participants_page.add_participant(Participant(window.current.id, "Pessoa Exemplo"))
     window.properties_page._add_link(ProposalProperty(
-        window.current.id, "synthetic-farm", PropertyClassification.CREDIT_OBJECT,
+        window.current.id, "synthetic-farm", None,
         property_name_snapshot="Fazenda Exemplo", municipality_snapshot="Palmas",
         state_snapshot="TO", selected_parcels=[ProposalPropertyParcel("parcel-1", "MAT-004")],
     ))
     app.processEvents()
-    assert "Classificação de imóvel inválida." in window.summary.pending.text()
+    assert "Classificação de matrícula inválida." in window.summary.pending.text()
     # Review must remain reachable even while classification is missing.
     window.steps.setCurrentRow(4)
     assert "Classificação pendente" in window.review_page.text.toPlainText()
-    window.properties_page.selected.cellWidget(0, 4).setCurrentIndex(2)
-    window.participants_page.table.cellWidget(0, 2).setCurrentIndex(3)
+    item = window.properties_page.selected.item(0, 0)
+    link = item.data(Qt.ItemDataRole.UserRole)
+    link.selected_parcels[0].classificacao = PropertyClassification.CREDIT_OBJECT
+    item.setData(Qt.ItemDataRole.UserRole, link)
+    window.refresh_summary()
+    choice = window.participants_page.table.cellWidget(0, 2)
+    choice.setCurrentIndex(choice.findData(int(ParticipantType.GUARANTOR)))
     app.processEvents()
     for value in ("Pessoa Exemplo", "Avalista", "Fazenda Exemplo", "Palmas", "MAT-004"):
         assert value in window.summary.details.text()
@@ -486,5 +494,7 @@ def test_navigation_marks_unvisited_pending_and_complete(ui):
     assert "Com pendência" in window.steps.item(0).text()
     window.steps.setCurrentRow(1)
     assert "Com pendência" in window.steps.item(2).text()
+    kind = window.participants_page.table.cellWidget(0, 2)
+    kind.setCurrentIndex(kind.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
     window.steps.setCurrentRow(4)
     assert "Completa" in window.steps.item(1).text()

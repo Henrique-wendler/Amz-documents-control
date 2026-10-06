@@ -38,7 +38,9 @@ class SpreadsheetPdfProposalExporter:
             print_ready = Path(temporary) / filled_xlsx.name
             shutil.copyfile(filled_xlsx, print_ready)
             workbook = load_workbook(print_ready)
-            workbook.active.print_area = PDF_PRINT_AREA
+            # Keep the exporter's page boundaries, including continuation areas.
+            if not workbook.active.print_area:
+                workbook.active.print_area = PDF_PRINT_AREA
             workbook.save(print_ready)
             for backend in available:
                 logger.info("Tentando backend PDF: %s", backend.name)

@@ -166,7 +166,10 @@ class SmokeDriver:
                 state_snapshot=farm.state, source_file_snapshot=farm.source_file,
                 selected_parcels=[ProposalPropertyParcel(farm.parcels[0].external_id, farm.parcels[0].registration)],
             ))
-            self.window.properties_page.selected.cellWidget(0, 4).setCurrentIndex(2)
+            # Synthetic smoke explicitly chooses the otherwise provisional participant type.
+            from amazon_agro.domain.models import ParticipantType
+            kind = self.window.participants_page.table.cellWidget(0, 2)
+            kind.setCurrentIndex(kind.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
             report["local_source_ok"] = True
             for name, value in {"numero_proposta": "TEST-005", "proponente": "Proponente Exemplo",
                                 "cpf_cnpj": "000.000.000-00", "finalidade": "Custeio", "agencia": "Agencia Exemplo"}.items():

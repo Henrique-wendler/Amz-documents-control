@@ -68,6 +68,7 @@ _PARCEL_LINKS = Table(
     Column("previous_registration_snapshot", String, nullable=False),
     Column("area_snapshot", String),
     Column("lot_description_snapshot", String, nullable=False),
+    Column("classificacao", String, nullable=False),
     ForeignKeyConstraint(
         ["proposal_id", "property_external_id"],
         ["proposal_properties.proposal_id", "proposal_properties.property_external_id"],
@@ -110,6 +111,10 @@ class SQLiteProposalRepository:
 
         _METADATA.create_all(self.engine)
         with self.engine.begin() as connection:
+            # Legacy sqlite3 transaction control does not BEGIN for DDL. Make
+            # schema additions and their data migration roll back together.
+            if not connection.connection.driver_connection.in_transaction:
+                connection.exec_driver_sql("BEGIN")
             existing = {
                 row[1] for row in connection.exec_driver_sql(
                     "PRAGMA table_info(proposal_properties)"
@@ -133,6 +138,18 @@ class SQLiteProposalRepository:
                 connection.exec_driver_sql(
                     "ALTER TABLE proposal_property_parcels ADD COLUMN "
                     "sequence INTEGER NOT NULL DEFAULT 0"
+                )
+            if "classificacao" not in parcel_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE proposal_property_parcels ADD COLUMN "
+                    "classificacao TEXT NOT NULL DEFAULT ''"
+                )
+                connection.exec_driver_sql(
+                    "UPDATE proposal_property_parcels SET classificacao = ("
+                    "SELECT classificacao FROM proposal_properties WHERE "
+                    "proposal_properties.proposal_id = proposal_property_parcels.proposal_id "
+                    "AND proposal_properties.property_external_id = "
+                    "proposal_property_parcels.property_external_id)"
                 )
 
     def save(self, proposal: Proposal) -> None:
@@ -168,7 +185,7 @@ class SQLiteProposalRepository:
                     {
                         "proposal_id": link.proposal_id,
                         "property_external_id": link.property_external_id,
-                        "classificacao": link.classificacao.value,
+                        "classificacao": (link.classificacao or link.selected_parcels[0].classificacao).value,
                         "property_name_snapshot": link.property_name_snapshot,
                         "municipality_snapshot": link.municipality_snapshot,
                         "state_snapshot": link.state_snapshot,
@@ -190,6 +207,7 @@ class SQLiteProposalRepository:
                             if parcel.area_snapshot is not None else None
                         ),
                         "lot_description_snapshot": parcel.lot_description_snapshot,
+                        "classificacao": parcel.classificacao.value,
                     }
                     for link in proposal.properties
                     for sequence, parcel in enumerate(link.selected_parcels)
@@ -243,6 +261,7 @@ class SQLiteProposalRepository:
                         area_snapshot=(Decimal(parcel["area_snapshot"])
                                        if parcel["area_snapshot"] is not None else None),
                         lot_description_snapshot=parcel["lot_description_snapshot"],
+                        classificacao=PropertyClassification(parcel["classificacao"]),
                     ) for parcel in parcel_rows],
                 ))
             return proposal

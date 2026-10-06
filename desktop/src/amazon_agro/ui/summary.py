@@ -80,7 +80,7 @@ class ProposalSummaryPanel(QWidget):
         items = [
             f"Participantes ({len(proposal.participants)})",
         ]
-        items.extend(f"• {p.nome or 'Sem nome'} — {PARTICIPANT_LABELS[p.tipo]}"
+        items.extend(f"• {p.nome or 'Sem nome'} — {PARTICIPANT_LABELS.get(p.tipo, 'Tipo provisório: selecione')}"
                      for p in proposal.participants)
         items.extend(["", f"Imóveis ({len(proposal.properties)})"])
         for link in proposal.properties:

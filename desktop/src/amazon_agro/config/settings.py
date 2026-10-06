@@ -10,7 +10,7 @@ from amazon_agro.config.resources import resource_path
 def _template_labels() -> dict[str, dict[str, str]]:
     return {
         "xlsx": {
-            "1": "GARANTIA",
+            "1": "HIPOTECA",
             "2": "OBJETO DE CRÉDITO",
             "3": "ALIENAÇÃO FIDUCIÁRIA",
         },
@@ -41,13 +41,15 @@ class AppSettings:
     property_file_profiles: dict[str, str] = field(default_factory=dict)
     default_output_dir: str = ""
     default_city: str = "Palmas"
+    default_consultancy_name: str = "Amazon Agro Consultoria e Projetos LTDA"
+    default_consultancy_document: str = ""
     technicians: list[str] = field(default_factory=list)
     banks: list[str] = field(default_factory=lambda: ["Banco da Amazônia"])
     agencies: list[str] = field(default_factory=list)
     statuses: list[str] = field(default_factory=list)
     awaiting_options: list[str] = field(default_factory=list)
     property_classifications: dict[str, str] = field(default_factory=lambda: {
-        "1": "Classe 1 — Garantia/Hipoteca (confirmar)",
+        "1": "Hipoteca",
         "2": "Objeto de crédito",
         "3": "Alienação fiduciária",
     })
@@ -55,6 +57,12 @@ class AppSettings:
         default_factory=_template_labels
     )
     _source_path: Path | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # Code 1 has an approved meaning, including configurations from older releases.
+        self.property_classifications["1"] = "Hipoteca"
+        for labels in self.property_classification_labels.values():
+            labels["1"] = "HIPOTECA"
 
     @classmethod
     def load(cls, path: Path | None = None) -> AppSettings:

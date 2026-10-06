@@ -87,7 +87,8 @@ class ReviewPage(QWidget):
         if proposal.participants:
             lines.extend(
                 f"{person.nome} | {mask_document(person.cpf_cnpj)} | "
-                f"{int(person.tipo)} — {PARTICIPANT_LABELS[person.tipo]} | ID: {person.id}"
+                f"{int(person.tipo) if person.tipo is not None else '—'} — "
+                f"{PARTICIPANT_LABELS.get(person.tipo, 'Tipo provisório: selecione')} | ID: {person.id}"
                 for person in proposal.participants
             )
         else:
@@ -97,16 +98,16 @@ class ReviewPage(QWidget):
         lines.extend(["", "IMÓVEIS"])
         if proposal.properties:
             for link in proposal.properties:
-                label = (self.settings.property_classifications[link.classificacao.value]
-                         if link.classificacao is not None else "Classificação pendente")
-                registrations = ", ".join(
-                    parcel.registration_snapshot for parcel in link.selected_parcels
-                ) or "—"
                 lines.append(
                     f"{link.property_name_snapshot or link.property_external_id} | "
-                    f"{link.municipality_snapshot or '—'} | "
-                    f"Matrículas selecionadas: {registrations} | {label}"
+                    f"{link.municipality_snapshot or '—'}"
                 )
+                for parcel in link.selected_parcels:
+                    label = (self.settings.property_classifications[parcel.classificacao.value]
+                             if parcel.classificacao is not None else "Classificação pendente")
+                    lines.append(f"  Matrícula: {parcel.registration_snapshot} | {label}")
+                if not link.selected_parcels:
+                    lines.append("  Matrículas: snapshot legado; depende da fonte original.")
         else:
             lines.append("Nenhum imóvel adicionado.")
         lines.extend([

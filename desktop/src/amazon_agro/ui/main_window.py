@@ -260,10 +260,7 @@ class MainWindow(QMainWindow):
     def new_proposal(self) -> None:
         if self._exporting:
             return
-        self._load(Proposal(
-            banco=self.settings.banks[0] if self.settings.banks else "",
-            cidade=self.settings.default_city, tecnico=self.settings.default_technician,
-        ))
+        self._load(self.service.new_proposal(self.settings))
         self.statusBar().showMessage("Nova proposta iniciada.", 5000)
 
     def open_proposal(self) -> None:

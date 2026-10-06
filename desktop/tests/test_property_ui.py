@@ -46,7 +46,7 @@ def test_ui_selects_farm_and_specific_registration_without_showing_document(
     monkeypatch.setattr(PropertyLocalEnrichmentDialog, "exec", complete)
     page.add_selected()
     assert page.selected.rowCount() == 1
-    page.selected.cellWidget(0, 4).setCurrentIndex(2)
+    assert "Hipoteca" in page.selected.item(0, 2).text()
     proposal = Proposal()
     links = page.collect(proposal.id)
     assert len(links) == 1
