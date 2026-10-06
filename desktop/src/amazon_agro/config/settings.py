@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from amazon_agro.config.resources import resource_path
+from amazon_agro.domain.models import ParticipantType
 
 
 def _template_labels() -> dict[str, dict[str, str]]:
@@ -43,6 +44,8 @@ class AppSettings:
     default_city: str = "Palmas"
     default_consultancy_name: str = "Amazon Agro Consultoria e Projetos LTDA"
     default_consultancy_document: str = ""
+    # Provisional Amazon Agro default, editable in each proposal.
+    default_consultancy_type: int = int(ParticipantType.MAIN_ISSUER)
     technicians: list[str] = field(default_factory=list)
     banks: list[str] = field(default_factory=lambda: ["Banco da Amazônia"])
     agencies: list[str] = field(default_factory=list)
@@ -59,6 +62,12 @@ class AppSettings:
     _source_path: Path | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        try:
+            if not isinstance(self.default_consultancy_type, int) or isinstance(self.default_consultancy_type, bool):
+                raise ValueError
+            ParticipantType(self.default_consultancy_type)
+        except ValueError as error:
+            raise ValueError("Configure um tipo padrão de participante válido (1 a 8).") from error
         # Code 1 has an approved meaning, including configurations from older releases.
         self.property_classifications["1"] = "Hipoteca"
         for labels in self.property_classification_labels.values():

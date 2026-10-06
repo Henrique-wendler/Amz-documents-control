@@ -271,37 +271,123 @@ def test_amazon_default_is_user_classified_editable_and_removable(app, tmp_path)
     service = ProposalService(repository, FakePropertyRepository())
     settings = AppSettings()
     proposal = service.new_proposal(settings)
+    assert len(proposal.participants) == 1
     person = proposal.participants[0]
     assert person.proposal_id == proposal.id
     assert person.nome == "Amazon Agro Consultoria e Projetos LTDA"
-    assert person.cpf_cnpj == "" and person.tipo is None
-    assert "Tipo de participante inválido." in ProposalExportValidator(settings, FakePropertyRepository()).validate(proposal).errors
+    assert person.cpf_cnpj == "" and person.tipo == ParticipantType.MAIN_ISSUER
+    assert "Tipo de participante inválido." not in ProposalExportValidator(settings, FakePropertyRepository()).validate(proposal).errors
     page = ParticipantsPage()
     page.load(proposal)
     page.table.item(0, 0).setText("Consultoria Exemplo")
     choice = page.table.cellWidget(0, 2)
-    choice.setCurrentIndex(choice.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
+    assert choice.currentData() == int(ParticipantType.MAIN_ISSUER)
+    assert choice.isEnabled()
+    choice.setCurrentIndex(choice.findData(int(ParticipantType.CUSTODIAN)))
     proposal.participants = page.collect(proposal.id)
     service.save(proposal)
     assert service.get(proposal.id).participants[0].nome == "Consultoria Exemplo"
+    assert service.get(proposal.id).participants[0].tipo == ParticipantType.CUSTODIAN
     page.table.selectRow(0)
     page.remove_selected()
     proposal.participants = page.collect(proposal.id)
     service.save(proposal)
-    assert service.get(proposal.id).participants == []
+    for _ in range(3):
+        proposal = service.get(proposal.id)
+        page.load(proposal)
+        proposal.participants = page.collect(proposal.id)
+        assert proposal.participants == []
+        service.save(proposal)
     assert service.new_proposal(settings).participants[0].id != person.id
     page.close()
     repository.engine.dispose()
 
 
 def test_participant_defaults_accept_later_official_data(tmp_path):
-    settings = AppSettings(default_consultancy_name="Nome configurado", default_consultancy_document="DOCUMENTO FORNECIDO")
+    settings = AppSettings(
+        default_consultancy_name="Nome configurado", default_consultancy_document="DOCUMENTO FORNECIDO",
+        default_consultancy_type=int(ParticipantType.CUSTODIAN),
+    )
     settings.save(tmp_path / "config.json")
     repository = SQLiteProposalRepository(tmp_path / "proposals.sqlite3")
     proposal = ProposalService(repository, FakePropertyRepository()).new_proposal(AppSettings.load(tmp_path / "config.json"))
     assert proposal.participants[0].nome == "Nome configurado"
     assert proposal.participants[0].cpf_cnpj == "DOCUMENTO FORNECIDO"
-    assert proposal.participants[0].tipo is None
+    assert proposal.participants[0].tipo == ParticipantType.CUSTODIAN
+    repository.engine.dispose()
+
+
+def test_older_config_without_consultancy_type_uses_provisional_code_one(tmp_path):
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"default_consultancy_document": ""}), encoding="utf-8")
+    settings = AppSettings.load(config)
+    assert settings.default_consultancy_type == int(ParticipantType.MAIN_ISSUER)
+    settings.save()
+    assert json.loads(config.read_text(encoding="utf-8"))["default_consultancy_type"] == 1
+    assert AppSettings.load(config).default_consultancy_document == ""
+
+
+@pytest.mark.parametrize("code", [0, 9, None, "1"])
+def test_config_rejects_invalid_consultancy_default_type(tmp_path, code):
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"default_consultancy_type": code}), encoding="utf-8")
+    with pytest.raises(ValueError, match="tipo padrão de participante válido"):
+        AppSettings.load(config)
+
+
+def test_new_proposals_save_and_export_without_manual_participant_type_selection(app, tmp_path):
+    settings = AppSettings()
+    source = FakePropertyRepository([])
+    repository = SQLiteProposalRepository(tmp_path / "proposals.sqlite3")
+    service = ProposalService(repository, source)
+    validator = ProposalExportValidator(settings, source)
+    exporter = OpenpyxlExcelProposalExporter(settings, source)
+    page = ParticipantsPage()
+    participant_ids = set()
+    for index in range(3):
+        proposal = service.new_proposal(settings)
+        page.load(proposal)
+        assert page.table.cellWidget(0, 2).currentData() == 1
+        proposal.participants = page.collect(proposal.id)
+        proposal.numero_proposta = f"TEST-DEFAULT-{index}"
+        proposal.proponente = "Produtor Exemplo"
+        proposal.cpf_cnpj = "000.000.000-00"
+        proposal.tecnico = "Técnico Exemplo"
+        proposal.finalidade = "Custeio"
+        proposal.valor_total = Decimal("1000")
+        assert validator.validate(proposal).ok
+        service.save(proposal)
+        reopened = service.get(proposal.id)
+        assert reopened.participants[0].tipo == ParticipantType.MAIN_ISSUER
+        participant_ids.add(reopened.participants[0].id)
+        workbook = load_workbook(exporter.export(reopened, tmp_path / f"default-{index}.xlsx"))
+        assert workbook.active["A9"].value == settings.default_consultancy_name
+        assert workbook.active["M9"].value == 1 and workbook.active["I9"].value is None
+        workbook.close()
+    assert len(participant_ids) == 3
+    page.close()
+    repository.engine.dispose()
+
+
+def test_reopened_proposal_keeps_one_amazon_and_its_saved_type(app, tmp_path):
+    settings = AppSettings()
+    repository = SQLiteProposalRepository(tmp_path / "proposals.sqlite3")
+    service = ProposalService(repository, FakePropertyRepository([]))
+    proposal = service.new_proposal(settings)
+    participant_id = proposal.participants[0].id
+    service.save(proposal)
+    settings.default_consultancy_type = int(ParticipantType.CUSTODIAN)
+    assert service.new_proposal(settings).participants[0].tipo == ParticipantType.CUSTODIAN
+    page = ParticipantsPage()
+    for _ in range(3):
+        reopened = service.get(proposal.id)
+        page.load(reopened)
+        reopened.participants = page.collect(reopened.id)
+        assert len(reopened.participants) == 1
+        assert reopened.participants[0].id == participant_id
+        assert reopened.participants[0].tipo == ParticipantType.MAIN_ISSUER
+        service.save(reopened)
+    page.close()
     repository.engine.dispose()
 
 

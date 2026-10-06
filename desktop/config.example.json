@@ -14,6 +14,7 @@
   "default_city": "Palmas",
   "default_consultancy_name": "Amazon Agro Consultoria e Projetos LTDA",
   "default_consultancy_document": "",
+  "default_consultancy_type": 1,
   "technicians": [],
   "banks": ["Banco da Amazônia"],
   "agencies": [],

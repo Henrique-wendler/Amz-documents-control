@@ -56,8 +56,6 @@ def ui(tmp_path, monkeypatch):
 
 def fill(window):
     window.new_proposal()
-    kind = window.participants_page.table.cellWidget(0, 2)
-    kind.setCurrentIndex(kind.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
     for field, value in {
         "numero_proposta": "TEST-004", "proponente": "Proponente Exemplo",
         "cpf_cnpj": "000.000.000-00", "tecnico": "Técnico Exemplo",
@@ -494,7 +492,5 @@ def test_navigation_marks_unvisited_pending_and_complete(ui):
     assert "Com pendência" in window.steps.item(0).text()
     window.steps.setCurrentRow(1)
     assert "Com pendência" in window.steps.item(2).text()
-    kind = window.participants_page.table.cellWidget(0, 2)
-    kind.setCurrentIndex(kind.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
     window.steps.setCurrentRow(4)
     assert "Completa" in window.steps.item(1).text()

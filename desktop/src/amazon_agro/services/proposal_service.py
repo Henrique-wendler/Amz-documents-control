@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from amazon_agro.config.settings import AppSettings
 
 from amazon_agro.domain.models import (
-    Participant, Proposal, ProposalPropertyParcel, Property, PropertyLocalEnrichment, RuralProperty,
+    Participant, ParticipantType, Proposal, ProposalPropertyParcel, Property, PropertyLocalEnrichment, RuralProperty,
 )
 from amazon_agro.repositories.contracts import (
     PropertyRepository, ProposalRepository, ProposalSummary,
@@ -28,7 +28,7 @@ class ProposalService:
         )
         proposal.participants.append(Participant(
             proposal.id, settings.default_consultancy_name,
-            settings.default_consultancy_document, tipo=None,
+            settings.default_consultancy_document, tipo=ParticipantType(settings.default_consultancy_type),
         ))
         return proposal
 

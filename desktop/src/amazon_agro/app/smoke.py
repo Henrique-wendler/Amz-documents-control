@@ -166,10 +166,10 @@ class SmokeDriver:
                 state_snapshot=farm.state, source_file_snapshot=farm.source_file,
                 selected_parcels=[ProposalPropertyParcel(farm.parcels[0].external_id, farm.parcels[0].registration)],
             ))
-            # Synthetic smoke explicitly chooses the otherwise provisional participant type.
             from amazon_agro.domain.models import ParticipantType
             kind = self.window.participants_page.table.cellWidget(0, 2)
-            kind.setCurrentIndex(kind.findData(int(ParticipantType.TECHNICAL_ASSISTANCE)))
+            assert kind.currentData() == int(ParticipantType.MAIN_ISSUER)
+            assert self.window.participants_page.table.item(0, 1).text() == ""
             report["local_source_ok"] = True
             for name, value in {"numero_proposta": "TEST-005", "proponente": "Proponente Exemplo",
                                 "cpf_cnpj": "000.000.000-00", "finalidade": "Custeio", "agencia": "Agencia Exemplo"}.items():
@@ -180,6 +180,8 @@ class SmokeDriver:
             saved = self.window.service.get(self.window.current.id)
             if saved is None:
                 raise RuntimeError("Proposal was not persisted.")
+            assert len(saved.participants) == 1
+            assert saved.participants[0].tipo == ParticipantType.MAIN_ISSUER
             self.window._load(saved)
             report["save_reopen_ok"] = True
             template = settings.template_path()
@@ -192,10 +194,14 @@ class SmokeDriver:
             sheet = output.active
             assert sheet["K3"].value == "TEST-005" and sheet["A6"].value == "Proponente Exemplo"
             assert sheet["A28"].value == "Fazenda Exemplo"
+            assert sheet["A9"].value == settings.default_consultancy_name
+            assert sheet["I9"].value is None and sheet["M9"].value == 1
             assert sheet.page_setup.fitToWidth == sheet.page_setup.fitToHeight == 1
             assert sheet.sheet_properties.pageSetUpPr.fitToPage
             output.close()
             report["xlsx_ok"] = True
+            report["amazon_default_ok"] = True
+            report["amazon_default_type"] = 1
             report["xlsx_path"] = str(xlsx_paths[0])
             available = self.window.export_service.pdf.selector.available_backends()
             report["pdf_backends"] = [backend.name for backend in available]
