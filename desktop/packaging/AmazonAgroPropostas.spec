@@ -20,6 +20,7 @@ if HAS_CYEXTENSION or list(sqlalchemy_root.rglob("*.pyd")):
 
 icon = root / "packaging/resources/AmazonAgro.ico"
 datas = [(str(root / "src/amazon_agro/templates/modelo_proposta.xlsx"), "amazon_agro/templates")]
+datas.append((str(root / "src/amazon_agro/resources/AmazonAgroLogo.png"), "amazon_agro/resources"))
 # Keep one compatible app-local MSVC runtime available before Python/Qt startup.
 # The Python interpreter's runtime may be older than the Qt wheel's runtime.
 qt_directory = Path(PySide6.__file__).parent

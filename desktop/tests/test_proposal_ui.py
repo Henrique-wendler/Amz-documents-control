@@ -196,7 +196,7 @@ def test_click_xlsx_saves_and_produces_real_workbook_without_pdf(ui, monkeypatch
     assert len(results) == 1 and results[0].suffix == ".xlsx"
     workbook = load_workbook(results[0])
     assert workbook.active["A6"].value == "Proponente Exemplo"
-    assert workbook.active["K3"].value == "TEST-004"
+    assert workbook.active["A3"].value == "TEST-004"
     workbook.close()
     assert window.service.get(window.current.id).valor_total == Decimal("123456.78")
 

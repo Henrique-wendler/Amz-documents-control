@@ -13,17 +13,15 @@ from amazon_agro.exporters.excel_map import (
     CLASSIFICATION_LEGEND_CELLS, EXCEL_FIELD_MAP, PARTICIPANT_COLUMNS,
     PARTICIPANT_ROWS, PROPERTY_COLUMNS, PROPERTY_ROWS, TEMPLATE_MARKERS,
 )
-from amazon_agro.exporters.formatting import format_brl, format_date_pt_br
+from amazon_agro.exporters.formatting import format_date_pt_br
+from amazon_agro.exporters.excel_layout import prepare_layout
 from amazon_agro.exporters.excel_pagination import property_page_rows
 from amazon_agro.repositories.contracts import PropertyRepository
 
 
 logger = logging.getLogger(__name__)
 CURRENCY_FIELDS = ("valor_total", "valor_fno", "valor_of")
-PERCENT_FIELDS = (
-    "percentual_recursos_proprios", "classificacao_da_percentual",
-    "astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual",
-)
+PERCENT_FIELDS = ("percentual_recursos_proprios", "fno_percentage", "of_percentage")
 BOOLEAN_FIELDS = (
     "astec_fno_financiada", "laudo_abc_financiado", "astec_of_financiada",
 )
@@ -50,7 +48,7 @@ def _check_template(sheet: Worksheet) -> None:
 def _set_percent(sheet: Worksheet, field: str, value: Decimal | None) -> None:
     cell = sheet[EXCEL_FIELD_MAP[field]]
     cell.value = value / Decimal("100") if value is not None else None
-    cell.number_format = "0.##%"
+    cell.number_format = "0.00%"
 
 
 class OpenpyxlExcelProposalExporter:
@@ -77,6 +75,7 @@ class OpenpyxlExcelProposalExporter:
             workbook = load_workbook(template)
             sheet = workbook.active
             _check_template(sheet)
+            prepare_layout(sheet)
             self._fill_general(sheet, proposal)
             self._fill_participants(sheet, proposal)
             self._fill_financial(sheet, proposal)
@@ -124,13 +123,20 @@ class OpenpyxlExcelProposalExporter:
         )
         for field in CURRENCY_FIELDS:
             value = getattr(proposal, field)
-            sheet[EXCEL_FIELD_MAP[field]] = format_brl(value)
+            cell = sheet[EXCEL_FIELD_MAP[field]]
+            cell.value = value
+            cell.number_format = '"R$" #,##0.00'
         for field in PERCENT_FIELDS:
             _set_percent(sheet, field, getattr(proposal, field))
         for field in BOOLEAN_FIELDS:
             sheet[EXCEL_FIELD_MAP[field]] = (
                 "Sim" if getattr(proposal, field) else "Não"
             )
+        _set_percent(sheet, "laudo_abc_percentual",
+                     proposal.laudo_abc_percentual if proposal.laudo_abc_financiado else None)
+        cell = sheet[EXCEL_FIELD_MAP["laudo_abc_valor"]]
+        cell.value = proposal.laudo_abc_valor if proposal.laudo_abc_financiado else None
+        cell.number_format = '"R$" #,##0.00'
 
     def _fill_properties(self, sheet: Worksheet, proposal: Proposal) -> None:
         for row in PROPERTY_ROWS:

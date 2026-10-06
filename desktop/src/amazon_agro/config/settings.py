@@ -43,8 +43,8 @@ class AppSettings:
     default_output_dir: str = ""
     default_city: str = "Palmas"
     default_consultancy_name: str = "Amazon Agro Consultoria e Projetos LTDA"
-    default_consultancy_document: str = ""
-    # Provisional Amazon Agro default, editable in each proposal.
+    default_consultancy_document: str = "07.778.284/0001-90"
+    # Business-approved Amazon Agro default, editable in each proposal.
     default_consultancy_type: int = int(ParticipantType.MAIN_ISSUER)
     technicians: list[str] = field(default_factory=list)
     banks: list[str] = field(default_factory=lambda: ["Banco da Amazônia"])
@@ -62,6 +62,10 @@ class AppSettings:
     _source_path: Path | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if (not self.default_consultancy_document.strip() and
+            self.default_consultancy_name.strip().casefold() == "amazon agro consultoria e projetos ltda"):
+            # Replace the empty placeholder in older configurations, not saved participants.
+            self.default_consultancy_document = "07.778.284/0001-90"
         try:
             if not isinstance(self.default_consultancy_type, int) or isinstance(self.default_consultancy_type, bool):
                 raise ValueError

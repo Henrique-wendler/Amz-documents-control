@@ -110,6 +110,8 @@ def fake_distribution(tmp_path, monkeypatch):
         "_internal/PySide6/plugins/platforms/qwindows.dll": b"synthetic plugin",
         "_internal/amazon_agro/templates/modelo_proposta.xlsx":
             (DESKTOP / "src/amazon_agro/templates/modelo_proposta.xlsx").read_bytes(),
+        "_internal/amazon_agro/resources/AmazonAgroLogo.png":
+            (DESKTOP / "src/amazon_agro/resources/AmazonAgroLogo.png").read_bytes(),
     }
     for relative, contents in resources.items():
         path = distribution / relative
@@ -120,7 +122,7 @@ def fake_distribution(tmp_path, monkeypatch):
 
 def test_manifest_requires_authorized_template_and_hashes_every_file(fake_distribution):
     manifest = support.distribution_manifest(fake_distribution)
-    assert manifest["file_count"] == 4
+    assert manifest["file_count"] == 5
     assert manifest["template_unchanged"]
     assert all(len(entry["sha256"]) == 64 for entry in manifest["files"])
     assert manifest["bytes"] == sum(entry["bytes"] for entry in manifest["files"])

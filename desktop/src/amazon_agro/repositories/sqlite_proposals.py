@@ -19,7 +19,7 @@ from amazon_agro.domain.models import (
 from amazon_agro.repositories.contracts import ProposalSummary
 
 
-_MONEY = {"valor_total", "recursos_proprios", "valor_fno", "valor_of"}
+_MONEY = {"valor_total", "recursos_proprios", "valor_fno", "valor_of", "laudo_abc_valor"}
 _PERCENT = {
     "percentual_recursos_proprios", "classificacao_da_percentual",
     "astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual",
@@ -34,7 +34,7 @@ _PROPOSALS = Table(
     Column("id", String, primary_key=True),
     *[
         Column(name, Boolean if name in _BOOLEAN else String, nullable=False
-               if name not in {"astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual"}
+               if name not in {"astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual", "laudo_abc_valor"}
                else True)
         for name in _SCALAR if name != "id"
     ],
@@ -86,7 +86,7 @@ def _serialize(value: object) -> object:
 def _proposal_from_row(row: object) -> Proposal:
     values = dict(row)
     for name in _MONEY:
-        values[name] = Decimal(values[name])
+        values[name] = Decimal(values[name]) if values[name] is not None else None
     for name in _PERCENT:
         values[name] = Decimal(values[name]) if values[name] is not None else None
     values["data_proposta"] = date.fromisoformat(values["data_proposta"])
@@ -115,6 +115,9 @@ class SQLiteProposalRepository:
             # schema additions and their data migration roll back together.
             if not connection.connection.driver_connection.in_transaction:
                 connection.exec_driver_sql("BEGIN")
+            proposal_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(proposals)")}
+            if "laudo_abc_valor" not in proposal_columns:
+                connection.exec_driver_sql("ALTER TABLE proposals ADD COLUMN laudo_abc_valor TEXT")
             existing = {
                 row[1] for row in connection.exec_driver_sql(
                     "PRAGMA table_info(proposal_properties)"

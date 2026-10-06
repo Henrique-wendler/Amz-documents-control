@@ -35,7 +35,7 @@ class FakeBackend:
 
     def convert(self, filled_xlsx, destination):
         sheet = load_workbook(filled_xlsx).active
-        self.proposal_number = sheet["K3"].value
+        self.proposal_number = sheet["A3"].value
         self.print_area = str(sheet.print_area)
         self.footer = (sheet["A34"].value, sheet["A35"].value)
         self.one_page_setup = (
@@ -120,7 +120,7 @@ def test_generate_both_uses_one_saved_proposal_and_filename(tmp_path) -> None:
     assert result.pdf_path is not None
     assert result.xlsx_path.name == "123_45_Joao_da_Silva_proposta.xlsx"
     assert result.pdf_path.name == "123_45_Joao_da_Silva_proposta.pdf"
-    assert load_workbook(result.xlsx_path).active["K3"].value == "123/45"
+    assert load_workbook(result.xlsx_path).active["A3"].value == "123/45"
     assert backend.proposal_number == "123/45"
     assert result.pdf_path.read_bytes().startswith(b"%PDF")
     with pytest.raises(FileExistsError):

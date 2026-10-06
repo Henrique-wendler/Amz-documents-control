@@ -275,7 +275,7 @@ def test_amazon_default_is_user_classified_editable_and_removable(app, tmp_path)
     person = proposal.participants[0]
     assert person.proposal_id == proposal.id
     assert person.nome == "Amazon Agro Consultoria e Projetos LTDA"
-    assert person.cpf_cnpj == "" and person.tipo == ParticipantType.MAIN_ISSUER
+    assert person.cpf_cnpj == "07.778.284/0001-90" and person.tipo == ParticipantType.MAIN_ISSUER
     assert "Tipo de participante inválido." not in ProposalExportValidator(settings, FakePropertyRepository()).validate(proposal).errors
     page = ParticipantsPage()
     page.load(proposal)
@@ -324,7 +324,7 @@ def test_older_config_without_consultancy_type_uses_provisional_code_one(tmp_pat
     assert settings.default_consultancy_type == int(ParticipantType.MAIN_ISSUER)
     settings.save()
     assert json.loads(config.read_text(encoding="utf-8"))["default_consultancy_type"] == 1
-    assert AppSettings.load(config).default_consultancy_document == ""
+    assert AppSettings.load(config).default_consultancy_document == "07.778.284/0001-90"
 
 
 @pytest.mark.parametrize("code", [0, 9, None, "1"])
@@ -362,7 +362,8 @@ def test_new_proposals_save_and_export_without_manual_participant_type_selection
         participant_ids.add(reopened.participants[0].id)
         workbook = load_workbook(exporter.export(reopened, tmp_path / f"default-{index}.xlsx"))
         assert workbook.active["A9"].value == settings.default_consultancy_name
-        assert workbook.active["M9"].value == 1 and workbook.active["I9"].value is None
+        assert workbook.active["M9"].value == 1
+        assert workbook.active["I9"].value == "07.778.284/0001-90"
         workbook.close()
     assert len(participant_ids) == 3
     page.close()
@@ -430,8 +431,11 @@ def test_excel_com_pdf_matches_xlsx_pages(tmp_path, count, expected):
     pages = json.loads(result.stdout)
     assert len(pages) == expected == printed_page_areas(load_workbook(path).active)
     for number, text in enumerate(pages):
+        assert "#" not in text, "Excel hid a numeric value because its printed cell was too narrow"
+        assert "LOGO AMAZON" not in text
         for index in range(number * 4 + 1, min(count, number * 4 + 4) + 1):
             assert f"MAT-{index:03}" in text
         assert "HIPOTECA" in text
         if number:
             assert "CONTINUAÇÃO" in text
+            assert "III - PROPOSTA" not in text

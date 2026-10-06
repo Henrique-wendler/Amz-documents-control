@@ -47,6 +47,11 @@ class PropertySourcesPage(QWidget):
         browse.clicked.connect(self.browse)
         folder_row.addWidget(browse)
         form.addRow("Pasta sincronizada pelo Google Drive for Desktop", folder_row)
+        hint = QLabel("Selecione a pasta que contém as planilhas. Os arquivos podem não aparecer "
+                      "nesta janela de seleção. XLSX/XLSM serão listados aqui após a seleção. "
+                      "A atualização é somente leitura.")
+        hint.setWordWrap(True)
+        form.addRow(hint)
         self.patterns = QLineEdit("; ".join(settings.property_file_patterns))
         form.addRow("Padrões de arquivo", self.patterns)
         self.recursive = QCheckBox("Incluir subpastas")
@@ -63,8 +68,8 @@ class PropertySourcesPage(QWidget):
         assign = QPushButton("Atribuir perfil ao arquivo selecionado")
         assign.clicked.connect(self.assign_profile)
         layout.addWidget(assign)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Arquivo", "Perfil", "Status"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["Arquivo", "Perfil", "Status", "Fazendas", "Diagnóstico"])
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         self.summary = QLabel()
@@ -74,13 +79,14 @@ class PropertySourcesPage(QWidget):
 
     def browse(self) -> None:
         selected = QFileDialog.getExistingDirectory(
-            self, "Pasta das planilhas", self.directory.text().strip()
+            self, "Pasta sincronizada pelo Google Drive for Desktop", self.directory.text().strip()
         )
         if selected:
             self.directory.setText(selected)
             self.refresh()
 
     def refresh(self) -> None:
+        discovered = []
         entered = self.directory.text().strip()
         path = (
             self.settings.source_directory()
@@ -93,22 +99,34 @@ class PropertySourcesPage(QWidget):
             )
         else:
             try:
-                count = len(PropertyWorkbookDiscovery().discover(
+                discovered = PropertyWorkbookDiscovery().discover(
                     path, self.settings.property_file_patterns,
                     self.settings.property_recursive, self.settings.property_excluded_files,
-                ))
-                self.found.setText(f"Arquivos encontrados: {count}")
+                )
+                self.found.setText(f"Arquivos encontrados: {len(discovered)}")
             except (OSError, ValueError) as error:
                 self.found.setText(str(error))
         sources = self.catalog.list_sources()
-        self.table.setRowCount(len(sources))
+        counts = self.catalog.source_property_counts()
+        pending = [file for file in discovered if not any(source.path == str(file.path) for source in sources)]
+        self.table.setRowCount(len(sources) + len(pending))
         for row, source in enumerate(sources):
             for column, value in enumerate((
-                source.relative_path, source.profile or "—", _STATUS.get(source.status, source.status)
+                source.relative_path, source.profile or "—", _STATUS.get(source.status, source.status),
+                str(counts.get(source.path, 0)), source.last_error or "—"
             )):
                 item = QTableWidgetItem(value)
                 self.table.setItem(row, column, item)
             self.table.item(row, 2).setToolTip(source.last_error)
+        for row, file in enumerate(pending, len(sources)):
+            for column, value in enumerate((file.relative_path, "Detecção automática", "Aguardando atualização", "—", "Atualize o catálogo para ler a planilha.")):
+                self.table.setItem(row, column, QTableWidgetItem(value))
+        self.table.resizeColumnsToContents()
+        self.table.setColumnWidth(0, 260)
+        self.table.setColumnWidth(1, 150)
+        self.table.setColumnWidth(2, 150)
+        self.table.setColumnWidth(3, 75)
+        self.table.resizeRowsToContents()
         stats = self.catalog.stats()
         self.summary.setText(
             f"Última sincronização: {stats.synchronized_at or '—'}\n"
@@ -133,12 +151,23 @@ class PropertySourcesPage(QWidget):
             self.catalog.search_enabled = True
             self.refresh()
             self.catalog_updated.emit()
+            issues = [source for source in self.catalog.list_sources()
+                      if source.status in {"ERROR", "NEEDS_CONFIGURATION"}]
+            diagnostics = "\n\n" + "\n".join(
+                f"{source.relative_path}: {source.last_error}" for source in issues
+            ) if issues else ""
             QMessageBox.information(
                 self, "Catálogo atualizado",
                 f"{len(report.events)} arquivo(s) verificados; "
-                f"{report.stats.properties} fazenda(s) disponíveis."
+                f"{report.stats.properties} fazenda(s) disponíveis.{diagnostics}"
             )
-        except (OSError, ValueError) as error:
+        except OSError:
+            self.refresh()
+            QMessageBox.warning(self, "Fonte de imóveis",
+                "A pasta está temporariamente indisponível. Verifique o Google Drive for Desktop, "
+                "marque os arquivos como disponíveis off-line e tente Atualizar catálogo novamente. "
+                "O último catálogo válido foi preservado.")
+        except ValueError as error:
             self.refresh()
             QMessageBox.warning(self, "Fonte de imóveis", str(error))
 

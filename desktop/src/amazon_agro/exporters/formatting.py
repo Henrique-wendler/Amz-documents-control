@@ -27,6 +27,11 @@ def format_percent(value: Decimal) -> str:
     return f"{rounded:f}".rstrip("0").rstrip(".").replace(".", ",") + "%"
 
 
+def format_percentage_fixed(value: Decimal) -> str:
+    rounded = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return f"{rounded:.2f}".replace(".", ",") + "%"
+
+
 def format_date_pt_br(city: str, proposal_date: date) -> str:
     prefix = f"{city.strip()}, " if city.strip() else ""
     return (

@@ -1,8 +1,8 @@
 """Cells inspected in the supplied Modelo Proposta XLSX template."""
 
 EXCEL_FIELD_MAP: dict[str, str] = {
-    "numero_proposta": "K3",
-    "agencia": "K2",
+    "numero_proposta": "A3",
+    "agencia": "K3",
     "proponente": "A6",
     "cpf_cnpj": "D6",
     "outros_participantes": "F6",
@@ -15,14 +15,14 @@ EXCEL_FIELD_MAP: dict[str, str] = {
     "fonte": "I21",
     "valor_total": "K21",
     "valor_fno": "A23",
-    "classificacao_da_percentual": "D23",
+    "fno_percentage": "D23",
     "astec_fno_financiada": "F23",
-    "astec_fno_percentual": "I23",
-    "laudo_abc_financiado": "J23",
-    "laudo_abc_percentual": "M23",
+    "laudo_abc_financiado": "I23",
+    "laudo_abc_percentual": "K23",
+    "laudo_abc_valor": "I25",
     "valor_of": "A25",
+    "of_percentage": "D25",
     "astec_of_financiada": "F25",
-    "astec_of_percentual": "I25",
     "technician_signature": "A34",
     "date_line": "A35",
 }

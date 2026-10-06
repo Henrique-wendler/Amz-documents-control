@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 from dataclasses import dataclass
+from decimal import Decimal
 from hashlib import sha256
 import io
 import json
@@ -169,21 +170,29 @@ class SmokeDriver:
             from amazon_agro.domain.models import ParticipantType
             kind = self.window.participants_page.table.cellWidget(0, 2)
             assert kind.currentData() == int(ParticipantType.MAIN_ISSUER)
-            assert self.window.participants_page.table.item(0, 1).text() == ""
+            assert self.window.participants_page.table.item(0, 1).text() == "07.778.284/0001-90"
             report["local_source_ok"] = True
             for name, value in {"numero_proposta": "TEST-005", "proponente": "Proponente Exemplo",
                                 "cpf_cnpj": "000.000.000-00", "finalidade": "Custeio", "agencia": "Agencia Exemplo"}.items():
                 control = self.window.operation_page.controls[name]
                 (control.setCurrentText if hasattr(control, "setCurrentText") else control.setText)(value)
-            self.window.proposal_page.spins["valor_total"].setValue(123456.78)
+            self.window.proposal_page.spins["valor_total"].setValue(Decimal("123456.78"))
+            self.window.proposal_page.spins["valor_fno"].setValue(Decimal("90000.00"))
+            self.window.proposal_page.spins["valor_of"].setValue(Decimal("25000.00"))
+            self.window.proposal_page.abc_yes.setChecked(True)
+            self.window.proposal_page.spins["laudo_abc_percentual"].setValue(3.25)
+            self.window.proposal_page.spins["laudo_abc_valor"].setValue(Decimal("4321.09"))
             self.window.save_proposal()
             saved = self.window.service.get(self.window.current.id)
             if saved is None:
                 raise RuntimeError("Proposal was not persisted.")
             assert len(saved.participants) == 1
             assert saved.participants[0].tipo == ParticipantType.MAIN_ISSUER
+            assert saved.laudo_abc_valor == Decimal("4321.09")
+            assert saved.laudo_abc_percentual == Decimal("3.25")
             self.window._load(saved)
             report["save_reopen_ok"] = True
+            report["abc_persistence_ok"] = True
             template = settings.template_path()
             before_hash = sha256(template.read_bytes()).hexdigest()
             report["template"] = str(template)
@@ -192,15 +201,24 @@ class SmokeDriver:
                 raise RuntimeError("No final XLSX was produced.")
             output = load_workbook(xlsx_paths[0])
             sheet = output.active
-            assert sheet["K3"].value == "TEST-005" and sheet["A6"].value == "Proponente Exemplo"
+            assert sheet["A3"].value == "TEST-005" and sheet["A6"].value == "Proponente Exemplo"
             assert sheet["A28"].value == "Fazenda Exemplo"
             assert sheet["A9"].value == settings.default_consultancy_name
-            assert sheet["I9"].value is None and sheet["M9"].value == 1
+            assert sheet["I9"].value == "07.778.284/0001-90" and sheet["M9"].value == 1
+            assert sheet["I23"].value == "Sim" and sheet["K23"].value == 0.0325
+            assert sheet["I25"].value == 4321.09
+            assert sheet["I22"].value == "LAUDO ABC FINANCIADO?"
+            for address, percentage in (("D23", saved.fno_percentage), ("D25", saved.of_percentage)):
+                assert abs(Decimal(str(sheet[address].value)) - percentage / Decimal("100")) < Decimal("0.00000000000001")
+            assert len(sheet._images) == 1 and sheet["A2"].value != "LOGO AMAZON"
             assert sheet.page_setup.fitToWidth == sheet.page_setup.fitToHeight == 1
             assert sheet.sheet_properties.pageSetUpPr.fitToPage
             output.close()
             report["xlsx_ok"] = True
             report["amazon_default_ok"] = True
+            report["abc_export_ok"] = True
+            report["financing_shares_ok"] = True
+            report["official_logo_ok"] = True
             report["amazon_default_type"] = 1
             report["xlsx_path"] = str(xlsx_paths[0])
             available = self.window.export_service.pdf.selector.available_backends()

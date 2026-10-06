@@ -1,5 +1,26 @@
 # Definições de negócio aprovadas — validação
 
+> Registro histórico da consolidação anterior. A decisão posterior confirmou
+> Amazon Agro Consultoria e Projetos LTDA, CNPJ 07.778.284/0001-90 e tipo padrão
+> 1 — Emitente principal, editável. Ela substitui as referências abaixo ao CNPJ
+> vazio e ao default provisório. O hotfix e sua nova validação estão em
+> [HOTFIX_QA.md](HOTFIX_QA.md).
+
+## Regra financeira posterior confirmada — 06/10/2026
+
+**CLASS. DA % = participação percentual de FNO e OF sobre o Valor Total.**
+`FNO% = (valor_fno / valor_total) * 100` e
+`OF% = (valor_of / valor_total) * 100`, com `Decimal` e arredondamento somente
+na apresentação em duas casas. Total zero resulta em `0,00%` para ambos.
+Recursos próprios não alteram o denominador; a soma pode ser menor que 100%.
+
+São resultados automáticos de somente leitura, recalculados ao editar/reabrir,
+exibidos na proposta/resumo/revisão e identificados junto aos valores no XLSX/PDF.
+O campo legado no SQLite permanece preservado, sem determinar esses resultados.
+FNO, OF ou sua soma acima de Total impedem a exportação com mensagem contextual,
+mas não impedem salvar propostas parcialmente preenchidas. A regra está
+confirmada e não integra `BUSINESS_DECISION_PENDING`.
+
 Revisão final do default provisório em 06/10/2026. Baseline de regressão preservado:
 `b1411b1883292f1bcedc3378cf2406b8bf344940`.
 

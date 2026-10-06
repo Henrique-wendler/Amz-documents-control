@@ -45,7 +45,9 @@ class WorkbookInspection:
 
 def header_candidates(sheet: Worksheet, profile: PropertyWorkbookProfile) -> list[HeaderCandidate]:
     candidates: list[HeaderCandidate] = []
-    for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, profile.header_scan_rows)):
+    for row_index, row in enumerate(sheet.iter_rows(
+        min_row=1, max_row=min(sheet.max_row, profile.header_scan_rows)
+    ), 1):
         columns: dict[str, int] = {}
         duplicates: set[str] = set()
         for cell in row:
@@ -56,7 +58,7 @@ def header_candidates(sheet: Worksheet, profile: PropertyWorkbookProfile) -> lis
                 columns[field_name] = cell.column
         if len(columns) >= 2:
             candidates.append(HeaderCandidate(
-                sheet.title, row[0].row, columns, tuple(sorted(duplicates))
+                sheet.title, row_index, columns, tuple(sorted(duplicates))
             ))
     return sorted(candidates, key=lambda item: (-len(item.columns), item.row))
 

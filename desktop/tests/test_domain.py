@@ -22,15 +22,15 @@ def test_proposal_keeps_classification_on_its_property_link() -> None:
 
 @pytest.mark.parametrize("value", [Decimal("-0.01"), Decimal("100.01"), Decimal("NaN")])
 def test_percentages_must_be_finite_and_between_zero_and_100(value: Decimal) -> None:
-    proposal = Proposal(classificacao_da_percentual=value)
+    proposal = Proposal(percentual_recursos_proprios=value)
     with pytest.raises(ValueError):
         proposal.validate()
 
 
-def test_unfunded_item_cannot_store_a_percentage() -> None:
+def test_legacy_astec_percentage_does_not_block_current_flow() -> None:
     proposal = Proposal(astec_fno_financiada=False, astec_fno_percentual=Decimal("5"))
-    with pytest.raises(ValueError):
-        proposal.validate()
+    proposal.validate()
+    assert proposal.astec_fno_percentual == Decimal("5")
 
 
 def test_relationships_must_reference_the_proposal() -> None:

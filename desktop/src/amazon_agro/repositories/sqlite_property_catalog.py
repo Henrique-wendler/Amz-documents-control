@@ -132,6 +132,13 @@ class SQLitePropertyCatalogRepository:
         ).fetchall()
         return [SourceFileRecord(**dict(row)) for row in rows]
 
+    def source_property_counts(self) -> dict[str, int]:
+        """Derived counts for source diagnostics; never stored as entity data."""
+        return dict(self.connection.execute(
+            "SELECT source_path, count(*) FROM rural_properties WHERE active=1 "
+            "GROUP BY source_path"
+        ).fetchall())
+
     def _upsert_source(
         self, file: DiscoveredWorkbook, fingerprint: str, status: str,
         profile: str, profile_signature: str, error: str = "",

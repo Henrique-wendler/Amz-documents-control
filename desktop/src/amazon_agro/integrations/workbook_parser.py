@@ -18,7 +18,7 @@ from amazon_agro.integrations.workbook_inspector import NeedsConfigurationError,
 from amazon_agro.integrations.workbook_profile import PropertyWorkbookProfile
 
 
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 _PARCEL_FIELDS = ("area", "previous_registration", "lot_description", "ccir", "itr", "car")
 _LABELS = {
     "area": "Área", "previous_registration": "Matrícula anterior",
@@ -299,7 +299,21 @@ class PropertyWorkbookParser:
             # owner gaps. Never split a real name merge by changing owners.
             groups: list[list[_ParcelRecord]] = []
             for record in records.values():
-                if not groups or groups[-1][-1].group_key != record.group_key:
+                previous = groups[-1][-1] if groups else None
+                shared_identity_merge = bool(previous and
+                    previous.last_row + 1 == record.row and previous.name == record.name and
+                    any(
+                        read(record.row, key) and
+                        {previous.row, record.row}.issubset(merged_targets(record.row, key)) and
+                        all(read(target, "name") == record.name
+                            for target in merged_targets(record.row, key))
+                        for key in ("ccir", "itr", "car")
+                    ))
+                # Adjacent registration blocks may have separate farm-name
+                # merges. A real shared document merge establishes their link;
+                # matching names or document strings alone never do.
+                if not previous or (previous.group_key != record.group_key and
+                                    not shared_identity_merge):
                     groups.append([])
                 groups[-1].append(record)
             properties: dict[str, RuralProperty] = {}

@@ -8,12 +8,15 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
+from zipfile import BadZipFile
+from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 from amazon_agro.config.settings import AppSettings
 from amazon_agro.integrations.workbook_discovery import (
     DiscoveredWorkbook, PropertyWorkbookDiscovery,
 )
-from amazon_agro.integrations.workbook_inspector import NeedsConfigurationError
+from amazon_agro.integrations.workbook_inspector import NeedsConfigurationError, select_header
 from amazon_agro.integrations.workbook_parser import PARSER_VERSION, PropertyWorkbookParser
 from amazon_agro.integrations.workbook_profile import PropertyWorkbookProfile
 from amazon_agro.repositories.sqlite_property_catalog import (
@@ -40,6 +43,13 @@ def _fingerprint(path: Path) -> str:
         while chunk := stream.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+_READ_ERROR = (
+    "Não foi possível ler a planilha. No Google Drive for Desktop, marque o arquivo "
+    "como disponível off-line, aguarde a sincronização e tente Atualizar catálogo "
+    "novamente. Confira também a permissão de leitura. O último catálogo válido foi preservado."
+)
 
 
 class PropertyCatalogSyncService:
@@ -79,6 +89,19 @@ class PropertyCatalogSyncService:
             profile = PropertyWorkbookProfile.configured(name, options)
         except (TypeError, ValueError) as error:
             raise NeedsConfigurationError("Configuração de perfil inválida.") from error
+        # Explicit file assignments/rules always win. For an unassigned file,
+        # recognize BASA by its table structure when the default family differs.
+        basa = PropertyWorkbookProfile()
+        if not matched and profile.name != basa.name:
+            workbook = load_workbook(file.path, read_only=True, data_only=False)
+            try:
+                try:
+                    select_header(workbook, profile)
+                except NeedsConfigurationError:
+                    select_header(workbook, basa)
+                    profile = basa
+            finally:
+                workbook.close()
         signature = hashlib.sha256(
             json.dumps({"parser_version": PARSER_VERSION, "profile": asdict(profile)},
                        sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -104,7 +127,7 @@ class PropertyCatalogSyncService:
             except OSError:
                 self.catalog.record_issue(
                     file, "", "ERROR", settings.property_profile_name, "",
-                    "Não foi possível ler o arquivo."
+                    _READ_ERROR
                 )
                 events.append(SyncEvent(file.relative_path, "ERROR", "ERROR"))
                 continue
@@ -118,6 +141,11 @@ class PropertyCatalogSyncService:
                 events.append(SyncEvent(
                     file.relative_path, "NEEDS_CONFIGURATION", "NEEDS_CONFIGURATION"
                 ))
+                continue
+            except (OSError, BadZipFile, InvalidFileException):
+                self.catalog.record_issue(file, fingerprint, "ERROR",
+                                          settings.property_profile_name, "", _READ_ERROR)
+                events.append(SyncEvent(file.relative_path, "ERROR", "ERROR"))
                 continue
             if (
                 previous and previous.fingerprint == fingerprint
@@ -141,6 +169,10 @@ class PropertyCatalogSyncService:
                 )
                 events.append(SyncEvent(file.relative_path, "NEEDS_CONFIGURATION",
                                         "NEEDS_CONFIGURATION"))
+            except OSError:
+                self.catalog.record_issue(file, fingerprint, "ERROR", profile.name,
+                                          profile_signature, _READ_ERROR)
+                events.append(SyncEvent(file.relative_path, "ERROR", "ERROR"))
             except Exception as error:
                 self.catalog.record_issue(
                     file, fingerprint, "ERROR", profile.name, profile_signature,

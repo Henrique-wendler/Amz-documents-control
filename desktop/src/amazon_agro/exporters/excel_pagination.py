@@ -5,6 +5,7 @@ from openpyxl.worksheet.pagebreak import Break
 from openpyxl.worksheet.worksheet import Worksheet
 
 from amazon_agro.exporters.excel_map import PDF_PRINT_AREA, PROPERTY_ROWS
+from amazon_agro.exporters.excel_layout import add_logo
 
 
 def _copy_rows(sheet: Worksheet, first: int, last: int, destination: int) -> None:
@@ -40,6 +41,7 @@ def property_page_rows(sheet: Worksheet, line_count: int) -> list[tuple[int, ...
         start = previous_end + 1
         # Identity and proponent repeat; only the property section continues.
         _copy_rows(sheet, 1, 6, start)
+        add_logo(sheet, start)
         _copy_rows(sheet, 26, 35, start + 6)
         sheet.cell(start + 6, 1, "IV - IMÓVEIS (CONTINUAÇÃO)")
         pages.append(tuple(range(start + 8, start + 12)))

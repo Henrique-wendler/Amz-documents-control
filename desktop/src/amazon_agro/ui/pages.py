@@ -4,15 +4,17 @@ from decimal import Decimal
 
 from PySide6.QtCore import QDate, QLocale, Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QDoubleSpinBox, QFormLayout, QGridLayout,
+    QButtonGroup, QComboBox, QDateEdit, QDoubleSpinBox, QFormLayout, QGridLayout,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QRadioButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from amazon_agro.config.settings import AppSettings
+from amazon_agro.ui.currency_input import CurrencyInput
 from amazon_agro.domain.models import (
-    PARTICIPANT_LABELS, Participant, ParticipantType, Proposal, new_id,
+    PARTICIPANT_LABELS, Participant, ParticipantType, Proposal, financing_percentage, new_id,
 )
+from amazon_agro.exporters.formatting import format_percentage_fixed
 
 
 class OperationPage(QWidget):
@@ -24,7 +26,6 @@ class OperationPage(QWidget):
         "responsavel": "Responsável", "tecnico": "Técnico",
         "gerente_banco": "Gerente do banco", "finalidade": "Finalidade",
         "atividade": "Atividade", "fonte": "Fonte",
-        "status": "Status / Etapa / Banco", "aguardando": "Aguardando",
         "cidade": "Cidade", "data_proposta": "Data da proposta",
     }
 
@@ -39,7 +40,7 @@ class OperationPage(QWidget):
             ("Dados bancários", ("banco", "agencia", "gerente_banco")),
             ("Dados do proponente", ("proponente", "cpf_cnpj", "porte")),
             ("Responsáveis", ("responsavel", "tecnico")),
-            ("Operação", ("finalidade", "atividade", "fonte", "status", "aguardando")),
+            ("Operação", ("finalidade", "atividade", "fonte")),
             ("Documento", ("numero_proposta", "cidade", "data_proposta")),
         )
         forms = {}
@@ -53,8 +54,7 @@ class OperationPage(QWidget):
             layout.addWidget(group)
         configured = {
             "banco": settings.banks, "agencia": settings.agencies,
-            "tecnico": settings.technicians, "status": settings.statuses,
-            "aguardando": settings.awaiting_options,
+            "tecnico": settings.technicians,
         }
         for index, (name, label) in enumerate(self.LABELS.items()):
             if name == "data_proposta":
@@ -153,7 +153,7 @@ class ParticipantsPage(QWidget):
             row, 1, QTableWidgetItem(participant.cpf_cnpj if participant else "")
         )
         kind = QComboBox()
-        kind.addItem("Selecione o tipo (provisório)", None)
+        kind.addItem("Selecione o tipo", None)
         for value, label in PARTICIPANT_LABELS.items():
             kind.addItem(f"{int(value)} — {label}", int(value))
         if participant:
@@ -197,15 +197,8 @@ class ParticipantsPage(QWidget):
         return participants
 
 
-def _money_spin() -> QDoubleSpinBox:
-    spin = QDoubleSpinBox()
-    spin.setLocale(QLocale("pt_BR"))
-    spin.setMaximumWidth(300)
-    spin.setDecimals(2)
-    spin.setRange(0, 999_999_999_999.99)
-    spin.setPrefix("R$ ")
-    spin.setGroupSeparatorShown(True)
-    return spin
+def _money_spin() -> CurrencyInput:
+    return CurrencyInput()
 
 
 def _percent_spin() -> QDoubleSpinBox:
@@ -221,27 +214,23 @@ def _percent_spin() -> QDoubleSpinBox:
 class ProposalPage(QWidget):
     changed = Signal()
     MONEY = {
-        "recursos_proprios": "Recursos próprios",
         "valor_total": "Valor total",
         "valor_fno": "Valor FNO",
         "valor_of": "Valor OF",
+        "recursos_proprios": "Recursos próprios",
     }
     PERCENT = {
         "percentual_recursos_proprios": "Percentual recursos próprios",
-        "classificacao_da_percentual": "Classificação DA %",
-        "astec_fno_percentual": "Percentual ASTEC FNO",
-        "laudo_abc_percentual": "Percentual Laudo ABC",
-        "astec_of_percentual": "Percentual ASTEC OF",
     }
     FLAGS = {
-        "astec_fno_financiada": ("ASTEC FNO financiada", "astec_fno_percentual"),
-        "laudo_abc_financiado": ("Laudo ABC financiado", "laudo_abc_percentual"),
-        "astec_of_financiada": ("ASTEC OF financiada", "astec_of_percentual"),
+        "astec_fno_financiada": "ASTEC FNO financiada?",
+        "astec_of_financiada": "ASTEC OF financiada?",
     }
 
     def __init__(self) -> None:
         super().__init__()
-        self.spins: dict[str, QDoubleSpinBox] = {}
+        self.spins: dict[str, QDoubleSpinBox | CurrencyInput] = {}
+        self.financing_shares: dict[str, QLabel] = {}
         self.flags: dict[str, QComboBox] = {}
         layout = QVBoxLayout(self)
         title = QLabel("Proposta")
@@ -258,43 +247,97 @@ class ProposalPage(QWidget):
             spin = _money_spin()
             self.spins[name] = spin
             spin.valueChanged.connect(self.changed)
-            form.addRow(label, spin)
+            if name in {"valor_fno", "valor_of"}:
+                share = QLabel()
+                self.financing_shares[name] = share
+                row = QHBoxLayout()
+                row.addWidget(spin)
+                row.addWidget(share)
+                form.addRow(label, row)
+            else:
+                form.addRow(label, spin)
         for name, label in self.PERCENT.items():
             spin = _percent_spin()
             self.spins[name] = spin
             spin.valueChanged.connect(self.changed)
             form.addRow(label, spin)
-        for name, (label, percent_name) in self.FLAGS.items():
+        for name, label in self.FLAGS.items():
             choice = QComboBox()
             choice.addItem("Não", False)
             choice.addItem("Sim", True)
             self.flags[name] = choice
             choice.currentIndexChanged.connect(self.changed)
+            if name == "astec_of_financiada":
+                self._add_abc_row(form)
             form.addRow(label, choice)
-            choice.currentIndexChanged.connect(
-                lambda _index, selector=choice, target=self.spins[percent_name]:
-                target.setEnabled(bool(selector.currentData()))
-            )
-            self.spins[percent_name].setEnabled(False)
         layout.addLayout(form)
         layout.addStretch()
+
+        for name in ("valor_total", "valor_fno", "valor_of"):
+            self.spins[name].valueChanged.connect(self._update_financing_shares)
+        self._update_financing_shares()
+
+    def _update_financing_shares(self, *_args) -> None:
+        total = self.spins["valor_total"].value()
+        for name, label in self.financing_shares.items():
+            percent = financing_percentage(self.spins[name].value(), total)
+            label.setText(f"Participação {'FNO' if name == 'valor_fno' else 'OF'}: {format_percentage_fixed(percent)}")
+
+    def _add_abc_row(self, form: QFormLayout) -> None:
+        self.abc_group = QButtonGroup(self)
+        self.abc_group.setExclusive(True)
+        self.abc_yes = QRadioButton("Sim")
+        self.abc_no = QRadioButton("Não")
+        self.abc_group.addButton(self.abc_yes, 1)
+        self.abc_group.addButton(self.abc_no, 0)
+        self.abc_no.setChecked(True)
+        row = QHBoxLayout()
+        row.addWidget(self.abc_yes)
+        row.addWidget(self.abc_no)
+        self.abc_fields = QWidget()
+        fields = QHBoxLayout(self.abc_fields)
+        fields.setContentsMargins(0, 0, 0, 0)
+        fields.addWidget(QLabel("Percentual"))
+        percent = _percent_spin()
+        fields.addWidget(percent)
+        fields.addWidget(QLabel("Valor"))
+        amount = CurrencyInput()
+        fields.addWidget(amount)
+        self.spins["laudo_abc_percentual"] = percent
+        self.spins["laudo_abc_valor"] = amount
+        percent.valueChanged.connect(self.changed)
+        amount.valueChanged.connect(self.changed)
+        row.addWidget(self.abc_fields)
+        form.addRow("Possui Laudo ABC financiado?", row)
+        self.abc_group.idToggled.connect(self._abc_toggled)
+        self._abc_toggled()
+
+    def _abc_toggled(self, *_args) -> None:
+        enabled = self.abc_yes.isChecked()
+        self.abc_fields.setVisible(enabled)
+        self.abc_fields.setEnabled(enabled)
+        self.changed.emit()
 
     def read_into(self, proposal: Proposal) -> None:
         proposal.descricao = self.description.toPlainText().strip()
         for name, spin in self.spins.items():
-            value = Decimal(str(spin.value())).quantize(Decimal("0.01"))
-            setattr(proposal, name, value)
+            if name not in {"laudo_abc_percentual", "laudo_abc_valor"}:
+                value = Decimal(str(spin.value())).quantize(Decimal("0.01"))
+                setattr(proposal, name, value)
         for name, choice in self.flags.items():
             enabled = bool(choice.currentData())
             setattr(proposal, name, enabled)
-            if not enabled:
-                setattr(proposal, self.FLAGS[name][1], None)
+        proposal.laudo_abc_financiado = self.abc_yes.isChecked()
+        for name in ("laudo_abc_percentual", "laudo_abc_valor"):
+            value = Decimal(str(self.spins[name].value())).quantize(Decimal("0.01"))
+            setattr(proposal, name, value if proposal.laudo_abc_financiado else None)
 
     def load(self, proposal: Proposal) -> None:
         self.description.setPlainText(proposal.descricao)
         for name, spin in self.spins.items():
             value = getattr(proposal, name)
-            spin.setValue(float(value) if value is not None else 0)
+            spin.setValue((value if isinstance(spin, CurrencyInput) else float(value)) if value is not None else 0)
         for name, choice in self.flags.items():
             choice.setCurrentIndex(choice.findData(getattr(proposal, name)))
-            self.spins[self.FLAGS[name][1]].setEnabled(bool(choice.currentData()))
+        (self.abc_yes if proposal.laudo_abc_financiado else self.abc_no).setChecked(True)
+        self._abc_toggled()

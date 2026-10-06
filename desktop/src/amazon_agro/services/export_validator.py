@@ -53,6 +53,15 @@ class ProposalExportValidator:
         ):
             errors.append("Informe um valor total maior que zero.")
             pending_steps.add(2)
+        amounts = (proposal.valor_total, proposal.valor_fno, proposal.valor_of)
+        if all(isinstance(value, Decimal) and value.is_finite() and value >= 0 for value in amounts):
+            for label, value in (("FNO", proposal.valor_fno), ("OF", proposal.valor_of)):
+                if value > proposal.valor_total:
+                    errors.append(f"O valor {label} não pode ser maior que o valor total da proposta.")
+                    pending_steps.add(2)
+            if proposal.valor_fno + proposal.valor_of > proposal.valor_total:
+                errors.append("A soma dos valores FNO e OF não pode ser maior que o valor total da proposta. Revise os valores informados.")
+                pending_steps.add(2)
         if len(proposal.participants) > len(PARTICIPANT_ROWS):
             pending_steps.add(1)
             errors.append(

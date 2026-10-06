@@ -7,6 +7,14 @@ from enum import IntEnum, StrEnum
 from uuid import uuid4
 
 
+def financing_percentage(amount: Decimal, total: Decimal) -> Decimal:
+    """Derive financing participation without rounding the monetary rule."""
+    if (not isinstance(total, Decimal) or not total.is_finite() or total <= 0
+            or not isinstance(amount, Decimal) or not amount.is_finite()):
+        return Decimal("0")
+    return (amount / total) * Decimal("100")
+
+
 class ParticipantType(IntEnum):
     MAIN_ISSUER = 1
     CUSTODIAN = 2
@@ -188,11 +196,13 @@ class Proposal:
     recursos_proprios: Decimal = Decimal("0")
     percentual_recursos_proprios: Decimal = Decimal("0")
     valor_fno: Decimal = Decimal("0")
+    # Legacy storage only; current shares derive from the monetary amounts.
     classificacao_da_percentual: Decimal = Decimal("0")
     astec_fno_financiada: bool = False
     astec_fno_percentual: Decimal | None = None
     laudo_abc_financiado: bool = False
     laudo_abc_percentual: Decimal | None = None
+    laudo_abc_valor: Decimal | None = None
     valor_of: Decimal = Decimal("0")
     astec_of_financiada: bool = False
     astec_of_percentual: Decimal | None = None
@@ -205,27 +215,36 @@ class Proposal:
     participants: list[Participant] = field(default_factory=list)
     properties: list[ProposalProperty] = field(default_factory=list)
 
+    @property
+    def fno_percentage(self) -> Decimal:
+        return financing_percentage(self.valor_fno, self.valor_total)
+
+    @property
+    def of_percentage(self) -> Decimal:
+        return financing_percentage(self.valor_of, self.valor_total)
+
     def validate(self) -> None:
         for name in ("valor_total", "recursos_proprios", "valor_fno", "valor_of"):
             value = getattr(self, name)
             if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
                 raise ValueError(f"{name} deve ser um valor monetário não negativo.")
-        for name in (
-            "percentual_recursos_proprios", "classificacao_da_percentual",
-            "astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual",
-        ):
+        for name in ("percentual_recursos_proprios",):
             value = getattr(self, name)
             if value is not None and (
                 not isinstance(value, Decimal) or not value.is_finite() or not 0 <= value <= 100
             ):
                 raise ValueError(f"{name} deve estar entre 0 e 100.")
-        for flag, percent in (
-            (self.astec_fno_financiada, self.astec_fno_percentual),
-            (self.laudo_abc_financiado, self.laudo_abc_percentual),
-            (self.astec_of_financiada, self.astec_of_percentual),
-        ):
-            if not flag and percent is not None:
-                raise ValueError("Percentual informado para item não financiado.")
+        if self.laudo_abc_financiado:
+            percent = self.laudo_abc_percentual
+            if percent is not None and (
+                not isinstance(percent, Decimal) or not percent.is_finite() or not 0 <= percent <= 100
+            ):
+                raise ValueError("laudo_abc_percentual deve estar entre 0 e 100.")
+            amount = self.laudo_abc_valor
+            if amount is not None and (
+                not isinstance(amount, Decimal) or not amount.is_finite() or amount < 0
+            ):
+                raise ValueError("laudo_abc_valor deve ser um valor monetário não negativo.")
         participant_ids: set[str] = set()
         for participant in self.participants:
             if participant.proposal_id != self.id or participant.id in participant_ids:

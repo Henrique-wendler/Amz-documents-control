@@ -11,6 +11,7 @@ dependencies = [
   "PySide6>=6.8,<7",
   "SQLAlchemy>=2.0,<3",
   "openpyxl>=3.1,<4",
+  "Pillow>=11,<13",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +32,7 @@ where = ["src"]
 version = {attr = "amazon_agro.version.__version__"}
 
 [tool.setuptools.package-data]
-amazon_agro = ["templates/*.xlsx"]
+amazon_agro = ["templates/*.xlsx", "resources/AmazonAgroLogo.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

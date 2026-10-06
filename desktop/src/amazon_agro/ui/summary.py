@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from amazon_agro.domain.models import PARTICIPANT_LABELS, Proposal
-from amazon_agro.exporters.formatting import format_brl
+from amazon_agro.exporters.formatting import format_brl, format_percentage_fixed
 from amazon_agro.services.export_validator import ValidationResult
 from amazon_agro.ui.privacy import mask_document
 
@@ -74,6 +74,8 @@ class ProposalSummaryPanel(QWidget):
             f"Técnico: {proposal.tecnico or '—'}",
             f"Finalidade: {proposal.finalidade or '—'}",
             f"Valor: {format_brl(proposal.valor_total)}",
+            f"Participação FNO: {format_percentage_fixed(proposal.fno_percentage)}",
+            f"Participação OF: {format_percentage_fixed(proposal.of_percentage)}",
             f"Fonte: {proposal.fonte or '—'}",
             f"Cidade: {proposal.cidade or '—'}",
         ]

@@ -43,6 +43,7 @@ def distribution_manifest(distribution: Path) -> dict:
     expected_template = "_internal/amazon_agro/templates/modelo_proposta.xlsx"
     identity = release_identity()
     required = [identity["executable"] + ".exe", expected_template,
+                "_internal/amazon_agro/resources/AmazonAgroLogo.png",
                 "_internal/python312.dll", "_internal/PySide6/plugins/platforms/qwindows.dll"]
     for relative in required:
         if not (distribution / relative).is_file():
@@ -64,7 +65,8 @@ def distribution_manifest(distribution: Path) -> dict:
         if "sqlalchemy" in relative.lower() and suffix in {".pyd", ".dll"}:
             raise ValueError(f"Optional SQLAlchemy native extension found: {relative}")
         if relative.startswith("_internal/amazon_agro/") and relative not in {
-            expected_template, "_internal/amazon_agro/resources/AmazonAgro.ico"
+            expected_template, "_internal/amazon_agro/resources/AmazonAgro.ico",
+            "_internal/amazon_agro/resources/AmazonAgroLogo.png"
         }:
             raise ValueError(f"Application resource is not on the release allowlist: {relative}")
         entries.append({"path": relative, "bytes": path.stat().st_size,
@@ -72,6 +74,9 @@ def distribution_manifest(distribution: Path) -> dict:
     packaged_template = distribution / expected_template
     if sha256(packaged_template.read_bytes()).digest() != sha256(template.read_bytes()).digest():
         raise ValueError("Packaged template differs from the authorized source template.")
+    logo = ROOT / "src/amazon_agro/resources/AmazonAgroLogo.png"
+    if sha256((distribution / "_internal/amazon_agro/resources/AmazonAgroLogo.png").read_bytes()).digest() != sha256(logo.read_bytes()).digest():
+        raise ValueError("Packaged logo differs from the authorized source logo.")
     return {"release": identity, "build_tools": validate_build_environment(),
             "bytes": sum(item["bytes"] for item in entries), "file_count": len(entries),
             "template_unchanged": True, "sqlalchemy_pure_python": True, "files": entries}

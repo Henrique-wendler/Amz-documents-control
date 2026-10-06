@@ -130,7 +130,7 @@ def main() -> None:
             if path.suffix == ".xlsx":
                 book = load_workbook(path)
                 assert book.active["A6"].value == "Proponente Exemplo"
-                assert book.active["K3"].value == "TEST-004"
+                assert book.active["A3"].value == "TEST-004"
                 assert book.active["A28"].value == "Fazenda Exemplo"
                 book.close()
         report["exports"][kind] = {"click_signals": spy.count(), "files": [str(p) for p in produced]}

@@ -70,8 +70,10 @@ def test_xlsx_integration_fills_mapped_cells_and_preserves_template(tmp_path) ->
     output = load_workbook(destination)
     source_sheet, sheet = source.active, output.active
     assert output.sheetnames == source.sheetnames
-    assert sheet["K3"].value == "12345"
-    assert sheet["K2"].value == "Palmas Centro"
+    assert sheet["A3"].value == "12345"
+    assert sheet["A2"].value == "Nº DA PROPOSTA"
+    assert sheet["K3"].value == "Palmas Centro"
+    assert sheet["K2"].value == "AGÊNCIA"
     assert sheet["A6"].value == "João da Silva"
     assert sheet["D6"].value == "123.456.789-00"
     assert sheet["I6"].value == "Maria Técnica"
@@ -86,19 +88,21 @@ def test_xlsx_integration_fills_mapped_cells_and_preserves_template(tmp_path) ->
     assert sheet["C21"].value == "Cultivo de cacau"
     assert sheet["G21"].value == "Sim"
     assert sheet["H21"].value == pytest.approx(0.125)
-    assert sheet["H21"].number_format == "0.##%"
+    assert sheet["H21"].number_format == "0.00%"
     assert sheet["I21"].value == "FNO"
-    assert sheet["K21"].value == "R$ 1.234.567,89"
-    assert sheet["A23"].value == "R$ 900.000,00"
-    assert sheet["D23"].value == pytest.approx(0.07)
-    assert sheet["D23"].number_format == "0.##%"
+    assert sheet["K21"].value == 1234567.89
+    assert sheet["A23"].value == 900000
+    assert sheet["K21"].number_format == '"R$" #,##0.00'
+    assert sheet["D23"].value == pytest.approx(float(proposal.valor_fno / proposal.valor_total))
+    assert sheet["D25"].value == pytest.approx(float(proposal.valor_of / proposal.valor_total))
+    assert sheet["D23"].number_format == sheet["D25"].number_format == "0.00%"
+    assert "classificacao_da_percentual" not in EXCEL_FIELD_MAP
     assert sheet["F23"].value == "Sim"
-    assert sheet["I23"].value == pytest.approx(0.025)
-    assert sheet["J23"].value == "Não"
-    assert sheet["M23"].value is None
-    assert sheet["A25"].value == "R$ 234.567,89"
+    assert sheet["I23"].value == "Não"
+    assert sheet["K23"].value is None
+    assert sheet["A25"].value == 234567.89
     assert sheet["F25"].value == "Sim"
-    assert sheet["I25"].value == pytest.approx(0.0125)
+    assert sheet["I25"].value is None
     assert sheet["A28"].value == "Imóvel demonstrativo A"
     assert sheet["E28"].value == "Palmas"
     assert sheet["I28"].value == "MAT-001"
@@ -118,47 +122,32 @@ def test_xlsx_integration_fills_mapped_cells_and_preserves_template(tmp_path) ->
                for cell in row)
     assert EXCEL_FIELD_MAP["valor_total"] == "K21"
 
-    assert {str(item) for item in sheet.merged_cells.ranges} == {
-        str(item) for item in source_sheet.merged_cells.ranges
-    }
-    assert {
-        key: dim.width for key, dim in sheet.column_dimensions.items()
-    } == {
-        key: dim.width for key, dim in source_sheet.column_dimensions.items()
-    }
-    assert {
-        key: dim.height for key, dim in sheet.row_dimensions.items()
-    } == {
-        key: dim.height for key, dim in source_sheet.row_dimensions.items()
-    }
-    for source_row in source_sheet:
-        for before in source_row:
-            after = sheet[before.coordinate]
-            if before._style is None:
-                assert after._style is None
-            else:
-                assert after._style is not None
-                assert before._style.fontId == after._style.fontId
-                assert before._style.fillId == after._style.fillId
-                assert before._style.borderId == after._style.borderId
-                assert before._style.alignmentId == after._style.alignmentId
-                assert before._style.protectionId == after._style.protectionId
+    source_merges = {str(item) for item in source_sheet.merged_cells.ranges}
+    assert {str(item) for item in sheet.merged_cells.ranges} == (
+        source_merges - {"A2:B3", "J22:L22", "J23:L23", "J24:L24", "J25:L25"}
+    ) | {"A2:B2", "A3:B3", "C21:F21", "F23:H23", "I22:J22", "K22:M22",
+         "I23:J23", "K23:M23", "I24:M24", "I25:M25"}
+    # The generated copy adopts the approved Word grid. Its original template
+    # bytes remain identical, while text gets readable widths and row heights.
+    assert sum(dim.width for dim in sheet.column_dimensions.values()) < 100
+    assert 750 < sum(sheet.row_dimensions[row].height for row in range(1, 36)) < 850
     for coordinate in ("A2", "A6", "A15", "A21", "K21", "A28", "K28", "A32"):
-        before, after = source_sheet[coordinate], sheet[coordinate]
-        assert copy(before.font) == copy(after.font)
-        assert copy(before.border) == copy(after.border)
-        assert copy(before.fill) == copy(after.fill)
-        assert copy(before.alignment) == copy(after.alignment)
-    assert len(sheet._images) == len(source_sheet._images)
+        after = sheet[coordinate]
+        assert after.font.name == "Times New Roman" and after.font.sz >= 8.5
+        assert after.border.left.style == after.border.right.style == "thin"
+        assert after.alignment.vertical == "center"
+        assert after.alignment.wrap_text or after.alignment.shrinkToFit
+    assert len(sheet._images) == 1
+    assert sheet._images[0].anchor._from.row == 0
     assert sheet.page_setup.orientation == source_sheet.page_setup.orientation
-    assert sheet.page_setup.scale == source_sheet.page_setup.scale
+    assert sheet.page_setup.scale is None
     assert sheet.print_area == source_sheet.print_area
     assert "$A$1:$M$35" in str(sheet.print_area)
     assert PDF_PRINT_AREA == "A1:M35"
     assert sheet.sheet_properties.pageSetUpPr.fitToPage is True
     assert sheet.page_setup.fitToWidth == sheet.page_setup.fitToHeight == 1
     assert len(sheet.row_breaks.brk) == 0
-    assert sheet.page_margins == source_sheet.page_margins
+    assert sheet.page_margins.left >= 0.3 and sheet.page_margins.right >= 0.3
 
 
 def test_xlsx_rejects_more_than_seven_participants(tmp_path) -> None:

@@ -8,13 +8,14 @@ from amazon_agro.config.settings import AppSettings
 from amazon_agro.domain.models import PARTICIPANT_LABELS, Proposal
 from amazon_agro.services.proposal_service import ProposalService
 from amazon_agro.ui.privacy import mask_document
+from amazon_agro.exporters.formatting import format_brl, format_percentage_fixed
 
 
-def _display(value: object) -> str:
+def _display(value: object, money: bool = False) -> str:
     if isinstance(value, bool):
         return "Sim" if value else "Não"
     if isinstance(value, Decimal):
-        return str(value).replace(".", ",")
+        return format_brl(value) if money else str(value).replace(".", ",")
     if value is None:
         return "—"
     return str(value) or "—"
@@ -28,21 +29,18 @@ class ReviewPage(QWidget):
         ("Responsável", "responsavel"), ("Técnico", "tecnico"),
         ("Gerente do banco", "gerente_banco"), ("Finalidade", "finalidade"),
         ("Atividade", "atividade"), ("Fonte", "fonte"),
-        ("Status / Etapa / Banco", "status"), ("Aguardando", "aguardando"),
         ("Cidade", "cidade"), ("Data da proposta", "data_proposta"),
     )
     FINANCIAL = (
-        ("Descrição", "descricao"), ("Recursos próprios", "recursos_proprios"),
+        ("Descrição", "descricao"), ("Valor total", "valor_total"), ("Valor FNO", "valor_fno"),
+        ("Valor OF", "valor_of"), ("Recursos próprios", "recursos_proprios"),
+        ("Participação FNO", "fno_percentage"), ("Participação OF", "of_percentage"),
         ("% recursos próprios", "percentual_recursos_proprios"),
-        ("Valor total", "valor_total"), ("Valor FNO", "valor_fno"),
-        ("Classificação DA %", "classificacao_da_percentual"),
         ("ASTEC FNO financiada", "astec_fno_financiada"),
-        ("% ASTEC FNO", "astec_fno_percentual"),
-        ("Laudo ABC financiado", "laudo_abc_financiado"),
+        ("Possui Laudo ABC financiado?", "laudo_abc_financiado"),
         ("% Laudo ABC", "laudo_abc_percentual"),
-        ("Valor OF", "valor_of"),
+        ("Valor Laudo ABC", "laudo_abc_valor"),
         ("ASTEC OF financiada", "astec_of_financiada"),
-        ("% ASTEC OF", "astec_of_percentual"),
     )
 
     def __init__(self, service: ProposalService, settings: AppSettings) -> None:
@@ -88,13 +86,20 @@ class ReviewPage(QWidget):
             lines.extend(
                 f"{person.nome} | {mask_document(person.cpf_cnpj)} | "
                 f"{int(person.tipo) if person.tipo is not None else '—'} — "
-                f"{PARTICIPANT_LABELS.get(person.tipo, 'Tipo provisório: selecione')} | ID: {person.id}"
+                f"{PARTICIPANT_LABELS.get(person.tipo, 'Selecione o tipo')} | ID: {person.id}"
                 for person in proposal.participants
             )
         else:
             lines.append("Nenhum participante adicionado.")
         lines.extend(["", "PROPOSTA"])
-        lines.extend(f"{label}: {_display(getattr(proposal, name))}" for label, name in self.FINANCIAL)
+        money_fields = {"valor_total", "valor_fno", "valor_of", "recursos_proprios", "laudo_abc_valor"}
+        for label, name in self.FINANCIAL:
+            if not proposal.laudo_abc_financiado and name in {"laudo_abc_percentual", "laudo_abc_valor"}:
+                continue
+            value = getattr(proposal, name)
+            text = (format_percentage_fixed(value) if name in {"fno_percentage", "of_percentage"}
+                    else _display(value, name in money_fields))
+            lines.append(f"{label}: {text}")
         lines.extend(["", "IMÓVEIS"])
         if proposal.properties:
             for link in proposal.properties:
