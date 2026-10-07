@@ -176,21 +176,44 @@ class SmokeDriver:
                                 "cpf_cnpj": "000.000.000-00", "finalidade": "Custeio", "agencia": "Agencia Exemplo"}.items():
                 control = self.window.operation_page.controls[name]
                 (control.setCurrentText if hasattr(control, "setCurrentText") else control.setText)(value)
-            self.window.proposal_page.spins["valor_total"].setValue(Decimal("123456.78"))
-            self.window.proposal_page.spins["valor_fno"].setValue(Decimal("90000.00"))
-            self.window.proposal_page.spins["valor_of"].setValue(Decimal("25000.00"))
+            self.window.proposal_page.spins["valor_total"].setValue(Decimal("100000.00"))
+            self.window.proposal_page.spins["valor_fno"].setValue(Decimal("70000.00"))
+            self.window.proposal_page.spins["valor_of"].setValue(Decimal("30000.00"))
             self.window.proposal_page.abc_yes.setChecked(True)
-            self.window.proposal_page.spins["laudo_abc_percentual"].setValue(3.25)
-            self.window.proposal_page.spins["laudo_abc_valor"].setValue(Decimal("4321.09"))
+            self.window.proposal_page.spins["laudo_abc_percentual"].setValue(5)
+            assert self.window.proposal_page.abc_amount.text() == "R$ 3.500,00"
+            self.window.proposal_page.spins["valor_fno"].setValue(Decimal("80000"))
+            assert self.window.proposal_page.abc_amount.text() == "R$ 4.000,00"
+            self.window.proposal_page.spins["valor_fno"].setValue(Decimal("70000"))
+            self.window.proposal_page.spins["valor_total"].setValue(Decimal("120000"))
+            assert self.window.proposal_page.abc_amount.text() == "R$ 3.500,00"
+            self.window.proposal_page.spins["valor_total"].setValue(Decimal("100000"))
+            for source, percent in (("fno", 2.75), ("of", 1.25)):
+                flag = f"astec_{source}_financiada"
+                fields = self.window.proposal_page.astec_fields[flag]
+                assert fields.isHidden() and not fields.isEnabled()
+                self.window.proposal_page.flags[flag].setValue(True)
+                self.window.proposal_page.spins[f"astec_{source}_percentual"].setValue(percent)
+                assert not fields.isHidden() and fields.isEnabled()
+            report["abc_fno_basis_ok"] = report["abc_total_independent_ok"] = True
+            assert "laudo_abc_valor" not in self.window.proposal_page.spins
+            assert "recursos_proprios" not in self.window.proposal_page.spins
+            report["abc_calculation_ok"] = True
             self.window.save_proposal()
             saved = self.window.service.get(self.window.current.id)
             if saved is None:
                 raise RuntimeError("Proposal was not persisted.")
             assert len(saved.participants) == 1
             assert saved.participants[0].tipo == ParticipantType.MAIN_ISSUER
-            assert saved.laudo_abc_valor == Decimal("4321.09")
-            assert saved.laudo_abc_percentual == Decimal("3.25")
+            assert saved.laudo_abc_valor == Decimal("3500.00")
+            assert saved.laudo_abc_percentual == Decimal("5")
             self.window._load(saved)
+            assert saved.astec_fno_financiada and saved.astec_of_financiada
+            assert saved.astec_fno_percentual == Decimal("2.75")
+            assert saved.astec_of_percentual == Decimal("1.25")
+            for fields in self.window.proposal_page.astec_fields.values():
+                assert not fields.isHidden() and fields.isEnabled()
+            report["astec_persistence_ok"] = True
             report["save_reopen_ok"] = True
             report["abc_persistence_ok"] = True
             template = settings.template_path()
@@ -205,8 +228,12 @@ class SmokeDriver:
             assert sheet["A28"].value == "Fazenda Exemplo"
             assert sheet["A9"].value == settings.default_consultancy_name
             assert sheet["I9"].value == "07.778.284/0001-90" and sheet["M9"].value == 1
-            assert sheet["I23"].value == "Sim" and sheet["K23"].value == 0.0325
-            assert sheet["I25"].value == 4321.09
+            assert sheet["I23"].value == "Sim" and sheet["K23"].value == 0.05
+            assert sheet["I25"].value == 3500
+            assert sheet["F23"].value == sheet["F25"].value == "Sim"
+            assert sheet["H23"].value == 0.0275 and sheet["H25"].value == 0.0125
+            assert "SOMENTE FNO" in sheet["I24"].value
+            report["astec_export_ok"] = True
             assert sheet["I22"].value == "LAUDO ABC FINANCIADO?"
             for address, percentage in (("D23", saved.fno_percentage), ("D25", saved.of_percentage)):
                 assert abs(Decimal(str(sheet[address].value)) - percentage / Decimal("100")) < Decimal("0.00000000000001")

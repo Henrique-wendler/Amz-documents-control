@@ -90,6 +90,7 @@ def test_manual_da_absent_and_derived_shares_present_in_proposal_review_summary(
 def test_current_xlsx_ignores_legacy_da_and_exports_abc_with_derived_shares(app, tmp_path, enabled):
     proposal = proposal_with_parcels(1)
     proposal.classificacao_da_percentual = Decimal("99.11")
+    proposal.valor_fno, proposal.valor_of = proposal.valor_total * Decimal("0.75"), proposal.valor_total * Decimal("0.25")
     proposal.laudo_abc_financiado = enabled
     proposal.laudo_abc_percentual = Decimal("3.25")
     proposal.laudo_abc_valor = Decimal("4321.09")
@@ -112,12 +113,12 @@ def test_current_xlsx_ignores_legacy_da_and_exports_abc_with_derived_shares(app,
     assert "classificacao_da_percentual" not in EXCEL_FIELD_MAP
     assert sheet["I22"].value == "LAUDO ABC FINANCIADO?"
     assert sheet["K23"].value == (0.0325 if enabled else None)
-    assert sheet["I25"].value == (4321.09 if enabled else None)
+    assert sheet["I25"].value == (24.375 if enabled else None)
     merges = {str(region) for region in sheet.merged_cells}
     assert {"D22:E22", "D23:E23", "D24:E24", "D25:E25"} <= merges
     assert sheet["D22"].value == "PARTICIPAÇÃO FNO"
     assert sheet["D24"].value == "PARTICIPAÇÃO OF"
-    assert sheet["D23"].value == sheet["D25"].value == 0
+    assert sheet["D23"].value == 0.75 and sheet["D25"].value == 0.25
     workbook.close()
     page.close()
     repository.engine.dispose()
@@ -225,7 +226,8 @@ def test_native_pdf_has_official_abc_label_and_ignores_legacy_da_and_inactive_ab
                     str(xlsx), str(pdf)], capture_output=True, text=True, check=True, timeout=120)
     result = subprocess.run([PDF_READER_PYTHON, "-c",
                              "import sys; from pypdf import PdfReader; print(' '.join(p.extract_text() for p in PdfReader(sys.argv[1]).pages))",
-                             str(pdf)], capture_output=True, text=True, check=True, timeout=30)
+                             str(pdf)], capture_output=True, text=True, check=True, timeout=30,
+                             encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     text = " ".join(result.stdout.split())
     assert "LAUDO ABC FINANCIADO?" in text
     assert "PARTICIPAÇÃO FNO" in text and "PARTICIPAÇÃO OF" in text
@@ -233,5 +235,5 @@ def test_native_pdf_has_official_abc_label_and_ignores_legacy_da_and_inactive_ab
     assert "TEST-PAGINATION" in text
     assert "CLASS. DA" not in text and "99,11" not in text
     assert ("3,25%" in text) == enabled
-    assert ("4.321,09" in text) == enabled
+    assert ("48.750,00" in text) == enabled
     assert "#" not in text

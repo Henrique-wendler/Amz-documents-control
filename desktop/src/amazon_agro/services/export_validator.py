@@ -13,6 +13,7 @@ from amazon_agro.repositories.contracts import PropertyRepository
 class ValidationResult:
     errors: tuple[str, ...]
     pending_steps: tuple[int, ...] = ()
+    financial_errors: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -26,11 +27,14 @@ class ProposalExportValidator:
 
     def validate(self, proposal: Proposal) -> ValidationResult:
         errors: list[str] = []
+        financial_errors: list[str] = []
         pending_steps: set[int] = set()
         try:
             proposal.validate()
         except ValueError as error:
             errors.append(str(error))
+            if any(name in str(error) for name in ("valor_", "percentual_", "laudo_abc")):
+                financial_errors.append(str(error))
             message = str(error).lower()
             pending_steps.add(1 if "participante" in message else 3 if any(
                 word in message for word in ("imóvel", "imóveis", "matrícula")
@@ -57,11 +61,12 @@ class ProposalExportValidator:
         if all(isinstance(value, Decimal) and value.is_finite() and value >= 0 for value in amounts):
             for label, value in (("FNO", proposal.valor_fno), ("OF", proposal.valor_of)):
                 if value > proposal.valor_total:
-                    errors.append(f"O valor {label} não pode ser maior que o valor total da proposta.")
+                    financial_errors.append(f"O valor {label} não pode ser maior que o valor total da proposta.")
                     pending_steps.add(2)
             if proposal.valor_fno + proposal.valor_of > proposal.valor_total:
-                errors.append("A soma dos valores FNO e OF não pode ser maior que o valor total da proposta. Revise os valores informados.")
+                financial_errors.append("A soma dos valores FNO e OF não pode ser maior que o valor total da proposta. Revise os valores informados.")
                 pending_steps.add(2)
+        errors.extend(financial_errors)
         if len(proposal.participants) > len(PARTICIPANT_ROWS):
             pending_steps.add(1)
             errors.append(
@@ -87,4 +92,5 @@ class ProposalExportValidator:
                     )
         if errors:
             pending_steps.add(4)
-        return ValidationResult(tuple(dict.fromkeys(errors)), tuple(sorted(pending_steps)))
+        return ValidationResult(tuple(dict.fromkeys(errors)), tuple(sorted(pending_steps)),
+                                tuple(dict.fromkeys(financial_errors)))

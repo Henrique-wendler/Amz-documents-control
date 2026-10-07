@@ -25,7 +25,7 @@ _PERCENT = {
     "astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual",
 }
 _BOOLEAN = {
-    "astec_fno_financiada", "laudo_abc_financiado", "astec_of_financiada",
+    "astec_fno_financiada", "laudo_abc_financiado", "astec_of_financiada", "possui_recursos_proprios",
 }
 _SCALAR = [item.name for item in fields(Proposal) if item.name not in {"participants", "properties"}]
 _METADATA = MetaData()
@@ -34,7 +34,7 @@ _PROPOSALS = Table(
     Column("id", String, primary_key=True),
     *[
         Column(name, Boolean if name in _BOOLEAN else String, nullable=False
-               if name not in {"astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual", "laudo_abc_valor"}
+               if name not in {"astec_fno_percentual", "laudo_abc_percentual", "astec_of_percentual", "laudo_abc_valor", "possui_recursos_proprios"}
                else True)
         for name in _SCALAR if name != "id"
     ],
@@ -118,6 +118,8 @@ class SQLiteProposalRepository:
             proposal_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(proposals)")}
             if "laudo_abc_valor" not in proposal_columns:
                 connection.exec_driver_sql("ALTER TABLE proposals ADD COLUMN laudo_abc_valor TEXT")
+            if "possui_recursos_proprios" not in proposal_columns:
+                connection.exec_driver_sql("ALTER TABLE proposals ADD COLUMN possui_recursos_proprios BOOLEAN")
             existing = {
                 row[1] for row in connection.exec_driver_sql(
                     "PRAGMA table_info(proposal_properties)"

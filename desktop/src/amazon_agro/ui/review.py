@@ -33,14 +33,16 @@ class ReviewPage(QWidget):
     )
     FINANCIAL = (
         ("Descrição", "descricao"), ("Valor total", "valor_total"), ("Valor FNO", "valor_fno"),
-        ("Valor OF", "valor_of"), ("Recursos próprios", "recursos_proprios"),
+        ("Valor OF", "valor_of"), ("Possui recursos próprios?", "has_own_resources"),
         ("Participação FNO", "fno_percentage"), ("Participação OF", "of_percentage"),
-        ("% recursos próprios", "percentual_recursos_proprios"),
+        ("% recursos próprios", "own_resources_percentage"),
         ("ASTEC FNO financiada", "astec_fno_financiada"),
+        ("% ASTEC FNO", "astec_fno_percentual"),
         ("Possui Laudo ABC financiado?", "laudo_abc_financiado"),
         ("% Laudo ABC", "laudo_abc_percentual"),
-        ("Valor Laudo ABC", "laudo_abc_valor"),
+        ("Valor Laudo ABC", "calculated_abc_amount"),
         ("ASTEC OF financiada", "astec_of_financiada"),
+        ("% ASTEC OF", "astec_of_percentual"),
     )
 
     def __init__(self, service: ProposalService, settings: AppSettings) -> None:
@@ -53,6 +55,7 @@ class ReviewPage(QWidget):
         layout.addWidget(self.text)
         self.validation_label = QLabel()
         self.validation_label.setWordWrap(True)
+        self.validation_label.setObjectName("validationMessage")
         layout.addWidget(self.validation_label)
         actions = QGridLayout()
         self.save_button = QPushButton("Salvar operação")
@@ -67,8 +70,11 @@ class ReviewPage(QWidget):
         layout.addLayout(actions)
         self.set_validation_errors(("Preencha os dados mínimos da proposta.",))
 
-    def set_validation_errors(self, errors: tuple[str, ...]) -> None:
+    def set_validation_errors(self, errors: tuple[str, ...], financial_errors: tuple[str, ...] = ()) -> None:
         enabled = not errors
+        self.validation_label.setProperty("blocked", bool(financial_errors))
+        self.validation_label.style().unpolish(self.validation_label)
+        self.validation_label.style().polish(self.validation_label)
         # Actions remain reachable so a click explains pending fields.
         self.validation_label.setText(
             "Pronta para exportar." if enabled
@@ -92,12 +98,18 @@ class ReviewPage(QWidget):
         else:
             lines.append("Nenhum participante adicionado.")
         lines.extend(["", "PROPOSTA"])
-        money_fields = {"valor_total", "valor_fno", "valor_of", "recursos_proprios", "laudo_abc_valor"}
+        money_fields = {"valor_total", "valor_fno", "valor_of", "calculated_abc_amount"}
         for label, name in self.FINANCIAL:
-            if not proposal.laudo_abc_financiado and name in {"laudo_abc_percentual", "laudo_abc_valor"}:
+            if name in {"astec_fno_percentual", "astec_of_percentual"} and not getattr(
+                proposal, name.replace("percentual", "financiada")
+            ):
+                continue
+            if not proposal.laudo_abc_financiado and name in {"laudo_abc_percentual", "calculated_abc_amount"}:
+                continue
+            if name == "own_resources_percentage" and not proposal.has_own_resources:
                 continue
             value = getattr(proposal, name)
-            text = (format_percentage_fixed(value) if name in {"fno_percentage", "of_percentage"}
+            text = (format_percentage_fixed(value) if value is not None and name in {"fno_percentage", "of_percentage", "own_resources_percentage", "laudo_abc_percentual", "astec_fno_percentual", "astec_of_percentual"}
                     else _display(value, name in money_fields))
             lines.append(f"{label}: {text}")
         lines.extend(["", "IMÓVEIS"])

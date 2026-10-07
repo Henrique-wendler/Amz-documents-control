@@ -93,9 +93,9 @@ def test_financial_order_and_removed_operation_fields(app):
     operation.read_into(legacy)
     assert legacy.status == "Etapa legada" and legacy.aguardando == "Documento legado"
     page = ProposalPage()
-    assert list(page.spins) == ["valor_total", "valor_fno", "valor_of", "recursos_proprios",
-                              "percentual_recursos_proprios",
-                              "laudo_abc_percentual", "laudo_abc_valor"]
+    assert list(page.spins) == ["valor_total", "valor_fno", "valor_of",
+                              "astec_fno_percentual", "laudo_abc_percentual",
+                              "astec_of_percentual", "percentual_recursos_proprios"]
     assert list(page.flags) == ["astec_fno_financiada", "astec_of_financiada"]
     assert all(isinstance(page.spins[key], CurrencyInput) for key in page.MONEY)
     operation.close()
@@ -112,19 +112,20 @@ def test_abc_exclusive_fields_persist_reopen_and_disable(app, tmp_path):
     assert not page.abc_no.isChecked()
     assert not page.abc_fields.isHidden() and page.abc_fields.isEnabled()
     page.spins["laudo_abc_percentual"].setValue(3.25)
-    page.spins["laudo_abc_valor"].setValue(Decimal("4321.09"))
+    page.spins["valor_total"].setValue(Decimal("100000"))
+    page.spins["valor_fno"].setValue(Decimal("70000"))
     page.read_into(proposal)
     repository = SQLiteProposalRepository(tmp_path / "proposals.sqlite3")
     repository.save(proposal)
     repository.engine.dispose()
     repository = SQLiteProposalRepository(tmp_path / "proposals.sqlite3")
     reopened = repository.get(proposal.id)
-    assert reopened.laudo_abc_valor == Decimal("4321.09")
+    assert reopened.laudo_abc_valor == Decimal("2275")
     assert reopened.laudo_abc_percentual == Decimal("3.25")
     assert reopened.astec_fno_percentual == Decimal("99")
     assert reopened.astec_of_percentual == Decimal("77")
     page.load(reopened)
-    assert page.spins["laudo_abc_valor"].value() == Decimal("4321.09")
+    assert page.abc_amount.text() == "R$ 2.275,00"
     page.abc_no.setChecked(True)
     page.read_into(reopened)
     assert reopened.laudo_abc_percentual is reopened.laudo_abc_valor is None
@@ -243,16 +244,16 @@ def test_source_screen_lists_discovered_names_and_visible_diagnostics(app, tmp_p
 
 @pytest.mark.parametrize("enabled", [True, False])
 def test_xlsx_abc_outputs_only_explicit_active_fields_and_ignores_legacy_percentages(tmp_path, enabled):
-    proposal = Proposal(laudo_abc_financiado=enabled, laudo_abc_percentual=Decimal("3.25"),
+    proposal = Proposal(valor_total=Decimal("100000"), valor_fno=Decimal("70000"), laudo_abc_financiado=enabled, laudo_abc_percentual=Decimal("3.25"),
                         laudo_abc_valor=Decimal("4321.09"),
                         astec_fno_percentual=Decimal("77.88"), astec_of_percentual=Decimal("99.11"))
     path = OpenpyxlExcelProposalExporter(AppSettings(), FakePropertyRepository()).export(proposal, tmp_path / "abc.xlsx")
     sheet = load_workbook(path).active
     assert sheet[EXCEL_FIELD_MAP["laudo_abc_financiado"]].value == ("Sim" if enabled else "Não")
     assert sheet[EXCEL_FIELD_MAP["laudo_abc_percentual"]].value == (0.0325 if enabled else None)
-    assert sheet[EXCEL_FIELD_MAP["laudo_abc_valor"]].value == (4321.09 if enabled else None)
-    assert "astec_fno_percentual" not in EXCEL_FIELD_MAP
-    assert "astec_of_percentual" not in EXCEL_FIELD_MAP
+    assert sheet[EXCEL_FIELD_MAP["laudo_abc_valor"]].value == (2275 if enabled else None)
+    assert sheet[EXCEL_FIELD_MAP["astec_fno_percentual"]].value is None
+    assert sheet[EXCEL_FIELD_MAP["astec_of_percentual"]].value is None
     assert not {0.7788, 0.9911}.intersection(cell.value for row in sheet for cell in row)
     assert "LOGO AMAZON" not in {cell.value for row in sheet for cell in row}
     assert len(sheet._images) == 1

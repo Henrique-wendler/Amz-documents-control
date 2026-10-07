@@ -6,13 +6,14 @@ from pathlib import Path
 from typing import Literal
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
+    QApplication, QDialog, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
     QListWidget, QMainWindow, QMessageBox, QPushButton, QScrollArea,
     QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
+from amazon_agro.config.resources import resource_path
 from amazon_agro.config.settings import AppSettings
 from amazon_agro.domain.models import Proposal
 from amazon_agro.exporters.pdf_backends import PdfBackendUnavailableError
@@ -59,14 +60,29 @@ class MainWindow(QMainWindow):
         outer = QVBoxLayout(root)
         outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(10)
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(9)
-        brand = QLabel("Amazon Agro\nGerador de Propostas")
+        header = QFrame()
+        header.setObjectName("appHeader")
+        toolbar = QHBoxLayout(header)
+        toolbar.setContentsMargins(18, 12, 18, 12)
+        toolbar.setSpacing(14)
+        logo = QLabel()
+        logo.setObjectName("brandLogo")
+        logo.setPixmap(QPixmap(str(resource_path("resources", "AmazonAgroLogo.png"))).scaled(
+            132, 36, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        logo.setAccessibleName("Logo Amazon Agro")
+        toolbar.addWidget(logo)
+        identity = QVBoxLayout()
+        identity.setSpacing(4)
+        brand = QLabel("Amazon Agro")
         brand.setObjectName("brand")
-        toolbar.addWidget(brand)
+        identity.addWidget(brand)
+        subtitle = QLabel("Gerador de Propostas")
+        subtitle.setObjectName("mutedText")
+        identity.addWidget(subtitle)
         self.badge = QLabel("Bem-vindo")
         self.badge.setObjectName("badge")
-        toolbar.addWidget(self.badge)
+        identity.addWidget(self.badge)
+        toolbar.addLayout(identity)
         toolbar.addStretch()
         self.header_buttons = {}
         for label, callback, shortcut in (
@@ -75,13 +91,15 @@ class MainWindow(QMainWindow):
             ("Salvar", self.save_proposal, "Ctrl+S"),
             ("Configurações", self.open_settings, "Ctrl+,"),
         ):
-            button = QPushButton(label)
+            button = QPushButton("+ Nova proposta" if label == "Nova proposta" else label)
+            if label == "Nova proposta":
+                button.setObjectName("primary")
             button.clicked.connect(callback)
             button.setToolTip(f"{label} ({shortcut})")
             toolbar.addWidget(button)
             self.header_buttons[label] = button
             QShortcut(QKeySequence(shortcut), self, activated=callback)
-        outer.addLayout(toolbar)
+        outer.addWidget(header)
         self.workspace = QStackedWidget()
         outer.addWidget(self.workspace, 1)
         landing = QWidget()
@@ -108,7 +126,7 @@ class MainWindow(QMainWindow):
         self.steps.setObjectName("proposalSteps")
         self.steps.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.steps.addItems(self.STEPS)
-        self.steps.setMinimumWidth(155)
+        self.steps.setMinimumWidth(175)
         self.steps.setMaximumWidth(210)
         self.splitter.addWidget(self.steps)
         self.stack = QStackedWidget()
@@ -124,7 +142,7 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.stack)
         self.summary = ProposalSummaryPanel()
         self.summary_scroll = self._scroll(self.summary)
-        self.summary_scroll.setMinimumWidth(260)
+        self.summary_scroll.setMinimumWidth(280)
         self.splitter.addWidget(self.summary_scroll)
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, False)
@@ -210,8 +228,10 @@ class MainWindow(QMainWindow):
         proposal = self._collect()
         validation = self.export_validator.validate(proposal)
         self.summary.update_proposal(proposal, validation)
-        self.review_page.set_validation_errors(validation.errors)
-        self.badge.setText("Com pendências" if not validation.ok else "Pronta para gerar")
+        self.review_page.set_validation_errors(validation.errors, validation.financial_errors)
+        self.badge.setText("● Composição inválida" if validation.financial_errors else
+                           f"● {len(validation.errors)} pendências" if not validation.ok else "● Pronta para gerar")
+        self.badge.setProperty("blocked", bool(validation.financial_errors))
         self.badge.setProperty("ready", validation.ok)
         self.badge.style().unpolish(self.badge)
         self.badge.style().polish(self.badge)
@@ -225,7 +245,8 @@ class MainWindow(QMainWindow):
             else:
                 state = "Completa"
             item = self.steps.item(index)
-            item.setText(f"{index + 1}. {name}\n{state}")
+            marker = "✓" if state == "Completa" else str(index + 1)
+            item.setText(f"{marker}  {name}\n{state}")
             item.setForeground(QColor({
                 "Atual": "#20563b", "Completa": "#38664b",
                 "Com pendência": "#8a4d17", "Não visitada": "#637068",
@@ -304,7 +325,7 @@ class MainWindow(QMainWindow):
         try:
             proposal = self._collect()
             validation = self.export_validator.validate(proposal)
-            self.review_page.set_validation_errors(validation.errors)
+            self.review_page.set_validation_errors(validation.errors, validation.financial_errors)
             if not validation.ok:
                 logger.info("Geração bloqueada por %d pendências", len(validation.errors))
                 QMessageBox.warning(self, "Dados para exportação", "Não foi possível gerar a proposta.\n\nCampos pendentes:\n" + "\n".join(f"• {error}" for error in validation.errors))

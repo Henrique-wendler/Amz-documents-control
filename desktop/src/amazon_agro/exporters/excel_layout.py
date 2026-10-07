@@ -22,14 +22,16 @@ def add_logo(sheet, row=1):
 
 
 def prepare_layout(sheet):
-    # Keep the original sections and four property rows, replacing only obsolete
-    # financing percentages and the logo placeholder in the generated copy.
-    for region in ("A2:B3", "J22:L22", "J23:L23", "J24:L24", "J25:L25"):
+    # Preserve the four property rows and pagination. Adapt only the output copy
+    # to show source-specific ASTEC percentages and the FNO-only ABC section.
+    for region in ("A2:B3", "F22:H22", "F24:H24", "F25:H25",
+                   "J22:L22", "J23:L23", "J24:L24", "J25:L25"):
         sheet.unmerge_cells(region)
     for row in range(22, 26):
         for column in range(9, 14):
             sheet.cell(row, column).value = None
-    for region in ("A2:B2", "A3:B3", "C21:F21", "F23:H23", "I22:J22", "K22:M22",
+    for region in ("A2:B2", "A3:B3", "C21:F21", "F22:G22", "F23:G23",
+                   "F24:G24", "F25:G25", "I22:J22", "K22:M22",
                    "I23:J23", "K23:M23", "I24:M24", "I25:M25"):
         sheet.merge_cells(region)
     sheet["A2"] = "Nº DA PROPOSTA"
@@ -37,12 +39,14 @@ def prepare_layout(sheet):
     sheet["K2"] = "AGÊNCIA"
     sheet["M8"] = "TIPO"
     sheet["F22"] = "ASTEC FNO FINANCIADA?"
+    sheet["H22"] = "% ASTEC"
     sheet["D22"] = "PARTICIPAÇÃO FNO"
     sheet["D24"] = "PARTICIPAÇÃO OF"
     sheet["F24"] = "ASTEC OF FINANCIADA?"
+    sheet["H24"] = "% ASTEC"
     sheet["I22"] = "LAUDO ABC FINANCIADO?"
-    sheet["K22"] = "% LAUDO ABC"
-    sheet["I24"] = "VALOR LAUDO ABC"
+    sheet["K22"] = "% LAUDO ABC (FNO)"
+    sheet["I24"] = "VALOR LAUDO ABC — SOMENTE FNO"
     sheet["I17"] = "8 - OUTORGA CONJUGAL"
 
     widths = (7, 7, 7, 8, 8, 6, 7, 8, 8, 6, 6, 7, 4)
@@ -80,6 +84,8 @@ def prepare_layout(sheet):
     sheet["A2"].alignment = Alignment(horizontal="center", vertical="center", shrinkToFit=True)
     sheet["A3"].alignment = Alignment(horizontal="center", vertical="center", shrinkToFit=True)
     sheet["M8"].font = Font(name="Times New Roman", size=8, bold=True)
+    for address in ("F22", "F24"):
+        sheet[address].font = Font(name="Times New Roman", size=9, bold=True)
     sheet["A34"].font = Font(name="Times New Roman", size=10, bold=True)
     sheet["A34"].alignment = Alignment(horizontal="left", vertical="center", indent=1, wrap_text=True)
     sheet["A35"].font = Font(name="Times New Roman", size=11)

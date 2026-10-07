@@ -119,7 +119,7 @@ class OpenpyxlExcelProposalExporter:
         for field in ("finalidade", "descricao", "fonte"):
             sheet[EXCEL_FIELD_MAP[field]] = getattr(proposal, field) or None
         sheet[EXCEL_FIELD_MAP["recursos_proprios_flag"]] = (
-            "Sim" if proposal.recursos_proprios > 0 else "Não"
+            "Sim" if proposal.has_own_resources else "Não"
         )
         for field in CURRENCY_FIELDS:
             value = getattr(proposal, field)
@@ -127,15 +127,20 @@ class OpenpyxlExcelProposalExporter:
             cell.value = value
             cell.number_format = '"R$" #,##0.00'
         for field in PERCENT_FIELDS:
-            _set_percent(sheet, field, getattr(proposal, field))
+            _set_percent(sheet, field, proposal.own_resources_percentage
+                         if field == "percentual_recursos_proprios" else getattr(proposal, field))
         for field in BOOLEAN_FIELDS:
             sheet[EXCEL_FIELD_MAP[field]] = (
                 "Sim" if getattr(proposal, field) else "Não"
             )
+        for source in ("fno", "of"):
+            _set_percent(sheet, f"astec_{source}_percentual",
+                         getattr(proposal, f"astec_{source}_percentual")
+                         if getattr(proposal, f"astec_{source}_financiada") else None)
         _set_percent(sheet, "laudo_abc_percentual",
                      proposal.laudo_abc_percentual if proposal.laudo_abc_financiado else None)
         cell = sheet[EXCEL_FIELD_MAP["laudo_abc_valor"]]
-        cell.value = proposal.laudo_abc_valor if proposal.laudo_abc_financiado else None
+        cell.value = proposal.calculated_abc_amount
         cell.number_format = '"R$" #,##0.00'
 
     def _fill_properties(self, sheet: Worksheet, proposal: Proposal) -> None:

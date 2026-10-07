@@ -1,6 +1,6 @@
 """Read-only live view of the current draft and shared export validation."""
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from amazon_agro.domain.models import PARTICIPANT_LABELS, Proposal
 from amazon_agro.exporters.formatting import format_brl, format_percentage_fixed
@@ -23,6 +23,23 @@ class ProposalSummaryPanel(QWidget):
         self.details.hide()
         self.identification = self._section(layout, "IDENTIFICAÇÃO")
         self.operation = self._section(layout, "OPERAÇÃO")
+        highlights = QWidget()
+        highlight_layout = QVBoxLayout(highlights)
+        highlight_layout.setContentsMargins(0, 0, 0, 8)
+        highlight_layout.setSpacing(6)
+        self.total_amount = QLabel()
+        self.total_amount.setObjectName("summaryAmount")
+        highlight_layout.addWidget(self.total_amount)
+        total_caption = QLabel("Valor Total")
+        total_caption.setObjectName("mutedText")
+        highlight_layout.addWidget(total_caption)
+        shares = QHBoxLayout()
+        self.fno_share, self.of_share = QLabel(), QLabel()
+        for label in (self.fno_share, self.of_share):
+            label.setObjectName("calculatedValue")
+            shares.addWidget(label)
+        highlight_layout.addLayout(shares)
+        self.operation.parentWidget().layout().insertWidget(1, highlights)
         self.items = self._section(layout, "ITENS")
         status_card = QFrame()
         status_card.setObjectName("summaryCard")
@@ -93,12 +110,20 @@ class ProposalSummaryPanel(QWidget):
                 f"  Matrículas: {registrations or '—'}",
             ])
         self.identification.setText("\n".join(identification))
-        self.operation.setText("\n".join(operation))
+        self.operation.setText("\n".join(line for line in operation if not line.startswith(("Valor:", "Participação "))))
+        self.total_amount.setText(format_brl(proposal.valor_total))
+        self.fno_share.setText(f"FNO {format_percentage_fixed(proposal.fno_percentage)}")
+        self.of_share.setText(f"OF {format_percentage_fixed(proposal.of_percentage)}")
         self.items.setText("\n".join(items))
         self.details.setText("\n".join([*identification, *operation, *items]))
-        self.status.setText("✓ Proposta pronta para gerar" if validation.ok
+        self.status.setText("Composição financeira inválida" if validation.financial_errors else
+                            "✓ Proposta pronta para gerar" if validation.ok
                             else f"Proposta com pendências ({len(validation.errors)})")
         self.status.setProperty("ready", validation.ok)
+        self.status.setProperty("blocked", bool(validation.financial_errors))
+        self.pending.setProperty("blocked", bool(validation.financial_errors))
+        self.pending.style().unpolish(self.pending)
+        self.pending.style().polish(self.pending)
         self.status.style().unpolish(self.status)
         self.status.style().polish(self.status)
         self.pending.setText("\n".join(f"• {error}" for error in validation.errors))

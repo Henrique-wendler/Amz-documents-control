@@ -102,6 +102,8 @@ def test_xlsx_integration_fills_mapped_cells_and_preserves_template(tmp_path) ->
     assert sheet["K23"].value is None
     assert sheet["A25"].value == 234567.89
     assert sheet["F25"].value == "Sim"
+    assert sheet["H23"].value == 0.025 and sheet["H25"].value == 0.0125
+    assert sheet["H23"].number_format == sheet["H25"].number_format == "0.00%"
     assert sheet["I25"].value is None
     assert sheet["A28"].value == "Imóvel demonstrativo A"
     assert sheet["E28"].value == "Palmas"
@@ -124,8 +126,10 @@ def test_xlsx_integration_fills_mapped_cells_and_preserves_template(tmp_path) ->
 
     source_merges = {str(item) for item in source_sheet.merged_cells.ranges}
     assert {str(item) for item in sheet.merged_cells.ranges} == (
-        source_merges - {"A2:B3", "J22:L22", "J23:L23", "J24:L24", "J25:L25"}
-    ) | {"A2:B2", "A3:B3", "C21:F21", "F23:H23", "I22:J22", "K22:M22",
+        source_merges - {"A2:B3", "F22:H22", "F24:H24", "F25:H25",
+                         "J22:L22", "J23:L23", "J24:L24", "J25:L25"}
+    ) | {"A2:B2", "A3:B3", "C21:F21", "F22:G22", "F23:G23",
+         "F24:G24", "F25:G25", "I22:J22", "K22:M22",
          "I23:J23", "K23:M23", "I24:M24", "I25:M25"}
     # The generated copy adopts the approved Word grid. Its original template
     # bytes remain identical, while text gets readable widths and row heights.

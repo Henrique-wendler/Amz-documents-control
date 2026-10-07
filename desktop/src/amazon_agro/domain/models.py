@@ -194,6 +194,9 @@ class Proposal:
     fonte: str = ""
     valor_total: Decimal = Decimal("0")
     recursos_proprios: Decimal = Decimal("0")
+    # Nullable for old drafts: retain the legacy monetary amount without using
+    # a fictitious amount to persist the current explicit yes/no choice.
+    possui_recursos_proprios: bool | None = None
     percentual_recursos_proprios: Decimal = Decimal("0")
     valor_fno: Decimal = Decimal("0")
     # Legacy storage only; current shares derive from the monetary amounts.
@@ -223,7 +226,30 @@ class Proposal:
     def of_percentage(self) -> Decimal:
         return financing_percentage(self.valor_of, self.valor_total)
 
+    @property
+    def has_own_resources(self) -> bool:
+        if self.possui_recursos_proprios is not None:
+            return self.possui_recursos_proprios
+        return self.recursos_proprios > 0 or self.percentual_recursos_proprios > 0
+
+    @property
+    def own_resources_percentage(self) -> Decimal:
+        return self.percentual_recursos_proprios if self.has_own_resources else Decimal("0")
+
+    @property
+    def calculated_abc_amount(self) -> Decimal | None:
+        """ABC belongs exclusively to FNO; the total and OF are not its basis."""
+        if not self.laudo_abc_financiado:
+            return None
+        percent = self.laudo_abc_percentual or Decimal("0")
+        if not all(isinstance(value, Decimal) and value.is_finite()
+                   for value in (self.valor_fno, percent)):
+            return Decimal("0")
+        return self.valor_fno * percent / Decimal("100")
+
     def validate(self) -> None:
+        if self.possui_recursos_proprios is not None and not isinstance(self.possui_recursos_proprios, bool):
+            raise ValueError("A opção de recursos próprios deve ser Sim ou Não.")
         for name in ("valor_total", "recursos_proprios", "valor_fno", "valor_of"):
             value = getattr(self, name)
             if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
@@ -234,6 +260,13 @@ class Proposal:
                 not isinstance(value, Decimal) or not value.is_finite() or not 0 <= value <= 100
             ):
                 raise ValueError(f"{name} deve estar entre 0 e 100.")
+        for source in ("fno", "of"):
+            if getattr(self, f"astec_{source}_financiada"):
+                percent = getattr(self, f"astec_{source}_percentual")
+                if percent is not None and (
+                    not isinstance(percent, Decimal) or not percent.is_finite() or not 0 <= percent <= 100
+                ):
+                    raise ValueError(f"Percentual ASTEC {source.upper()} deve estar entre 0 e 100.")
         if self.laudo_abc_financiado:
             percent = self.laudo_abc_percentual
             if percent is not None and (

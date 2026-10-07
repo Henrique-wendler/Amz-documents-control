@@ -212,3 +212,25 @@ definições desta etapa. Os relatórios anteriores registram o estado históric
 - `tests/test_property_snapshots.py`
 - `tests/test_property_ui.py`
 - `tests/test_proposal_ui.py`
+
+## Decisão final vigente — ABC exclusivo do FNO e percentuais ASTEC (07/10/2026)
+
+Esta decisão substitui qualquer orientação anterior conflitante, inclusive a regra incorreta de cálculo do ABC sobre o Total e a remoção dos percentuais ASTEC.
+
+`valor_laudo_abc = valor_fno * laudo_abc_percentual / 100`
+
+O domínio calcula com `Decimal`, sem arredondamento intermediário. Total 100.000 / FNO 70.000 / OF 30.000 / ABC 5% resulta em **R$ 3.500,00**. Alterar FNO para 80.000 recalcula imediatamente para **R$ 4.000,00**. Alterar apenas Total para 120.000, mantendo FNO 70.000, deixa ABC em **R$ 3.500,00**. FNO zero resulta em zero; Total não é a base do ABC.
+
+Laudo ABC pertence exclusivamente à seção FNO. Sim habilita a edição do percentual e mostra o valor automático somente leitura. Não oculta/desabilita percentual e valor e omite ambos no XLSX/PDF. Na reabertura e exportação, o valor é derivado do FNO, mesmo quando o campo monetário legado diferir. Ao editar/salvar, o campo compatível recebe o valor calculado; não há reescrita global das propostas antigas.
+
+**ASTEC FNO** e **ASTEC OF** são escolhas independentes Sim/Não. Em Sim, o usuário digita o percentual da respectiva ASTEC; esse percentual aparece, persiste e é exportado junto à fonte. Em Não, o controle percentual fica oculto/desabilitado e o documento omite o percentual. Dados percentuais legados inativos podem continuar armazenados; não são validados como ativos nem exportados. Percentuais ativos devem ser Decimal finito entre 0 e 100. As colunas ASTEC existentes no SQLite são reutilizadas.
+
+**CLASS. DA FNO/OF** permanece a participação automática e somente leitura de cada valor sobre o Total. Total 100.000 / FNO 70.000 / OF 30.000 produz 70,00% / 30,00%. Total zero produz 0,00%; FNO% + OF% não precisa somar 100%.
+
+Recursos Próprios mantém somente Sim/Não e percentual condicional. Não tem percentual efetivo zero. O valor monetário antigo permanece no SQLite; o indicador nullable `possui_recursos_proprios` persiste a escolha explícita, inclusive Sim com 0%. A migração existente não reescreve snapshots, IDs ou classificações.
+
+A página Proposta agrupa Descrição e Valor Total, FNO (valor, participação, ASTEC e ABC), OF (valor, participação e ASTEC) e Recursos Próprios. A cópia XLSX adaptada identifica os percentuais ASTEC por fonte e a seção ABC como **SOMENTE FNO**. O PDF usa essa mesma cópia via Excel COM. Logo, template original e paginação de quatro matrículas por página são preservados.
+
+FNO > Total, OF > Total ou FNO + OF > Total continuam bloqueando somente a exportação, com mensagem contextual, e permitem salvar. O cabeçalho, resumo e revisão usam o mesmo resultado de validação.
+
+Resultados e screenshots: [PROPOSAL_UI_VALIDATION.md](PROPOSAL_UI_VALIDATION.md). Parser BASA, catálogo/Drive local, Hipoteca=1, participantes automáticos e CNPJ oficial permanecem preservados. Sem Setup/RC, commit ou push nesta etapa.
