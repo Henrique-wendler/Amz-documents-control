@@ -5,6 +5,7 @@ import { DashboardMessageState } from "../components/dashboard/DashboardState";
 import { ReportFiltersPanel } from "../components/reports/ReportFiltersPanel";
 import { ReportGrid } from "../components/reports/ReportGrid";
 import { ReportSummary } from "../components/reports/ReportSummary";
+import { ReportChart } from "../components/reports/ReportChart";
 import { ReportTypeCards } from "../components/reports/ReportTypeCards";
 import { SectionCard } from "../components/SectionCard";
 import { Sidebar } from "../components/Sidebar";
@@ -71,6 +72,7 @@ export function RelatoriosPage({ onNavigate }: Props) {
     <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} exporting={exporting} canGenerate={canGenerate} canExport={canExport} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={(format) => void exportReport(format)} /></SectionCard>
     {error ? <DashboardMessageState kind="error" title="Não foi possível gerar o relatório" description={error} onRetry={() => void generate(type, filters)} /> : <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{report?.rows.length ?? 0} registros</Badge>}>
       {report ? <ReportSummary metrics={report.metrics} /> : null}
+      {report?.chart ? <ReportChart chart={report.chart} /> : null}
       <ReportGrid columns={report?.columns ?? []} rows={report?.rows ?? []} loading={generating} />
     </SectionCard>}
   </main></div><Toaster toasterId={toasterId} position="top-end" /></div>;

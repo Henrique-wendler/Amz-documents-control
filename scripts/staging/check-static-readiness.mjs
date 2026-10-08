@@ -38,6 +38,31 @@ for (const functionName of expectedFunctions) {
     fail(`Edge Function ${functionName} entrypoint is missing`);
   }
 }
+const reportAssets = ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LICENSE_LIBERATION", "amazon-agro-logo.jpg"];
+for (const asset of reportAssets) {
+  try {
+    if (!(await readFile(resolve(root, "supabase", "functions", "generate-report", "assets", asset))).length) {
+      fail(`report asset ${asset} is empty`);
+    }
+  } catch {
+    fail(`report asset ${asset} is missing`);
+  }
+}
+if (!supabaseConfig.includes('static_files = ["./functions/generate-report/assets/*"]')) {
+  fail("generate-report assets are not bundled as static files");
+}
+try {
+  const [publicLogo, reportLogo] = await Promise.all([
+    readFile(resolve(root, "public", "amazon-agro-logo.jpg")),
+    readFile(resolve(root, "supabase", "functions", "generate-report", "assets", "amazon-agro-logo.jpg")),
+  ]);
+  if (!publicLogo.equals(reportLogo)) fail("frontend and PDF logos differ");
+} catch {
+  fail("Amazon Agro logo is missing from frontend or PDF assets");
+}
+if (!failures.some((message) => message.startsWith("report asset") || message.includes("generate-report assets"))) {
+  pass("Unicode PDF fonts and the Amazon Agro logo are bundled with generate-report");
+}
 
 const publicEnvironment = await readFile(resolve(root, ".env.example"), "utf8");
 const functionEnvironment = await readFile(resolve(root, "supabase", "functions", ".env.example"), "utf8");
@@ -53,11 +78,16 @@ if (/^(?:SUPABASE_SERVICE_ROLE_KEY|GATEWAY_TOKEN)=\S+/mi.test(`${functionEnviron
   pass("backend and Gateway environment examples contain no secret values");
 }
 
+const sharedFunctionDirectory = resolve(root, "supabase", "functions", "_shared");
+const sharedFunctionFiles = (await readdir(sharedFunctionDirectory, { recursive: true }))
+  .filter((name) => /\.(?:ts|tsx|js|mjs)$/.test(name))
+  .map((name) => resolve(sharedFunctionDirectory, name));
 const runtimeFiles = [
   ...(await readdir(resolve(root, "src"), { recursive: true }))
     .filter((name) => /\.(?:ts|tsx)$/.test(name))
     .map((name) => resolve(root, "src", name)),
   ...expectedFunctions.map((name) => resolve(root, "supabase", "functions", name, "index.ts")),
+  ...sharedFunctionFiles,
   ...(await readdir(resolve(root, "gateway", "src")))
     .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
     .map((name) => resolve(root, "gateway", "src", name)),

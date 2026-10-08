@@ -107,6 +107,8 @@ npx supabase functions deploy admin-users document-files generate-report --proje
 npx supabase functions deploy file-gateway --project-ref $stagingProjectRef --no-verify-jwt
 ```
 
+O cálculo do gráfico de fazendas permanece em `supabase/functions/_shared/farmAreaChart.ts` e é importado pela pré-visualização Vite e por `generate-report`. O módulo contém apenas TypeScript e APIs JavaScript comuns aos dois runtimes. A [estrutura recomendada para Edge Functions](https://supabase.com/docs/guides/functions/development-environment#recommended-project-structure) mantém código compartilhado em `_shared` dentro de `supabase/functions`; este projeto usa o comando de deploy padrão acima, sem um fluxo de empacotamento verificado para imports externos a essa árvore. O sucesso de `functions serve` local não comprova que um módulo na raiz ou em `src/` será incluído no bundle de deploy. Mantenha essa localização até validar o empacotamento do mesmo fluxo de deploy antes de mover a fonte compartilhada.
+
 O `file-gateway` continua autenticando a instância no próprio backend; `--no-verify-jwt` não o torna público sem o token dedicado válido.
 
 ### 5. Configurar Auth
