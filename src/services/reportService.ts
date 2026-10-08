@@ -1,4 +1,5 @@
 import { reportQueryRepository, type ReportSnapshot } from "../repositories/reportQueryRepository";
+import { buildFarmAreaChart } from "../../supabase/functions/_shared/farmAreaChart";
 import type {
   ReportColumn, ReportDefinition, ReportFilterOptions, ReportFilters, ReportLoadResult,
   ReportMetric, ReportRow, ReportType, ReportViewModel,
@@ -101,7 +102,7 @@ const createContext = (snapshot: ReportSnapshot): ReportContext => {
   };
 };
 
-type ReportBody = Pick<ReportViewModel, "columns" | "rows" | "metrics">;
+type ReportBody = Pick<ReportViewModel, "columns" | "rows" | "metrics" | "chart">;
 
 const buildFarms = (snapshot: ReportSnapshot, filters: ReportFilters): ReportBody => {
   const registrationCountByFarm = new Map<string, number>();
@@ -111,6 +112,7 @@ const buildFarms = (snapshot: ReportSnapshot, filters: ReportFilters): ReportBod
     columns: columns([["name", "Fazenda"], ["location", "Município / UF"], ["area", "Área total", "end"], ["registrations", "Matrículas", "end"], ["status", "Situação"], ["updated", "Atualizado em"]]),
     rows: records.map((farm) => row(farm.id, { name: farm.name, location: `${farm.municipality} / ${farm.state}`, area: formatArea(farm.totalArea), registrations: count(registrationCountByFarm.get(farm.id) ?? 0), status: labels.entity[farm.status], updated: farm.updatedAt })),
     metrics: [...baseMetrics(records.length), sumMetric("Área total", records.reduce((sum, farm) => sum + farm.totalArea, 0), formatArea)],
+    chart: buildFarmAreaChart(records),
   };
 };
 

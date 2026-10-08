@@ -13,6 +13,7 @@ import {
 } from "@fluentui/react-icons";
 import type { ComponentType } from "react";
 import { usePermissions } from "../hooks/usePermissions";
+import { BrandLogo } from "./BrandLogo";
 
 interface NavItem {
   label: string;
@@ -45,6 +46,7 @@ export function Sidebar({ activePath = "/", onNavigate }: SidebarProps) {
   return (
     <aside className="sidebar" aria-label="Navegação principal">
       <div className="sidebar__title">
+        <BrandLogo />
         <span>Sistema de Gestão</span>
         <strong>Imóveis Rurais</strong>
       </div>

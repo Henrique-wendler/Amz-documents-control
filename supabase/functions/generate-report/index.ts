@@ -1,6 +1,8 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 import ExcelJS from "npm:exceljs@4.4.0";
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
+import fontkit from "npm:@pdf-lib/fontkit@1.1.1";
+import { PDFDocument, PDFFont, PDFPage, rgb } from "npm:pdf-lib@1.17.1";
+import { buildFarmAreaChart, type FarmAreaChart } from "../_shared/farmAreaChart.ts";
 
 type JsonRecord = Record<string, unknown>;
 type ReportType = "farms" | "owners" | "registrations" | "operations" | "guarantees" | "documents" | "car";
@@ -25,7 +27,7 @@ interface ReportFilters {
 interface ReportColumn { key: string; label: string; align?: "start" | "end"; kind?: SpreadsheetCellKind; }
 interface ReportRow { id: string; values: Record<string, string>; spreadsheetValues: Record<string, SpreadsheetValue>; }
 interface ReportMetric { label: string; value: string; spreadsheetValue: SpreadsheetValue; numberFormat?: string; }
-interface BuiltReport { title: string; columns: ReportColumn[]; rows: ReportRow[]; metrics: ReportMetric[]; }
+interface BuiltReport { title: string; columns: ReportColumn[]; rows: ReportRow[]; metrics: ReportMetric[]; chart?: FarmAreaChart; }
 
 interface RequestContext {
   userId: string;
@@ -281,7 +283,13 @@ const buildFarms = async (context: RequestContext, filters: ReportFilters): Prom
     registrations: count(registrationCounts.get(str(farm.id)) ?? 0), status: str(farm.status) === "active" ? "Ativa" : "Inativa", updated: formatTimestamp(farm.updated_at),
   }, { area: num(farm.total_area), registrations: registrationCounts.get(str(farm.id)) ?? 0, updated: spreadsheetTimestamp(farm.updated_at) }));
   const totalArea = selected.reduce((sum, farm) => sum + num(farm.total_area), 0);
-  return { title: reportTitles.farms, columns: columns([["name", "Fazenda"], ["location", "Município / UF"], ["area", "Área total", "end", "decimal"], ["registrations", "Matrículas", "end", "integer"], ["status", "Situação"], ["updated", "Atualizado em", undefined, "datetime"]]), rows, metrics: [...metrics(rows), metric("Área total", area(totalArea), totalArea, '#,##0.0000 "ha"')] };
+  return {
+    title: reportTitles.farms,
+    columns: columns([["name", "Fazenda"], ["location", "Município / UF"], ["area", "Área total", "end", "decimal"], ["registrations", "Matrículas", "end", "integer"], ["status", "Situação"], ["updated", "Atualizado em", undefined, "datetime"]]),
+    rows,
+    metrics: [...metrics(rows), metric("Área total", area(totalArea), totalArea, '#,##0.0000 "ha"')],
+    chart: buildFarmAreaChart(selected.map((farm) => ({ id: str(farm.id), name: str(farm.name), totalArea: num(farm.total_area) }))),
+  };
 };
 
 const buildOwners = async (context: RequestContext, filters: ReportFilters): Promise<BuiltReport> => {
@@ -517,23 +525,18 @@ const filterDescription = (type: ReportType, filters: ReportFilters, farms: Map<
   return parts.length ? parts.join(" | ") : "Sem filtros adicionais";
 };
 
-const safePdfText = (value: string) => value
-  .normalize("NFC")
-  .replace(/[–—]/g, "-")
-  .replace(/[“”]/g, '"')
-  .replace(/[‘’]/g, "'")
-  .replace(/[^\x20-\x7E\xA0-\xFF]/g, "?");
+const pdfText = (value: string) => value.normalize("NFC");
 
 const truncate = (text: string, font: PDFFont, size: number, width: number) => {
-  const safe = safePdfText(text);
+  const safe = pdfText(text);
   if (font.widthOfTextAtSize(safe, size) <= width) return safe;
-  let result = safe;
-  while (result.length && font.widthOfTextAtSize(`${result}...`, size) > width) result = result.slice(0, -1);
-  return `${result}...`;
+  const characters = Array.from(safe);
+  while (characters.length && font.widthOfTextAtSize(`${characters.join("")}…`, size) > width) characters.pop();
+  return `${characters.join("")}…`;
 };
 
 const wrap = (text: string, font: PDFFont, size: number, width: number, maxLines = 3) => {
-  const words = safePdfText(text).split(/\s+/).filter(Boolean);
+  const words = pdfText(text).split(/\s+/).filter(Boolean);
   if (!words.length) return ["-"];
   const lines: string[] = [];
   let current = "";
@@ -545,12 +548,75 @@ const wrap = (text: string, font: PDFFont, size: number, width: number, maxLines
     if (lines.length === maxLines - 1) break;
   }
   if (current && lines.length < maxLines) lines.push(current);
-  const originalFits = lines.join(" ").length >= safePdfText(text).length;
+  const originalFits = lines.join(" ").length >= pdfText(text).length;
   if (!originalFits && lines.length) lines[lines.length - 1] = truncate(`${lines[lines.length - 1]}...`, font, size, width);
   return lines.slice(0, maxLines);
 };
 
-const drawText = (page: PDFPage, text: string, options: Parameters<PDFPage["drawText"]>[1]) => page.drawText(safePdfText(text), options);
+const drawText = (page: PDFPage, text: string, options: Parameters<PDFPage["drawText"]>[1]) => page.drawText(pdfText(text), options);
+
+const chartColor = (hex: string) => rgb(
+  Number.parseInt(hex.slice(1, 3), 16) / 255,
+  Number.parseInt(hex.slice(3, 5), 16) / 255,
+  Number.parseInt(hex.slice(5, 7), 16) / 255,
+);
+
+const donutSectorPath = (fraction: number, startFraction: number, radius: number) => {
+  const steps = Math.max(4, Math.ceil(fraction * 120));
+  const points = Array.from({ length: steps + 1 }, (_, index) => {
+    const angle = -Math.PI / 2 + (startFraction + fraction * index / steps) * Math.PI * 2;
+    return `${(Math.cos(angle) * radius).toFixed(3)} ${(Math.sin(angle) * radius).toFixed(3)}`;
+  });
+  return `M 0 0 L ${points.join(" L ")} Z`;
+};
+
+const donutChartLayout = (chart: FarmAreaChart, regular: PDFFont) => {
+  const labelWidth = 315;
+  const rows = chart.items.map((item) => {
+    const lines = wrap(item.label, regular, 8, labelWidth, 5);
+    return { item, lines, height: Math.max(22, lines.length * 10 + 8) };
+  });
+  return { rows, height: chart.items.length ? Math.max(226, 44 + rows.reduce((sum, row) => sum + row.height, 0)) : 76 };
+};
+
+const drawDonutChart = (page: PDFPage, chart: FarmAreaChart, layout: ReturnType<typeof donutChartLayout>, x: number, topY: number, width: number, regular: PDFFont, bold: PDFFont) => {
+  page.drawRectangle({ x, y: topY - layout.height, width, height: layout.height, color: rgb(0.973, 0.982, 0.969), borderColor: rgb(0.84, 0.89, 0.82), borderWidth: 0.6 });
+  drawText(page, chart.title, { x: x + 12, y: topY - 19, size: 10, font: bold, color: rgb(0.071, 0.271, 0.173) });
+  if (!chart.items.length) {
+    drawText(page, "Nenhuma fazenda para exibir no gráfico.", { x: x + 12, y: topY - 46, size: 8, font: regular, color: rgb(0.42, 0.42, 0.42) });
+    return;
+  }
+
+  const centerX = x + 112;
+  const centerY = topY - 127;
+  const outerRadius = 80;
+  page.drawCircle({ x: centerX, y: centerY, size: outerRadius, color: rgb(0.89, 0.93, 0.88) });
+  chart.items.forEach((item) => {
+    if (item.fraction <= 0) return;
+    if (item.fraction >= 1) {
+      page.drawCircle({ x: centerX, y: centerY, size: outerRadius, color: chartColor(item.color) });
+    } else {
+      page.drawSvgPath(donutSectorPath(item.fraction, item.startFraction, outerRadius), { x: centerX, y: centerY, color: chartColor(item.color) });
+    }
+  });
+  page.drawCircle({ x: centerX, y: centerY, size: 49, color: rgb(1, 1, 1) });
+  drawText(page, "Área total", { x: centerX - regular.widthOfTextAtSize("Área total", 7) / 2, y: centerY + 4, size: 7, font: regular, color: rgb(0.42, 0.47, 0.43) });
+  const totalText = truncate(chart.displayTotalArea, bold, 9, 92);
+  drawText(page, totalText, { x: centerX - bold.widthOfTextAtSize(totalText, 9) / 2, y: centerY - 12, size: 9, font: bold, color: rgb(0.071, 0.271, 0.173) });
+
+  const legendX = x + 226;
+  const legendWidth = width - 238;
+  let rowTop = topY - 42;
+  layout.rows.forEach(({ item, lines, height }) => {
+    page.drawRectangle({ x: legendX, y: rowTop - 9, width: 10, height: 10, color: chartColor(item.color) });
+    lines.forEach((line, index) => drawText(page, line, { x: legendX + 18, y: rowTop - 8 - index * 10, size: 8, font: regular, color: rgb(0.20, 0.25, 0.20) }));
+    const areaX = legendX + legendWidth - 164;
+    drawText(page, item.displayArea, { x: areaX, y: rowTop - 8, size: 8, font: regular, color: rgb(0.20, 0.25, 0.20) });
+    const percentWidth = bold.widthOfTextAtSize(item.displayPercentage, 8);
+    drawText(page, item.displayPercentage, { x: legendX + legendWidth - percentWidth, y: rowTop - 8, size: 8, font: bold, color: rgb(0.071, 0.271, 0.173) });
+    rowTop -= height;
+  });
+};
 
 const generatePdf = async (
   report: BuiltReport,
@@ -560,8 +626,14 @@ const generatePdf = async (
   filtersText: string,
 ) => {
   const document = await PDFDocument.create();
-  const regular = await document.embedFont(StandardFonts.Helvetica);
-  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  document.registerFontkit(fontkit);
+  const [regularBytes, boldBytes] = await Promise.all([
+    Deno.readFile(new URL("./assets/LiberationSans-Regular.ttf", import.meta.url)),
+    Deno.readFile(new URL("./assets/LiberationSans-Bold.ttf", import.meta.url)),
+  ]);
+  const regular = await document.embedFont(regularBytes);
+  const bold = await document.embedFont(boldBytes);
+  const brandLogo = await document.embedJpg(await Deno.readFile(new URL("./assets/amazon-agro-logo.jpg", import.meta.url)));
   document.setTitle(`${report.title} - ${context.organizationName}`);
   document.setAuthor(context.organizationName);
   document.setSubject("Relatório administrativo");
@@ -584,17 +656,22 @@ const generatePdf = async (
     const page = document.addPage(size);
     pages.push(page);
     page.drawRectangle({ x: 0, y: size[1] - 76, width: size[0], height: 76, color: rgb(0.071, 0.271, 0.173) });
-    drawText(page, context.organizationName, { x: margin, y: size[1] - 26, size: 10, font: bold, color: rgb(0.91, 0.95, 0.89) });
-    drawText(page, report.title, { x: margin, y: size[1] - 53, size: 20, font: bold, color: rgb(1, 1, 1) });
+    const logoBox = { x: margin, y: size[1] - 72, width: 158, height: 68 };
+    page.drawRectangle({ ...logoBox, color: rgb(1, 1, 1) });
+    const logoSize = brandLogo.scaleToFit(152, 64);
+    page.drawImage(brandLogo, { x: logoBox.x + (logoBox.width - logoSize.width) / 2, y: logoBox.y + (logoBox.height - logoSize.height) / 2, ...logoSize });
+    const contentX = margin + 170;
+    drawText(page, truncate(context.organizationName, bold, 10, 390), { x: contentX, y: size[1] - 26, size: 10, font: bold, color: rgb(0.91, 0.95, 0.89) });
+    drawText(page, report.title, { x: contentX, y: size[1] - 53, size: 20, font: bold, color: rgb(1, 1, 1) });
     const rightText = firstPage ? "RELATÓRIO ADMINISTRATIVO" : `CONTINUAÇÃO · ${reportId.slice(0, 8)}`;
-    drawText(page, rightText, { x: size[0] - margin - bold.widthOfTextAtSize(safePdfText(rightText), 9), y: size[1] - 28, size: 9, font: bold, color: rgb(0.91, 0.95, 0.89) });
+    drawText(page, rightText, { x: size[0] - margin - bold.widthOfTextAtSize(pdfText(rightText), 9), y: size[1] - 28, size: 9, font: bold, color: rgb(0.91, 0.95, 0.89) });
     return page;
   };
 
   let page = header(true);
   let y = size[1] - 98;
-  drawText(page, `Emitente: ${context.organizationLegalName}`, { x: margin, y, size: 8.5, font: regular, color: rgb(0.25, 0.25, 0.25) });
-  drawText(page, `Gerado por: ${context.userName}`, { x: 310, y, size: 8.5, font: regular, color: rgb(0.25, 0.25, 0.25) });
+  drawText(page, truncate(`Emitente: ${context.organizationLegalName}`, regular, 8.5, 260), { x: margin, y, size: 8.5, font: regular, color: rgb(0.25, 0.25, 0.25) });
+  drawText(page, truncate(`Gerado por: ${context.userName}`, regular, 8.5, 230), { x: 310, y, size: 8.5, font: regular, color: rgb(0.25, 0.25, 0.25) });
   drawText(page, `Data: ${generatedLabel}`, { x: 560, y, size: 8.5, font: regular, color: rgb(0.25, 0.25, 0.25) });
   y -= 15;
   drawText(page, `ID do relatório: ${reportId}`, { x: margin, y, size: 8.2, font: regular, color: rgb(0.35, 0.35, 0.35) });
@@ -615,6 +692,17 @@ const generatePdf = async (
     drawText(page, truncate(metric.value, bold, 12, metricWidth - 14), { x: x + 7, y: y - 32, size: 12, font: bold, color: rgb(0.071, 0.271, 0.173) });
   });
   y -= 57;
+
+  if (report.chart?.kind === "donut") {
+    const chart = report.chart;
+    const layout = donutChartLayout(chart, regular);
+    if (y - layout.height < 54) {
+      page = header(false);
+      y = size[1] - 96;
+    }
+    drawDonutChart(page, chart, layout, margin, y, tableWidth, regular, bold);
+    y -= layout.height + 12;
+  }
 
   const drawTableHeader = () => {
     page.drawRectangle({ x: margin, y: y - 22, width: tableWidth, height: 22, color: rgb(0.094, 0.361, 0.216) });
@@ -660,7 +748,7 @@ const generatePdf = async (
   pages.forEach((currentPage, index) => {
     const footer = `Relatório ${reportId} · Página ${index + 1} de ${pages.length}`;
     drawText(currentPage, footer, { x: margin, y: 19, size: 7.2, font: regular, color: rgb(0.42, 0.42, 0.42) });
-    const dateWidth = regular.widthOfTextAtSize(safePdfText(generatedLabel), 7.2);
+    const dateWidth = regular.widthOfTextAtSize(pdfText(generatedLabel), 7.2);
     drawText(currentPage, generatedLabel, { x: size[0] - margin - dateWidth, y: 19, size: 7.2, font: regular, color: rgb(0.42, 0.42, 0.42) });
   });
   return { bytes: await document.save(), pageCount: pages.length };
