@@ -10,7 +10,7 @@ declare
     '202608270005', '202608270006', '202608280007', '202608280008',
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
-    '202609150017', '202609240018', '202610080019'
+    '202609150017', '202609240018', '202610080019', '202610080020'
   ];
   applied_versions text[];
 begin
@@ -19,7 +19,7 @@ begin
   from supabase_migrations.schema_migrations;
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history differs from the expected 001-019 set.';
+    raise exception 'Migration history differs from the expected 001-020 set.';
   end if;
 end;
 $$;
@@ -116,8 +116,7 @@ begin
   select array_agg(policy_name order by policy_name)
     into missing_central_policies
   from unnest(array[
-    'pending_issue_management_select', 'pending_issue_management_insert',
-    'pending_issue_management_update', 'pending_issue_events_select'
+    'pending_issue_management_select', 'pending_issue_events_select'
   ]) policy_name
   where not exists (
     select 1 from pg_policies policy
@@ -185,7 +184,12 @@ declare
     'public.begin_document_upload(uuid,text,text,bigint)',
     'public.finalize_document_upload(uuid,uuid,text,bigint,text)',
     'public.request_attachment_remote_copy(uuid,uuid)',
-    'public.add_pending_issue_note(uuid,text)'
+    'public.add_pending_issue_note(uuid,text)',
+    'public.reconcile_pending_issues()',
+    'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)',
+    'public.list_pending_issues(text,text,uuid,boolean,boolean,uuid,uuid,uuid,text,text,integer,integer)',
+    'public.get_pending_issue_summary()',
+    'public.list_pending_issue_assignees()'
   ];
   missing text[];
   gateway_function text;
@@ -204,6 +208,39 @@ begin
     or has_function_privilege('authenticated', 'private.prepare_pending_issue_management()', 'EXECUTE')
     or has_function_privilege('authenticated', 'private.write_pending_issue_history()', 'EXECUTE') then
     raise exception 'Central function grants are not restricted as expected.';
+  end if;
+
+  if has_function_privilege('anon', 'public.reconcile_pending_issues()', 'EXECUTE')
+    or has_function_privilege('anon', 'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.list_pending_issues(text,text,uuid,boolean,boolean,uuid,uuid,uuid,text,text,integer,integer)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.get_pending_issue_summary()', 'EXECUTE')
+    or has_function_privilege('anon', 'public.list_pending_issue_assignees()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.reconcile_pending_issues()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.list_pending_issues(text,text,uuid,boolean,boolean,uuid,uuid,uuid,text,text,integer,integer)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.get_pending_issue_summary()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.list_pending_issue_assignees()', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.detect_pending_issues(uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.reconcile_pending_issues_for_organization(uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.pending_issue_snapshot(uuid)', 'EXECUTE') then
+    raise exception 'Central detection/read functions have unexpected grants.';
+  end if;
+
+  if not has_table_privilege('authenticated', 'public.pending_issue_management', 'SELECT')
+    or has_table_privilege('authenticated', 'public.pending_issue_management', 'INSERT')
+    or has_table_privilege('authenticated', 'public.pending_issue_management', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.pending_issue_management', 'DELETE')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'SELECT')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'INSERT')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'UPDATE')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'DELETE')
+    or exists (
+      select 1 from pg_policies policy
+      where policy.schemaname = 'public'
+        and policy.tablename = 'pending_issue_management'
+        and policy.policyname in ('pending_issue_management_insert', 'pending_issue_management_update')
+    ) then
+    raise exception 'Central management table grants/policies allow unexpected direct writes.';
   end if;
 
   foreach gateway_function in array array[
@@ -254,7 +291,7 @@ end;
 $$;
 
 select
-  19 as migrations_validated,
+  20 as migrations_validated,
   32 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;

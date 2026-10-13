@@ -6,7 +6,7 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 
 - [ ] `npm run check:staging:static` aprovado.
 - [ ] `supabase/validation/staging-readiness.sql` aprovado.
-- [ ] Após o deploy aprovado da Migration 019, migrations remotas mostram exatamente `001–019` aplicadas.
+- [ ] Após o deploy aprovado da Migration 020, migrations remotas mostram exatamente `001–020` aplicadas.
 - [ ] Frontend e API usam HTTPS; navegador não apresenta mixed content.
 - [ ] CORS aceita apenas a origem HTTPS de staging.
 - [ ] Nenhum secret aparece no bundle, logs do navegador ou repositório.

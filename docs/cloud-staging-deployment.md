@@ -71,7 +71,7 @@ npx supabase db push --linked
 npx supabase migration list --linked
 ```
 
-Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `018` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
+Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `020` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
 
 Depois, usando uma conexão administrativa temporária obtida no ambiente seguro:
 
@@ -79,7 +79,7 @@ Depois, usando uma conexão administrativa temporária obtida no ambiente seguro
 psql "$env:STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/validation/staging-readiness.sql
 ```
 
-O validador é somente leitura e verifica o histórico `001–019`, 32 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 019 no ambiente autorizado.
+O validador é somente leitura e verifica o histórico `001–020`, 32 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 020 no ambiente autorizado.
 
 ### 3. Configurar secrets e políticas das Edge Functions
 

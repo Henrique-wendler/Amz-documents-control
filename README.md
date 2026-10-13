@@ -150,6 +150,7 @@ As migrations ficam em `supabase/migrations/` e atualmente vão de:
 202609150017_file_gateway_service_role_select.sql
 202609240018_admin_users_service_role_reads.sql
 202610080019_pending_issues_foundation.sql
+202610080020_pending_issues_detection_contract.sql
 ```
 
 Elas devem ser executadas na ordem existente. Alterações de schema, RLS, functions SQL ou permissions devem ser feitas em migration incremental; migrations já aplicadas não devem ser reescritas silenciosamente.
