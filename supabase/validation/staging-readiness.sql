@@ -10,17 +10,16 @@ declare
     '202608270005', '202608270006', '202608280007', '202608280008',
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
-    '202609150017','202609240018'
+    '202609150017', '202609240018', '202610080019'
   ];
   applied_versions text[];
 begin
   select array_agg(version order by version)
     into applied_versions
-  from supabase_migrations.schema_migrations
-  where version = any(expected_versions);
+  from supabase_migrations.schema_migrations;
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history is incomplete or out of order. Expected 001-018.';
+    raise exception 'Migration history differs from the expected 001-019 set.';
   end if;
 end;
 $$;
@@ -35,7 +34,7 @@ declare
     'guarantee_financials', 'guarantee_items', 'document_types', 'rural_documents',
     'document_attachments', 'file_access_log', 'car_records', 'audit_log',
     'report_templates', 'report_log', 'attachment_locations', 'file_gateway_instances',
-    'remote_copy_jobs'
+    'remote_copy_jobs', 'pending_issue_management', 'pending_issue_events'
   ];
   missing text[];
   without_rls text[];
@@ -65,6 +64,8 @@ do $$
 declare
   broad_policies text[];
   missing_permissions text[];
+  technician_permissions text[];
+  missing_central_policies text[];
 begin
   select array_agg(format('%I.%I', schemaname, tablename) order by schemaname, tablename)
     into broad_policies
@@ -81,7 +82,8 @@ begin
   from unnest(array[
     'users.manage', 'catalogs.manage', 'files.read', 'files.manage',
     'reports.read', 'reports.generate', 'reports.export', 'reports.financial',
-    'financial.read', 'financial.write', 'audit.read'
+    'financial.read', 'financial.write', 'audit.read',
+    'pending_issues.read', 'pending_issues.manage', 'pending_issues.financial_read'
   ]) permission_key
   where not exists (
     select 1 from public.permissions permission
@@ -90,6 +92,51 @@ begin
 
   if missing_permissions is not null then
     raise exception 'Required permissions are missing: %', array_to_string(missing_permissions, ', ');
+  end if;
+
+  select array_agg(permission_key order by permission_key)
+    into technician_permissions
+  from public.role_permissions
+  where role_key = 'technician';
+
+  if technician_permissions is distinct from array[
+    'pending_issues.financial_read', 'pending_issues.manage', 'pending_issues.read'
+  ] then
+    raise exception 'Technician must have exactly the three Central permissions.';
+  end if;
+
+  if (select count(*) from public.role_permissions
+      where role_key = 'admin' and permission_key like 'pending_issues.%') <> 3
+    or exists (select 1 from public.role_permissions
+      where role_key in ('manager', 'operator', 'viewer')
+        and permission_key like 'pending_issues.%') then
+    raise exception 'Central permissions are assigned to an unexpected role.';
+  end if;
+
+  select array_agg(policy_name order by policy_name)
+    into missing_central_policies
+  from unnest(array[
+    'pending_issue_management_select', 'pending_issue_management_insert',
+    'pending_issue_management_update', 'pending_issue_events_select'
+  ]) policy_name
+  where not exists (
+    select 1 from pg_policies policy
+    where policy.schemaname = 'public'
+      and policy.tablename = case
+        when policy_name = 'pending_issue_events_select' then 'pending_issue_events'
+        else 'pending_issue_management'
+      end
+      and policy.policyname = policy_name
+  );
+
+  if missing_central_policies is not null then
+    raise exception 'Central RLS policies are missing: %', array_to_string(missing_central_policies, ', ');
+  end if;
+
+  if has_table_privilege('authenticated', 'public.pending_issue_events', 'INSERT')
+    or has_table_privilege('authenticated', 'public.pending_issue_events', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.pending_issue_events', 'DELETE') then
+    raise exception 'Browser role can mutate the Central event history directly.';
   end if;
 end;
 $$;
@@ -137,7 +184,8 @@ declare
     'public.save_guarantee_transactional(uuid,integer,uuid,text,text,smallint,text,date,date,text,uuid[],uuid,uuid[],numeric,integer)',
     'public.begin_document_upload(uuid,text,text,bigint)',
     'public.finalize_document_upload(uuid,uuid,text,bigint,text)',
-    'public.request_attachment_remote_copy(uuid,uuid)'
+    'public.request_attachment_remote_copy(uuid,uuid)',
+    'public.add_pending_issue_note(uuid,text)'
   ];
   missing text[];
   gateway_function text;
@@ -149,6 +197,13 @@ begin
 
   if missing is not null then
     raise exception 'Required functions/RPCs are missing: %', array_to_string(missing, ', ');
+  end if;
+
+  if has_function_privilege('anon', 'public.add_pending_issue_note(uuid,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.add_pending_issue_note(uuid,text)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.prepare_pending_issue_management()', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.write_pending_issue_history()', 'EXECUTE') then
+    raise exception 'Central function grants are not restricted as expected.';
   end if;
 
   foreach gateway_function in array array[
@@ -199,8 +254,8 @@ end;
 $$;
 
 select
-  18 as migrations_validated,
-  30 as public_tables_validated,
+  19 as migrations_validated,
+  32 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;
 

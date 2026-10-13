@@ -79,7 +79,7 @@ Depois, usando uma conexão administrativa temporária obtida no ambiente seguro
 psql "$env:STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/validation/staging-readiness.sql
 ```
 
-O validador é somente leitura e verifica o histórico `001–018`, 30 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway.
+O validador é somente leitura e verifica o histórico `001–019`, 32 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 019 no ambiente autorizado.
 
 ### 3. Configurar secrets e políticas das Edge Functions
 

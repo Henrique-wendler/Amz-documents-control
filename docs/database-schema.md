@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual aprovado: schema versionado em migrations até `018`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
+> Estado do schema versionado: migrations até `019`. A Migration 019 estabelece somente a fundação da Central de Pendências; detector, reconciliação e interface ainda não foram implementados. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio existentes, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -44,6 +44,7 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 16 | `202609040016_on_demand_remote_copy.sql` | jobs tenant-aware para disponibilização remota, RPCs de claim/upload/conclusão/falha e auditoria |
 | 17 | `202609150017_file_gateway_service_role_select.sql` | leitura mínima pelo `service_role` para a Edge Function do File Gateway |
 | 18 | `202609240018_admin_users_service_role_reads.sql` | leitura mínima pelo `service_role` para a Edge Function de administração de usuários |
+| 19 | `202610080019_pending_issues_foundation.sql` | role Técnico, permissões da Central, acompanhamento, timeline funcional, RLS e auditoria |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -58,6 +59,7 @@ A ordem é obrigatória: cada migration referencia somente objetos criados anter
 | Documentos | `document_types`, `rural_documents`, `document_attachments`, `attachment_locations`, `file_access_log` | documentos, anexos lógicos, localizações físicas e acessos |
 | CAR | `car_records` | histórico de CAR por fazenda/matrícula |
 | Governança | `audit_log`, `report_templates`, `report_log` | trilha imutável e geração de relatórios |
+| Central de Pendências | `pending_issue_management`, `pending_issue_events` | acompanhamento persistente e timeline funcional; detecção ainda não implementada |
 
 ## Relacionamentos e cardinalidades
 
@@ -112,11 +114,11 @@ erDiagram
 
 ## RLS e segurança
 
-Todas as 29 tabelas empresariais/governança têm RLS habilitado, além das policies específicas de `storage.objects`. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID ou object key conhecido nunca substitui autorização.
+Todas as 32 tabelas públicas versionadas têm RLS habilitado, além das policies específicas de `storage.objects`. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID ou object key conhecido nunca substitui autorização.
 
-`audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de roles/permissions exigem `permissions.manage`, enquanto os catálogos empresariais exigem `catalogs.manage` para escrita. Nenhuma função expõe `service_role`.
+`audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`, e registros de `pending_issue_management` ou `pending_issue_events` exigem `pending_issues.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de roles/permissions exigem `permissions.manage`, enquanto os catálogos empresariais exigem `catalogs.manage` para escrita. Nenhuma função expõe `service_role`.
 
-Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuração inicial, sem usuários ou dados pessoais. Permissões financeiras e de exportação permanecem entradas independentes do catálogo.
+Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuração inicial, sem usuários ou dados pessoais. A Migration 019 acrescenta `technician` com somente `pending_issues.read`, `pending_issues.manage` e `pending_issues.financial_read`; `admin` também recebe essas três permissões. `pending_issues.financial_read` não concede `financial.read` nem acesso direto às tabelas financeiras. O contrato de leitura financeira da Central será definido posteriormente.
 
 ## Bootstrap da V1
 

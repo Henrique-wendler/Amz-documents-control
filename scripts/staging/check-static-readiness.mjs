@@ -11,11 +11,11 @@ const migrationFiles = (await readdir(migrationDirectory))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 const migrationNumbers = migrationFiles.map((name) => Number(name.match(/^(\d{12})_/)?.[1].slice(-3)));
-const expectedNumbers = Array.from({ length: 18 }, (_, index) => index + 1);
-if (migrationFiles.length === 18 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
-  pass("migrations 001-018 are present in order");
+const expectedNumbers = Array.from({ length: 19 }, (_, index) => index + 1);
+if (migrationFiles.length === 19 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
+  pass("migrations 001-019 are present in order");
 } else {
-  fail(`expected migrations 001-018; found ${migrationFiles.join(", ")}`);
+  fail(`expected migrations 001-019; found ${migrationFiles.join(", ")}`);
 }
 
 const expectedFunctions = ["admin-users", "document-files", "file-gateway", "generate-report"];
@@ -114,7 +114,11 @@ if (/insert into storage\.buckets[\s\S]*?'rural-documents'[\s\S]*?false/i.test(a
 } else {
   fail("private rural-documents bucket provisioning was not found");
 }
-for (const permission of ["users.manage", "catalogs.manage", "files.read", "files.manage", "reports.read", "reports.generate", "reports.export", "financial.read"]) {
+for (const permission of [
+  "users.manage", "catalogs.manage", "files.read", "files.manage",
+  "reports.read", "reports.generate", "reports.export", "financial.read",
+  "pending_issues.read", "pending_issues.manage", "pending_issues.financial_read",
+]) {
   if (!allMigrations.includes(`'${permission}'`)) fail(`required permission ${permission} was not found in migrations`);
 }
 if (!failures.some((message) => message.startsWith("required permission"))) pass("critical staging permissions are provisioned by migrations");
