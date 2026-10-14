@@ -6,7 +6,7 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 
 - [ ] `npm run check:staging:static` aprovado.
 - [ ] `supabase/validation/staging-readiness.sql` aprovado.
-- [ ] Após o deploy aprovado da Migration 020, migrations remotas mostram exatamente `001–020` aplicadas.
+- [ ] Após o deploy aprovado da Migration 021, migrations remotas mostram exatamente `001–021` aplicadas.
 - [ ] Frontend e API usam HTTPS; navegador não apresenta mixed content.
 - [ ] CORS aceita apenas a origem HTTPS de staging.
 - [ ] Nenhum secret aparece no bundle, logs do navegador ou repositório.
@@ -19,6 +19,8 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 - [ ] Convite por Admin funciona e retorna somente à origem de staging.
 - [ ] Enrollment e challenge MFA TOTP funcionam.
 - [ ] MFA incompleto não acessa rotas protegidas.
+- [ ] JWT `aal1` permite ler apenas o próprio profile para concluir MFA; owners, farms, escrita, RPCs de negócio, Pendências, Storage privado e as três Edge Functions de usuário são negados diretamente pelo backend.
+- [ ] JWT `aal2` permite as mesmas operações somente com permission, perfil e organização ativos e tenant correto.
 - [ ] Recovery chega ao e-mail fictício, abre `/redefinir-senha` uma vez e permite a nova senha.
 - [ ] Logout encerra sessão e reload restaura somente sessão válida.
 - [ ] Profile ausente/inativo continua bloqueado.

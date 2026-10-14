@@ -3,6 +3,7 @@ import ExcelJS from "npm:exceljs@4.4.0";
 import fontkit from "npm:@pdf-lib/fontkit@1.1.1";
 import { PDFDocument, PDFFont, PDFPage, rgb } from "npm:pdf-lib@1.17.1";
 import { buildFarmAreaChart, type FarmAreaChart } from "../_shared/farmAreaChart.ts";
+import { verifiedJwtHasAal2 } from "../_shared/verifiedJwtAal.ts";
 
 type JsonRecord = Record<string, unknown>;
 type ReportType = "farms" | "owners" | "registrations" | "operations" | "guarantees" | "documents" | "car";
@@ -169,6 +170,7 @@ const requireContext = async (request: Request): Promise<RequestContext> => {
   });
   const { data: userData, error: userError } = await client.auth.getUser(token);
   if (userError || !userData.user) throw new HttpError(401, "Sessão inválida ou expirada.", "invalid_session");
+  if (!verifiedJwtHasAal2(token)) throw new HttpError(403, "Confirme sua autenticação em duas etapas para continuar.", "mfa_required");
 
   const { data: profile, error: profileError } = await client
     .from("profiles")

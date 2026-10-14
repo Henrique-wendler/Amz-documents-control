@@ -10,7 +10,8 @@ declare
     '202608270005', '202608270006', '202608280007', '202608280008',
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
-    '202609150017', '202609240018', '202610080019', '202610080020'
+    '202609150017', '202609240018', '202610080019', '202610080020',
+    '202610140021'
   ];
   applied_versions text[];
 begin
@@ -19,7 +20,7 @@ begin
   from supabase_migrations.schema_migrations;
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history differs from the expected 001-020 set.';
+    raise exception 'Migration history differs from the expected 001-021 set.';
   end if;
 end;
 $$;
@@ -71,7 +72,8 @@ begin
     into broad_policies
   from pg_policies
   where 'authenticated' = any(roles)
-    and cmd = 'ALL';
+    and cmd = 'ALL'
+    and permissive = 'PERMISSIVE';
 
   if broad_policies is not null then
     raise exception 'Broad authenticated ALL policies found: %', array_to_string(broad_policies, ', ');
@@ -136,6 +138,65 @@ begin
     or has_table_privilege('authenticated', 'public.pending_issue_events', 'UPDATE')
     or has_table_privilege('authenticated', 'public.pending_issue_events', 'DELETE') then
     raise exception 'Browser role can mutate the Central event history directly.';
+  end if;
+end;
+$$;
+
+do $$
+declare
+  missing_aal2_policies text[];
+begin
+  select array_agg(table_ref.tablename order by table_ref.tablename)
+    into missing_aal2_policies
+  from pg_tables table_ref
+  where schemaname = 'public'
+    and not exists (
+      select 1 from pg_policies policy
+      where policy.schemaname = 'public'
+        and policy.tablename = table_ref.tablename
+        and policy.policyname = case
+          when table_ref.tablename = 'profiles' then 'profiles_require_aal2_select'
+          else table_ref.tablename || '_require_aal2'
+        end
+        and policy.permissive = 'RESTRICTIVE'
+        and 'authenticated' = any(policy.roles)
+        and policy.qual like '%current_user_has_aal2%'
+        and (table_ref.tablename = 'profiles'
+          or policy.with_check like '%current_user_has_aal2%')
+    );
+
+  if missing_aal2_policies is not null then
+    raise exception 'Missing restrictive aal2 policies: %', array_to_string(missing_aal2_policies, ', ');
+  end if;
+
+  if to_regprocedure('private.current_user_has_aal2()') is null
+    or has_function_privilege('anon', 'private.current_user_has_aal2()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'private.current_user_has_aal2()', 'EXECUTE')
+    or not exists (
+      select 1 from pg_policies policy
+      where policy.schemaname = 'storage'
+        and policy.tablename = 'objects'
+        and policy.policyname = 'rural_documents_require_aal2'
+        and policy.permissive = 'RESTRICTIVE'
+        and 'authenticated' = any(policy.roles)
+        and policy.qual like '%current_user_has_aal2%'
+        and policy.with_check like '%current_user_has_aal2%'
+    ) or exists (
+      select 1 from unnest(array[
+        'profiles_require_aal2_insert', 'profiles_require_aal2_update',
+        'profiles_require_aal2_delete'
+      ]) policy_name
+      where not exists (
+        select 1 from pg_policies policy
+        where policy.schemaname = 'public'
+          and policy.tablename = 'profiles'
+          and policy.policyname = policy_name
+          and policy.permissive = 'RESTRICTIVE'
+          and 'authenticated' = any(policy.roles)
+          and coalesce(policy.qual, policy.with_check) like '%current_user_has_aal2%'
+      )
+    ) then
+    raise exception 'Backend aal2 helper, grants or Storage policy is missing.';
   end if;
 end;
 $$;
@@ -291,7 +352,7 @@ end;
 $$;
 
 select
-  20 as migrations_validated,
+  21 as migrations_validated,
   32 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;

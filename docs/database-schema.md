@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado do schema versionado: migrations até `020`. A Migration 019 estabelece a fundação da Central de Pendências; a 020 acrescenta detector, reconciliação e contratos de leitura. A interface ainda não foi implementada. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio existentes, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
+> Estado do schema versionado: migrations até `021`. As Migrations 019 e 020 implementam o contrato da Central de Pendências; a 021 exige MFA `aal2` no backend. O frontend usa Supabase para Auth/MFA, profiles/permissions e os módulos de negócio, inclusive a Central de Pendências. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -46,8 +46,17 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 18 | `202609240018_admin_users_service_role_reads.sql` | leitura mínima pelo `service_role` para a Edge Function de administração de usuários |
 | 19 | `202610080019_pending_issues_foundation.sql` | role Técnico, permissões da Central, acompanhamento, timeline funcional, RLS e auditoria |
 | 20 | `202610080020_pending_issues_detection_contract.sql` | cinco detectores atuais, reconciliação idempotente, edição gerencial restrita, lista paginada e resumo autorizado da Central |
+| 21 | `202610140021_enforce_mfa_aal2.sql` | helper privado de AAL2, gate compartilhado de permissões, RLS restritiva e Storage privado protegidos após MFA |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
+
+### MFA no backend (Migration 021)
+
+`private.current_user_has_aal2()` lê o claim `aal` do JWT validado pelo Supabase. `private.has_permission()` exige `aal2` antes das verificações existentes de profile, role, organização e permission. `current_user_permissions()` retorna vazio em `aal1`. Policies restritivas em todas as 32 tabelas públicas exigem `aal2` para dados de negócio; a única exceção de leitura é o próprio `profile`, necessário para a interface descobrir enrollment/challenge. Escritas em `profiles` exigem `aal2`. O bucket privado `rural-documents` também tem policy restritiva; suas regras anteriores de permission e prefixo de organização continuam válidas.
+
+As RPCs acessíveis ao usuário usam o gate compartilhado de permission; `current_user_permissions()` aplica `aal2` diretamente. As RPCs de sincronização exclusivas do `service_role` continuam reservadas ao File Gateway. As Edge Functions `admin-users`, `document-files` e `generate-report` exigem `aal2` após `getUser(token)` validar o mesmo JWT; retornam HTTP 403 com código `mfa_required` e mensagem de domínio. O `file-gateway` mantém autenticação por token de instância e não recebe JWT de usuário.
+
+Para validar **somente no Supabase local**, após aplicar a migration local, execute `supabase/validation/mfa-aal2-local.sql` com `psql -v ON_ERROR_STOP=1`. O teste exige um admin local ativo, cria fixtures dentro de uma transação e termina em `ROLLBACK`. Ele cobre `aal1` negado, `aal2` permitido, permission ausente, outro tenant e profile/organização inativos. Execute `node --experimental-strip-types --test scripts/test-mfa-backend.mjs` para o helper. Com as quatro variáveis `MFA_LOCAL_URL`, `MFA_LOCAL_ANON_KEY`, `MFA_LOCAL_JWT_SECRET` e `MFA_LOCAL_ACTOR_ID` obtidas exclusivamente da stack local, o mesmo script também chama as três Edge Functions por HTTP com JWTs de teste `aal1`/`aal2`. Não grave nem publique esses valores.
 
 ## Catálogo de tabelas
 

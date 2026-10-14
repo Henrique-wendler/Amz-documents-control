@@ -71,7 +71,7 @@ npx supabase db push --linked
 npx supabase migration list --linked
 ```
 
-Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `020` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
+Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `021` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
 
 Depois, usando uma conexão administrativa temporária obtida no ambiente seguro:
 
@@ -79,7 +79,7 @@ Depois, usando uma conexão administrativa temporária obtida no ambiente seguro
 psql "$env:STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/validation/staging-readiness.sql
 ```
 
-O validador é somente leitura e verifica o histórico `001–020`, 32 tabelas públicas, RLS, ausência de policy `authenticated → ALL`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 020 no ambiente autorizado.
+O validador é somente leitura e verifica o histórico `001–021`, 32 tabelas públicas, RLS, ausência de policy permissiva `authenticated → ALL`, policies restritivas de `aal2`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 021 no ambiente autorizado.
 
 ### 3. Configurar secrets e políticas das Edge Functions
 
@@ -110,6 +110,8 @@ npx supabase functions deploy file-gateway --project-ref $stagingProjectRef --no
 O cálculo do gráfico de fazendas permanece em `supabase/functions/_shared/farmAreaChart.ts` e é importado pela pré-visualização Vite e por `generate-report`. O módulo contém apenas TypeScript e APIs JavaScript comuns aos dois runtimes. A [estrutura recomendada para Edge Functions](https://supabase.com/docs/guides/functions/development-environment#recommended-project-structure) mantém código compartilhado em `_shared` dentro de `supabase/functions`; este projeto usa o comando de deploy padrão acima, sem um fluxo de empacotamento verificado para imports externos a essa árvore. O sucesso de `functions serve` local não comprova que um módulo na raiz ou em `src/` será incluído no bundle de deploy. Mantenha essa localização até validar o empacotamento do mesmo fluxo de deploy antes de mover a fonte compartilhada.
 
 O `file-gateway` continua autenticando a instância no próprio backend; `--no-verify-jwt` não o torna público sem o token dedicado válido.
+
+As funções `admin-users`, `document-files` e `generate-report` validam o JWT do usuário e exigem o claim `aal2` antes de operações privilegiadas. O `file-gateway` usa exclusivamente autenticação de instância e não recebe a exceção de MFA do usuário.
 
 ### 5. Configurar Auth
 
@@ -164,6 +166,6 @@ Siga [`cloud-staging-smoke-test.md`](cloud-staging-smoke-test.md). O aceite exig
 ## Rollback e separação
 
 - Não execute rollback destrutivo sem plano e backup do próprio staging.
-- Corrija schema somente com migration incremental posterior à `018`.
+- Corrija schema somente com migration incremental posterior à `021`.
 - Remova fixtures temporárias de tenant B e objetos de teste ao concluir.
 - Produção exigirá novo projeto, novos secrets, nova origem HTTPS e novo ciclo completo de validação; nunca promova o banco de staging como produção.
