@@ -10,6 +10,7 @@ import {
   Search24Regular,
   Shield24Regular,
   Settings24Regular,
+  Warning24Regular,
 } from "@fluentui/react-icons";
 import type { ComponentType } from "react";
 import { usePermissions } from "../hooks/usePermissions";
@@ -20,20 +21,22 @@ interface NavItem {
   icon: ComponentType;
   path?: string;
   permission?: string;
+  group: "Gestão" | "Imóveis" | "Operações" | "Análise" | "Sistema";
 }
 
 const items: NavItem[] = [
-  { label: "Visão Geral", icon: Home24Regular, path: "/dashboard" },
-  { label: "Consulta Geral", icon: Search24Regular, path: "/consulta" },
-  { label: "Proprietários", icon: People24Regular, path: "/proprietarios" },
-  { label: "Fazendas", icon: Building24Regular, path: "/fazendas" },
-  { label: "Matrículas", icon: Document24Regular, path: "/matriculas" },
-  { label: "Operações e Garantias", icon: Money24Regular, path: "/" },
-  { label: "Documentos", icon: Folder24Regular, path: "/documentos" },
-  { label: "CAR", icon: Shield24Regular, path: "/car" },
-  { label: "Relatórios", icon: ChartMultiple24Regular, path: "/relatorios" },
-  { label: "Administração · Usuários", icon: Settings24Regular, path: "/administracao/usuarios", permission: "users.manage" },
-  { label: "Administração · Catálogos", icon: BookDatabase24Regular, path: "/administracao/catalogos", permission: "catalogs.manage" },
+  { label: "Visão Geral", icon: Home24Regular, path: "/dashboard", group: "Gestão" },
+  { label: "Consulta Geral", icon: Search24Regular, path: "/consulta", group: "Gestão" },
+  { label: "Proprietários", icon: People24Regular, path: "/proprietarios", group: "Imóveis" },
+  { label: "Fazendas", icon: Building24Regular, path: "/fazendas", group: "Imóveis" },
+  { label: "Matrículas", icon: Document24Regular, path: "/matriculas", group: "Imóveis" },
+  { label: "CAR", icon: Shield24Regular, path: "/car", group: "Imóveis" },
+  { label: "Operações e Garantias", icon: Money24Regular, path: "/", group: "Operações" },
+  { label: "Documentos", icon: Folder24Regular, path: "/documentos", group: "Operações" },
+  { label: "Pendências", icon: Warning24Regular, path: "/pendencias", permission: "pending_issues.read", group: "Operações" },
+  { label: "Relatórios", icon: ChartMultiple24Regular, path: "/relatorios", group: "Análise" },
+  { label: "Administração · Usuários", icon: Settings24Regular, path: "/administracao/usuarios", permission: "users.manage", group: "Sistema" },
+  { label: "Administração · Catálogos", icon: BookDatabase24Regular, path: "/administracao/catalogos", permission: "catalogs.manage", group: "Sistema" },
 ];
 
 interface SidebarProps {
@@ -51,19 +54,22 @@ export function Sidebar({ activePath = "/", onNavigate }: SidebarProps) {
         <strong>Imóveis Rurais</strong>
       </div>
       <nav className="sidebar__nav">
-        {items.filter((item) => !item.permission || hasPermission(item.permission)).map(({ label, icon: Icon, path }) => {
+        {items.filter((item) => !item.permission || hasPermission(item.permission)).map(({ label, icon: Icon, path, group }, index, visible) => {
           const active = path === activePath;
           return (
+            <div className="sidebar__nav-entry" key={label}>
+            {index === 0 || visible[index - 1].group !== group ? <span className="sidebar__group">{group}</span> : null}
             <button
               type="button"
-              key={label}
               className={`sidebar__item${active ? " sidebar__item--active" : ""}`}
+              aria-label={label}
               aria-current={active ? "page" : undefined}
               onClick={path && onNavigate ? () => onNavigate(path) : undefined}
             >
               <Icon />
               <span>{label}</span>
             </button>
+            </div>
           );
         })}
       </nav>

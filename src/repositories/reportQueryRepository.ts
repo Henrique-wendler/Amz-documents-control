@@ -16,6 +16,7 @@ import { supabaseOperationRepository } from "./supabaseOperationRepository";
 import { supabaseOwnerRepository } from "./supabaseOwnerRepository";
 import { supabaseOwnershipRepository } from "./supabaseOwnershipRepository";
 import { supabaseRegistrationRepository } from "./supabaseRegistrationRepository";
+import { supabase } from "../lib/supabase";
 
 export interface ReportSnapshot {
   farms: PersistedFarm[];
@@ -35,6 +36,38 @@ const emptySnapshot = (): ReportSnapshot => ({
   farms: [], owners: [], registrations: [], ownershipLinks: [], operations: [], guarantees: [], institutions: [],
   guaranteeTypes: [], documents: [], documentTypes: [], cars: [],
 });
+
+// A report preview must never present page-limited data as organization totals.
+const verifyCompleteSnapshot = async (type: ReportType, snapshot: ReportSnapshot) => {
+  const checks: Array<{ table: string; loaded: number; activeOnly?: boolean }> = [
+    { table: "farms", loaded: snapshot.farms.length },
+    { table: "registrations", loaded: snapshot.registrations.length },
+  ];
+  if (type === "owners" || type === "registrations") checks.push(
+    { table: "owners", loaded: snapshot.owners.length },
+    { table: "ownership_links", loaded: snapshot.ownershipLinks.length },
+  );
+  if (type === "operations" || type === "guarantees") checks.push(
+    { table: "operations", loaded: snapshot.operations.length },
+    { table: "financial_institutions", loaded: snapshot.institutions.length },
+  );
+  if (type === "guarantees") checks.push(
+    { table: "guarantees", loaded: snapshot.guarantees.length },
+    { table: "guarantee_types", loaded: snapshot.guaranteeTypes.length },
+  );
+  if (type === "documents") checks.push(
+    { table: "rural_documents", loaded: snapshot.documents.length },
+    { table: "document_types", loaded: snapshot.documentTypes.length, activeOnly: true },
+  );
+  if (type === "car") checks.push({ table: "car_records", loaded: snapshot.cars.length });
+  await Promise.all(checks.map(async ({ table, loaded, activeOnly }) => {
+    let query = supabase.from(table).select("id", { count: "exact", head: true }).is("deleted_at", null);
+    if (activeOnly) query = query.eq("status", "active");
+    const { count, error } = await query;
+    if (error || count === null) throw new Error("Não foi possível confirmar o total de registros da pré-visualização.");
+    if (count !== loaded) throw new Error("A pré-visualização excede o limite de registros carregados. Refine a consulta ou use a exportação completa.");
+  }));
+};
 
 export const reportQueryRepository = {
   async load(type: ReportType, includeFinancial: boolean): Promise<ReportSnapshot> {
@@ -65,6 +98,7 @@ export const reportQueryRepository = {
         supabaseFarmRepository.list(), supabaseRegistrationRepository.list(), supabaseCarRepository.list(),
       ]);
     }
+    await verifyCompleteSnapshot(type, snapshot);
     return snapshot;
   },
 };

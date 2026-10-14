@@ -4,11 +4,25 @@ import type { ReportExportFormat, ReportFilterOptions, ReportFilters, ReportType
 
 interface Props { type: ReportType; value: ReportFilters; options: ReportFilterOptions; generating: boolean; exporting: boolean; canGenerate: boolean; canExport: boolean; onChange: React.Dispatch<React.SetStateAction<ReportFilters>>; onGenerate: () => void; onExport: (format: ReportExportFormat) => void; }
 const selectedLabel = (items: Array<{ value: string; label: string }>, value: string, fallback: string) => items.find((item) => item.value === value)?.label ?? fallback;
+const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 export function ReportFiltersPanel({ type, value, options, generating, exporting, canGenerate, canExport, onChange, onGenerate, onExport }: Props) {
   const set = <K extends keyof ReportFilters>(key: K, next: ReportFilters[K]) => onChange((current) => ({ ...current, [key]: next }));
   const periodApplicable = type === "operations" || type === "guarantees" || type === "documents";
+  const setPeriod = (days?: number, months?: number) => {
+    const end = new Date();
+    const start = new Date(end);
+    if (days) start.setDate(start.getDate() - days);
+    if (months) start.setMonth(start.getMonth() - months);
+    onChange((current) => ({ ...current, startDate: localDate(start), endDate: localDate(end) }));
+  };
   return <div className="report-filters">
+    {periodApplicable ? <div className="report-period-presets" role="group" aria-label="Períodos rápidos">
+      <span>Período:</span><Button size="small" appearance="subtle" onClick={() => setPeriod(30)}>30 dias</Button>
+      <Button size="small" appearance="subtle" onClick={() => setPeriod(90)}>90 dias</Button>
+      <Button size="small" appearance="subtle" onClick={() => setPeriod(undefined, 12)}>12 meses</Button>
+      <Button size="small" appearance="subtle" onClick={() => onChange((current) => ({ ...current, startDate: "", endDate: "" }))}>Todo o período</Button>
+    </div> : null}
     <div className="report-filters__fields">
       <Field label="Fazenda"><Dropdown value={selectedLabel(options.farms, value.farmId, "Todas as fazendas")} selectedOptions={[value.farmId]} onOptionSelect={(_, data) => set("farmId", data.optionValue ?? "")}><Option value="">Todas as fazendas</Option>{options.farms.map((farm) => <Option key={farm.value} value={farm.value}>{farm.label}</Option>)}</Dropdown></Field>
       <Field label="Situação"><Dropdown value={selectedLabel(options.statuses, value.status, "Todas")} selectedOptions={[value.status]} onOptionSelect={(_, data) => set("status", data.optionValue ?? "")}><Option value="">Todas</Option>{options.statuses.map((status) => <Option key={status.value} value={status.value}>{status.label}</Option>)}</Dropdown></Field>

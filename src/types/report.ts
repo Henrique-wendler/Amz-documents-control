@@ -22,6 +22,14 @@ export interface ReportColumn { key: string; label: string; align?: "start" | "e
 export interface ReportRow { id: string; values: Record<string, string>; }
 export interface ReportMetric { label: string; value: string; }
 export type ReportChart = FarmAreaChart;
+export interface ReportAnalysisChart {
+  title: string;
+  description: string;
+  centerLabel: string;
+  centerValue?: string;
+  valueUnit?: "registro" | "vínculo";
+  items: Array<{ key: string; label: string; value: number; displayValue?: string; rowIds: string[] }>;
+}
 
 export interface ReportViewModel {
   type: ReportType;
@@ -30,6 +38,7 @@ export interface ReportViewModel {
   rows: ReportRow[];
   metrics: ReportMetric[];
   chart?: ReportChart;
+  analysisCharts: ReportAnalysisChart[];
   generatedAt: string;
 }
 

@@ -7,6 +7,7 @@
     "dev": "vite --configLoader runner",
     "build": "tsc -b && vite build --configLoader runner",
     "check:encoding": "node scripts/check-encoding.mjs",
+    "test:pending-issues": "node --experimental-strip-types --test scripts/test-pending-issues.mjs",
     "preview": "vite preview --configLoader runner",
     "check:staging:static": "node scripts/staging/check-static-readiness.mjs"
   },

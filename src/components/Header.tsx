@@ -22,7 +22,7 @@ export function Header({
     .slice(0, 2)
     .map((part) => part[0]?.toLocaleUpperCase("pt-BR"))
     .join("") || "US";
-  const roleLabel = ({ admin: "Administrador", manager: "Gestor", operator: "Operador", viewer: "Consulta" } as Record<string, string>)[profile?.role_key ?? ""] ?? profile?.role_key;
+  const roleLabel = ({ admin: "Administrador", manager: "Gestor", operator: "Operador", viewer: "Consulta", technician: "Técnico" } as Record<string, string>)[profile?.role_key ?? ""] ?? profile?.role_key;
 
   return (
     <header className="app-header">
