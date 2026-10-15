@@ -9,7 +9,7 @@ export class PendingIssueConcurrencyError extends Error {
 
 export const pendingIssueErrorFromCode = (code: string, fallback: string): Error => {
   switch (code) {
-    case "40001": return new PendingIssueConcurrencyError();
+    case "PT409": return new PendingIssueConcurrencyError();
     case "42501": return new Error("Você não possui permissão para esta ação.");
     case "P0002": return new Error("Esta pendência não está mais disponível.");
     case "23514": case "23503": return new Error("Verifique o responsável, o status e a justificativa informados.");

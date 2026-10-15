@@ -71,7 +71,7 @@ npx supabase db push --linked
 npx supabase migration list --linked
 ```
 
-Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `021` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
+Não use `--include-seed`: `supabase/staging/seed.sql` é deliberadamente separado de `supabase/seed.sql` e nunca roda automaticamente. As migrations `001` a `022` devem ser o único caminho para criar schema, RLS, permissions, RPCs e bucket em um banco vazio.
 
 Depois, usando uma conexão administrativa temporária obtida no ambiente seguro:
 
@@ -79,7 +79,7 @@ Depois, usando uma conexão administrativa temporária obtida no ambiente seguro
 psql "$env:STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/validation/staging-readiness.sql
 ```
 
-O validador é somente leitura e verifica o histórico `001–021`, 32 tabelas públicas, RLS, ausência de policy permissiva `authenticated → ALL`, policies restritivas de `aal2`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 021 no ambiente autorizado.
+O validador é somente leitura e verifica o histórico `001–022`, 32 tabelas públicas, RLS, ausência de policy permissiva `authenticated → ALL`, policies restritivas de `aal2`, permissions críticas, bucket privado, policies de Storage, RPCs sensíveis e os `SELECT` mínimos do File Gateway. Execute-o após aplicar a Migration 022 no ambiente autorizado.
 
 ### 3. Configurar secrets e políticas das Edge Functions
 
@@ -103,9 +103,12 @@ Funções necessárias:
 | `file-gateway` | token dedicado da instância | jobs Cloud ↔ local; pode ficar sem instância ativa |
 
 ```powershell
-npx supabase functions deploy admin-users document-files generate-report --project-ref $stagingProjectRef
+npx supabase functions deploy admin-users document-files --project-ref $stagingProjectRef
+npx supabase functions deploy generate-report --project-ref $stagingProjectRef
 npx supabase functions deploy file-gateway --project-ref $stagingProjectRef --no-verify-jwt
 ```
+
+`generate-report` lê fontes e logo de `assets/` para produzir PDF. O deploy dessa função exige Docker ativo e o empacotamento local da CLI; **não use `--use-api`**. Após o deploy, baixe o ZIP da função implantada e confirme que as duas fontes `.ttf`, o logo `.jpg` e a licença estão presentes em `assets/`. `check:staging:static` verifica os arquivos e a configuração no repositório, mas não comprova o conteúdo do bundle remoto. Teste PDF e XLSX no staging antes de aprovar a publicação.
 
 O cálculo do gráfico de fazendas permanece em `supabase/functions/_shared/farmAreaChart.ts` e é importado pela pré-visualização Vite e por `generate-report`. O módulo contém apenas TypeScript e APIs JavaScript comuns aos dois runtimes. A [estrutura recomendada para Edge Functions](https://supabase.com/docs/guides/functions/development-environment#recommended-project-structure) mantém código compartilhado em `_shared` dentro de `supabase/functions`; este projeto usa o comando de deploy padrão acima, sem um fluxo de empacotamento verificado para imports externos a essa árvore. O sucesso de `functions serve` local não comprova que um módulo na raiz ou em `src/` será incluído no bundle de deploy. Mantenha essa localização até validar o empacotamento do mesmo fluxo de deploy antes de mover a fonte compartilhada.
 

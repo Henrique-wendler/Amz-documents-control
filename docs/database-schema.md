@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado do schema versionado: migrations até `021`. As Migrations 019 e 020 implementam o contrato da Central de Pendências; a 021 exige MFA `aal2` no backend. O frontend usa Supabase para Auth/MFA, profiles/permissions e os módulos de negócio, inclusive a Central de Pendências. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
+> Estado do schema versionado: migrations até `022`. As Migrations 019 e 020 implementam o contrato da Central de Pendências; a 021 exige MFA `aal2` no backend; a 022 corrige o status HTTP do conflito de versão. O frontend usa Supabase para Auth/MFA, profiles/permissions e os módulos de negócio, inclusive a Central de Pendências. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -47,6 +47,7 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 19 | `202610080019_pending_issues_foundation.sql` | role Técnico, permissões da Central, acompanhamento, timeline funcional, RLS e auditoria |
 | 20 | `202610080020_pending_issues_detection_contract.sql` | cinco detectores atuais, reconciliação idempotente, edição gerencial restrita, lista paginada e resumo autorizado da Central |
 | 21 | `202610140021_enforce_mfa_aal2.sql` | helper privado de AAL2, gate compartilhado de permissões, RLS restritiva e Storage privado protegidos após MFA |
+| 22 | `202610150022_fix_pending_issue_conflict_status.sql` | conflito de versão da Central como `PT409`/HTTP 409, sem retry de serialização |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -142,7 +143,7 @@ Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuraçã
 
 `list_pending_issue_assignees()` exige `pending_issues.manage` e usa o tenant da sessão. Retorna apenas `profile_id`, `full_name`, `role_key` e `role_name` de profiles ativos cujo role está ativo e possui `pending_issues.manage`. É o contrato do seletor “Responsável”; a atribuição é revalidada pelo trigger da 019 no momento da escrita. O Técnico não precisa de leitura geral de `profiles`, roles, catálogos ou Administração de Usuários.
 
-A timeline é lida diretamente de `pending_issue_events` com filtro por `pending_issue_id`, ordenação por `created_at` e `event_order`, e paginação. O `SELECT` e a policy da 019 exigem simultaneamente o tenant e `pending_issues.read`; não há escrita direta pelo navegador. Para editar, a UI chama `update_pending_issue_management(p_pending_issue_id, p_expected_version, p_assigned_to, p_status, p_resolution_due_date, p_justification)` com um snapshot completo dos quatro campos gerenciais. `NULL` em campo opcional significa limpá-lo, nunca omitir a alteração. A RPC exige `pending_issues.manage`, deriva o tenant da sessão, atualiza somente esses campos e retorna a nova `version`. Versão antiga gera conflito (`40001`), sem alteração; ID ausente ou de outro tenant gera `P0002`. Os triggers da 019 incrementam `version`, derivam autoria e `resolved_at`, validam responsável/status/justificativa e registram timeline e auditoria. `add_pending_issue_note()` continua sendo o contrato separado para observações. O fluxo da Central para Admin/Técnico é reconciliar, listar e carregar resumo usando somente as três permissões da Central. Não há classificação automática de severidade.
+A timeline é lida diretamente de `pending_issue_events` com filtro por `pending_issue_id`, ordenação por `created_at` e `event_order`, e paginação. O `SELECT` e a policy da 019 exigem simultaneamente o tenant e `pending_issues.read`; não há escrita direta pelo navegador. Para editar, a UI chama `update_pending_issue_management(p_pending_issue_id, p_expected_version, p_assigned_to, p_status, p_resolution_due_date, p_justification)` com um snapshot completo dos quatro campos gerenciais. `NULL` em campo opcional significa limpá-lo, nunca omitir a alteração. A RPC exige `pending_issues.manage`, deriva o tenant da sessão, atualiza somente esses campos e retorna a nova `version`. Versão antiga gera conflito (`PT409`, HTTP 409), sem alteração nem retry de serialização; ID ausente ou de outro tenant gera `P0002`. Os triggers da 019 incrementam `version`, derivam autoria e `resolved_at`, validam responsável/status/justificativa e registram timeline e auditoria. `add_pending_issue_note()` continua sendo o contrato separado para observações. O fluxo da Central para Admin/Técnico é reconciliar, listar e carregar resumo usando somente as três permissões da Central. Não há classificação automática de severidade.
 
 ## Bootstrap da V1
 

@@ -11,7 +11,7 @@ declare
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
     '202609150017', '202609240018', '202610080019', '202610080020',
-    '202610140021'
+    '202610140021', '202610150022'
   ];
   applied_versions text[];
 begin
@@ -20,7 +20,7 @@ begin
   from supabase_migrations.schema_migrations;
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history differs from the expected 001-021 set.';
+    raise exception 'Migration history differs from the expected 001-022 set.';
   end if;
 end;
 $$;
@@ -264,6 +264,12 @@ begin
     raise exception 'Required functions/RPCs are missing: %', array_to_string(missing, ', ');
   end if;
 
+  if position('PT409' in pg_get_functiondef(
+      'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)'::regprocedure
+    )) = 0 then
+    raise exception 'Central version conflict must use SQLSTATE PT409.';
+  end if;
+
   if has_function_privilege('anon', 'public.add_pending_issue_note(uuid,text)', 'EXECUTE')
     or not has_function_privilege('authenticated', 'public.add_pending_issue_note(uuid,text)', 'EXECUTE')
     or has_function_privilege('authenticated', 'private.prepare_pending_issue_management()', 'EXECUTE')
@@ -352,7 +358,7 @@ end;
 $$;
 
 select
-  21 as migrations_validated,
+  22 as migrations_validated,
   32 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;

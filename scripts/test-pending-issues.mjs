@@ -75,10 +75,11 @@ test("filter validation accepts supported UUIDs and rejects partial IDs", () => 
   assert.equal(validatePendingIssueFilters({ ...initialPendingIssueFilters, farmId: "12345678-1234-4234-8234-123456789012" }), "");
 });
 
-test("40001 maps to a concurrency error without SQL details", () => {
-  const error = pendingIssueErrorFromCode("40001", "fallback");
+test("PT409 maps to a concurrency error without SQL details", () => {
+  const error = pendingIssueErrorFromCode("PT409", "fallback");
   assert.ok(error instanceof PendingIssueConcurrencyError);
   assert.match(error.message, /alterada por outro usuário/);
+  assert.equal(pendingIssueErrorFromCode("40001", "Falha de serialização real").message, "Falha de serialização real");
   assert.equal(pendingIssueErrorFromCode("XX000", "Falha segura").message, "Falha segura");
 });
 

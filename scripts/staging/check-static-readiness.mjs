@@ -11,11 +11,11 @@ const migrationFiles = (await readdir(migrationDirectory))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 const migrationNumbers = migrationFiles.map((name) => Number(name.match(/^(\d{12})_/)?.[1].slice(-3)));
-const expectedNumbers = Array.from({ length: 21 }, (_, index) => index + 1);
-if (migrationFiles.length === 21 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
-  pass("migrations 001-021 are present in order");
+const expectedNumbers = Array.from({ length: 22 }, (_, index) => index + 1);
+if (migrationFiles.length === 22 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
+  pass("migrations 001-022 are present in order");
 } else {
-  fail(`expected migrations 001-021; found ${migrationFiles.join(", ")}`);
+  fail(`expected migrations 001-022; found ${migrationFiles.join(", ")}`);
 }
 
 const expectedFunctions = ["admin-users", "document-files", "file-gateway", "generate-report"];
@@ -61,7 +61,7 @@ try {
   fail("Amazon Agro logo is missing from frontend or PDF assets");
 }
 if (!failures.some((message) => message.startsWith("report asset") || message.includes("generate-report assets"))) {
-  pass("Unicode PDF fonts and the Amazon Agro logo are bundled with generate-report");
+  pass("Unicode PDF fonts and the Amazon Agro logo are present and configured for bundling");
 }
 
 const publicEnvironment = await readFile(resolve(root, ".env.example"), "utf8");
