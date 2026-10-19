@@ -11,6 +11,7 @@
     "test:pending-conflict:local": "node --test scripts/test-pending-issue-conflict-local.mjs",
     "test:mfa-backend": "node --experimental-strip-types --test scripts/test-mfa-backend.mjs",
     "test:report-pdf": "node --test scripts/test-report-pdf.mjs",
+    "test:security-headers": "node --test scripts/test-frontend-security-headers.mjs",
     "preview": "vite preview --configLoader runner",
     "check:staging:static": "node scripts/staging/check-static-readiness.mjs"
   },

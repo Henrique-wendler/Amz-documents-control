@@ -10,6 +10,8 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 - [ ] Frontend e API usam HTTPS; navegador não apresenta mixed content.
 - [ ] CORS aceita apenas a origem HTTPS de staging.
 - [ ] Nenhum secret aparece no bundle, logs do navegador ou repositório.
+- [ ] `nosniff`, `Referrer-Policy`, proteção contra framing, `Permissions-Policy` e CSP chegam por HTTPS nas rotas da SPA; console sem violação inesperada em Auth, Storage e exportações.
+- [ ] Plano de backup de banco e objetos, responsáveis, RPO/RTO e ensaio de restauração isolado estão aprovados conforme [`backup-restore-runbook.md`](backup-restore-runbook.md).
 
 ## Auth e sessão
 

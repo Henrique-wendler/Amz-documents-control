@@ -162,6 +162,8 @@ npm run build
 
 Publique o conteúdo de `dist/` em uma origem HTTPS. Configure fallback para `index.html` nas rotas do SPA, headers de segurança/cache do provedor e nunca sirva `.env`, sourcemaps privados ou arquivos de configuração.
 
+No projeto Vercel, `vercel.mjs` mantém o fallback da SPA e aplica os headers de segurança. A [configuração programática oficial da Vercel](https://vercel.com/docs/project-configuration/vercel-ts) aceita esse nome e o export `config`; mantenha apenas esse arquivo de configuração, sem `vercel.json` concorrente. A CSP deriva a origem de Auth/API/Functions/Storage de `VITE_SUPABASE_URL` no momento do deploy; essa variável deve apontar ao projeto Supabase correto do ambiente. `script-src` aceita somente a própria origem; `style-src 'unsafe-inline'` é necessário para os estilos injetados pelo Fluent UI e para os estilos dos gráficos. O QR de TOTP usa imagem `data:`, e o logo e as fontes da interface usam a própria origem. As fontes do PDF são incorporadas pela Edge Function. Valide os headers HTTPS e o console após cada deploy, inclusive `/redefinir-senha` com refresh, downloads PDF/XLSX via Blob e acesso aos objetos privados de Storage.
+
 ### 9. Executar smoke test
 
 Siga [`cloud-staging-smoke-test.md`](cloud-staging-smoke-test.md). O aceite exige Auth/MFA/recovery, administração, CRUD, Dashboard/Consulta, relatórios, Storage, RLS, cross-tenant e auditoria aprovados com evidências sanitizadas.
@@ -169,6 +171,7 @@ Siga [`cloud-staging-smoke-test.md`](cloud-staging-smoke-test.md). O aceite exig
 ## Rollback e separação
 
 - Não execute rollback destrutivo sem plano e backup do próprio staging.
-- Corrija schema somente com migration incremental posterior à `021`.
+- Para backup de banco, bytes de Storage e ensaio de restore antes de produção, siga [`backup-restore-runbook.md`](backup-restore-runbook.md).
+- Corrija schema somente com migration incremental posterior à `022`.
 - Remova fixtures temporárias de tenant B e objetos de teste ao concluir.
 - Produção exigirá novo projeto, novos secrets, nova origem HTTPS e novo ciclo completo de validação; nunca promova o banco de staging como produção.
