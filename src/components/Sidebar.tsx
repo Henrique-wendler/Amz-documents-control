@@ -30,6 +30,7 @@ const items: NavItem[] = [
   { label: "Operações e Garantias", icon: Money24Regular, path: "/" },
   { label: "Documentos", icon: Folder24Regular, path: "/documentos" },
   { label: "CAR", icon: Shield24Regular, path: "/car" },
+  { label: "Acompanhamento de Propostas", icon: ChartMultiple24Regular, path: "/acompanhamento-propostas", permission: "proposal_reports.read" },
   { label: "Relatórios", icon: ChartMultiple24Regular, path: "/relatorios" },
   { label: "Administração · Usuários", icon: Settings24Regular, path: "/administracao/usuarios", permission: "users.manage" },
   { label: "Administração · Catálogos", icon: BookDatabase24Regular, path: "/administracao/catalogos", permission: "catalogs.manage" },

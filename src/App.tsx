@@ -25,6 +25,7 @@ import { FazendasPage } from "./pages/FazendasPage";
 import { MatriculasPage } from "./pages/MatriculasPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
 import { CarPage } from "./pages/CarPage";
+import { ProposalTrackingPage } from "./pages/ProposalTrackingPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaPage } from "./pages/MfaPage";
@@ -183,6 +184,10 @@ export default function App() {
 
   if (currentPath === "/car") {
     return <CarPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/acompanhamento-propostas") {
+    return <ProposalTrackingPage onNavigate={navigate} />;
   }
 
   if (currentPath === "/relatorios") {

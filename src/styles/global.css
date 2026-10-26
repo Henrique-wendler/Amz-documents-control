@@ -2964,3 +2964,18 @@ button.registration-farm-card {
   .catalog-administration-toolbar__new { width: 100%; justify-self: stretch; }
   .catalog-administration-grid .catalog-column--details { display: none; }
 }
+
+/* Proposal approval tracking uses the existing cards, layout and Fluent controls. */
+.tracking-page { display: flex; flex-direction: column; gap: 20px; }
+.tracking-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; align-items: end; }
+.tracking-kpis { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.tracking-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.tracking-table-scroll { max-width: 100%; overflow-x: auto; }
+.tracking-table-scroll table { min-width: 640px; }
+.tracking-table-scroll th { white-space: nowrap; }
+.tracking-reason { min-width: 180px; max-width: 300px; overflow-wrap: anywhere; }
+.tracking-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 16px; }
+.tracking-editor, .tracking-person-field { display: flex; flex-direction: column; gap: 16px; }
+.tracking-editor { padding-bottom: 20px; }
+.tracking-reference-date { margin: 0; color: #68746c; }
+@media (max-width: 1200px) { .tracking-groups { grid-template-columns: 1fr; } }
