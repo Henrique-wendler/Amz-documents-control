@@ -116,7 +116,7 @@ const buildDashboard = (snapshot: DashboardSnapshot, filters: DashboardFilters, 
       { id: "registries", label: "Matrículas", value: String(registrations.length), detail: `${activeRegistrations.length} ativas`, icon: "registry", tone: "neutral" },
       { id: "operations", label: filters.status === "Em análise" ? "Operações em análise" : "Operações ativas", value: String(filters.status === "Em análise" ? statusOperations.length : activeOperations.length), detail: access.readFinancial ? compactCurrency(operationTotal) : "Valores restritos", icon: "operation", tone: "neutral" },
       { id: "guarantees", label: "Garantias ativas", value: String(activeGuarantees.length), detail: access.readFinancial ? compactCurrency(guaranteeTotal) : "Valores restritos", icon: "guarantee", tone: "neutral" },
-      { id: "pending", label: "Pendências", value: String(pendingDocuments.length), detail: "Requerem atenção", icon: "pending", tone: "warning" },
+      { id: "pending", label: "Documentos em atenção", value: String(pendingDocuments.length), detail: "Vencidos ou próximos do vencimento", icon: "pending", tone: "warning" },
     ],
     operationsByStatus,
     alerts: [

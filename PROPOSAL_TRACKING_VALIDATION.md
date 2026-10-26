@@ -9,12 +9,12 @@ Data: 26/10/2026.
 - Base: `origin/main`, atualizada por fetch, HEAD `5bf1e28ed603e412176eac5c001a2e01682dfb20`.
 - Implementação em worktree isolado, pois o checkout original contém outro trabalho em andamento. Os arquivos desse checkout foram preservados.
 - Somente web + Supabase. Nenhuma alteração no repositório `AmazonAgro-Propostas`, nos seus documentos/exportadores, parser BASA, catálogo, Drive, numeração ou instalador.
-- Nenhum commit, push, merge ou migration em ambiente remoto/produção.
+- Checkpoint original revisado e publicado: `cee4059aa3fb7c4686347a2a7f58c1b3f8ea3e32`. A reconciliação autorizada com a baseline de homologação está detalhada ao final; main e desktop preservados.
 
 ## Schema e migration
 
-Nova migration: `supabase/migrations/202610260019_proposal_approval_tracking.sql`.
-A sequência existente 001–018 foi preservada. Nenhuma migration antiga foi editada.
+Nova migration pendente: `supabase/migrations/202610260023_proposal_approval_tracking.sql`.
+A sequência 001–022 da homologação foi incorporada sem editar seus arquivos. O número 019 pertence à Central de Pendências; o acompanhamento foi renumerado para 023 antes de sua primeira aplicação remota.
 
 Nova tabela `public.operation_approval_tracking`:
 
@@ -270,7 +270,7 @@ A lista abaixo inclui fonte, migration, testes e documentação; nenhum build, d
 - `src/services/proposalTrackingServiceCore.ts`
 - `src/styles/global.css`
 - `src/types/proposalTracking.ts`
-- `supabase/migrations/202610260019_proposal_approval_tracking.sql`
+- `supabase/migrations/202610260023_proposal_approval_tracking.sql`
 - `supabase/tests/proposal_approval_tracking.test.sql`
 - `tests/ProposalTrackingPage.test.tsx`
 - `tests/SidebarTracking.test.tsx`
@@ -279,3 +279,35 @@ A lista abaixo inclui fonte, migration, testes e documentação; nenhum build, d
 - `tests/setup.ts`
 - `tests/trackingFixtures.ts`
 - `vitest.config.ts`
+
+## Reconciliação autorizada com a homologação — 26/10/2026
+
+Esta seção atualiza o checkpoint anterior; os resultados 001–019/103 SQL acima são históricos, anteriores à reconciliação.
+
+- Branch preservada: feature/proposal-approval-tracking. Main não recebeu merge.
+- Checkpoint do módulo: cee4059aa3fb7c4686347a2a7f58c1b3f8ea3e32.
+- Baseline incorporada: origin/fix/staging-release-blockers, d0d24dbfe6b0644cb2ac947973bae2e6a029e2e3. Inclui a Central de Pendências, as correções preexistentes de relatórios, MFA e headers; não implementa exportação gerencial nova.
+- Homologação identificada: sistema-rural-staging-clean, iglciwizbxtkfwlboihe, sa-east-1. O projeto antigo wmazymspoysyqkqmmnaw está inativo e não foi escolhido.
+- Drift inicial: remoto 001–022 versus módulo 001–018 + tracking 019. Nenhuma migration foi aplicada enquanto esse drift existia.
+- Após reconciliação, os SQLs/nomes das 22 migrations remotas foram comparados aos statements do reset local, com SHA-256 após normalização de CRLF: 22/22 idênticos. Única pendência: 202610260023_proposal_approval_tracking.sql.
+- Validador remoto somente leitura, ainda em 001–022: PASS, 32 tabelas, RLS, MFA, grants e bucket privado.
+- A nova tabela ganhou policy RESTRICTIVE de aal2, seguindo a migration 021 já implantada. As RPCs continuam usando has_permission, agora também protegido por MFA. Nenhum relaxamento de segurança.
+- Sete regressões SQL adicionais negam report/options/search/save/SELECT/helper sem aal2 e conferem a policy restritiva. Fixtures autorizados usam aal2; não houve mudança das regras de atraso/financeiro.
+- Runner local remove somente cópias SQL obsoletas no projeto descartável validado, para evitar que a antiga numeração 019 permaneça após o rename. O projeto local anterior não foi resetado.
+
+### Revisão repetida
+
+| Verificação | Resultado |
+| --- | --- |
+| Reset isolado 001–023 + pgTAP | 110 PASS |
+| Frontend Vitest/RTL | 35 PASS |
+| Pendências / MFA helper / PDF assets / headers / donut | 12 + 2 + 1 + 4 + 8 PASS |
+| HTTP PostgREST local real | 26 verificações PASS, incluindo cinco negativas aal1 |
+| Soma das três propostas atrasadas | R$ 1.750.000,00 |
+| Resposta sem financial | nenhuma chave/valor monetário em KPIs/grupos/linhas/opções |
+| RLS cross-tenant | leitura isolada e escrita negada |
+| Build / staging estático / UTF-8 | PASS |
+
+Total automatizado: 172 testes, além das 26 verificações HTTP. Evidências sanitizadas em .tmp/homologation-20261026; logs locais e credenciais não entram no Git.
+
+Aplicação da 023, preview reconciliado, usuários sintéticos e QA remoto são registrados em documento próprio após a publicação. Este registro de revisão local não constitui aceite de QA manual nem GO para merge.

@@ -1,4 +1,5 @@
 import { createClient, type User } from "npm:@supabase/supabase-js@2.112.4";
+import { verifiedJwtHasAal2 } from "../_shared/verifiedJwtAal.ts";
 
 type JsonRecord = Record<string, unknown>;
 type ProfileStatus = "active" | "inactive";
@@ -137,6 +138,7 @@ const requireAdminContext = async (request: Request): Promise<AdminContext> => {
 
   const { data: userData, error: userError } = await adminClient.auth.getUser(token);
   if (userError || !userData.user) throw new HttpError(401, "Sessão inválida ou expirada.", "invalid_session");
+  if (!verifiedJwtHasAal2(token)) throw new HttpError(403, "Confirme sua autenticação em duas etapas para continuar.", "mfa_required");
 
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")

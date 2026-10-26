@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Field, Input, MessageBar, MessageBarBody, Spinner } from "@fluentui/react-components";
 import { LockClosed20Regular, Mail20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../contexts/AuthContext";
+import { BrandLogo } from "../components/BrandLogo";
 
 export function LoginPage() {
   const { signIn, requestPasswordReset, loading, error: authError } = useAuth();
@@ -43,6 +44,7 @@ export function LoginPage() {
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-panel__brand">
+          <BrandLogo />
           <span>Sistema de Gestão</span>
           <strong>Imóveis Rurais</strong>
         </div>

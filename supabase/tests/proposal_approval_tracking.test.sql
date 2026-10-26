@@ -41,7 +41,7 @@ insert into public.operations(id,organization_id,operation_number,institution_id
 insert into public.operation_financials(operation_id,organization_id,amount) select id,organization_id,
  case operation_number when 'QA-001' then 500000 when 'QA-002' then 350000 when 'QA-003' then 900000 else 999999 end
  from public.operations;
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated","aal":"aal2"}',true);
 insert into public.operation_approval_tracking(operation_id,organization_id,approval_deadline,approval_status,technician_name_snapshot,responsible_name_snapshot)
 select id,organization_id,
  case operation_number when 'QA-001' then (now() at time zone 'America/Araguaina')::date-6
@@ -104,7 +104,7 @@ select is((select technician_name_snapshot from public.operation_approval_tracki
 select is(public.save_proposal_tracking('40000000-0000-0000-0000-000000000011',1,'{"approval_status":"pending","technician_profile_id":"20000000-0000-0000-0000-000000000001","responsible_profile_id":"20000000-0000-0000-0000-000000000004"}'),2,'Following up preserves linked profiles');
 select is((select technician_name_snapshot from public.operation_approval_tracking where operation_id='40000000-0000-0000-0000-000000000011'),'User QA 1','Following up does not rewrite historical snapshot');
 
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000004","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000004","role":"authenticated","aal":"aal2"}',true);
 select is((public.proposal_tracking_report()->>'total_rows')::int,10,'Report-only role can read without operations permission');
 select ok(private.has_permission('financial.read'),'Existing operations financial permission does not authorize report finances');
 select ok(not(public.proposal_tracking_report()->'kpis'?'overdue_amount_total'),'Financial KPI key omitted without permission');
@@ -113,21 +113,21 @@ select ok(not jsonb_path_exists(public.proposal_tracking_report(),'$.**.overdue_
 select is((select count(*)::int from public.operation_approval_tracking),10,'RLS report-only access does not require unrelated operations.read');
 select throws_ok($$select public.save_proposal_tracking('40000000-0000-0000-0000-000000000001',2,'{"approval_status":"pending"}')$$,'42501',null,'Read-only cannot manage tracking');
 select is(jsonb_array_length(public.proposal_tracking_options()->'profiles'),0,'Read-only does not receive editing profile catalog');
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000002","role":"authenticated","aal":"aal2"}',true);
 select is((select count(*)::int from public.operation_approval_tracking),0,'Operator has zero tracking rows by default');
 select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'Operator dashboard RPC denied');
 select throws_ok($$select public.proposal_tracking_options()$$,'42501',null,'Operator report options denied');
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000003","role":"authenticated","aal":"aal2"}',true);
 select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'Viewer dashboard denied');
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000005","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000005","role":"authenticated","aal":"aal2"}',true);
 select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'Financial permission alone does not authorize report');
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000007","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000007","role":"authenticated","aal":"aal2"}',true);
 select is((select count(*)::int from public.operation_approval_tracking),10,'Tracking read permission can read operational extension');
 select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'Tracking read does not grant managerial dashboard');
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000006","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000006","role":"authenticated","aal":"aal2"}',true);
 select is(public.save_proposal_tracking('40000000-0000-0000-0000-000000000012',null,'{"approval_status":"pending"}'),1,'Explicit tracking manager can adopt operation');
 select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'Tracking manage does not implicitly grant report');
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000008","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000008","role":"authenticated","aal":"aal2"}',true);
 select is((public.proposal_tracking_report()->>'total_rows')::int,1,'Second organization sees only its own row');
 select is((select count(*)::int from public.operation_approval_tracking),1,'Direct RLS isolates second organization');
 select set_config('request.jwt.claims','{}',true);
@@ -138,7 +138,7 @@ select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'Anon
 reset role;
 
 -- Pre-commit regressions: current-state timestamps and immutable decision history.
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated","aal":"aal2"}',true);
 set local role authenticated;
 select set_config('qa.original_approved_at',(select approved_at::text from public.operation_approval_tracking where operation_id='40000000-0000-0000-0000-000000000001'),true);
 select is(public.save_proposal_tracking('40000000-0000-0000-0000-000000000001',2,'{"delay_notes":"Follow-up only QA"}'),3,'Same-status follow-up increments version');
@@ -163,7 +163,7 @@ select throws_ok($$update public.operation_approval_tracking set approval_status
 select throws_ok($$update public.operation_approval_tracking set approval_status='approved',approved_at=now(),rejected_at=now(),cancelled_at=null where operation_id='40000000-0000-0000-0000-000000000001'$$,'23514',null,'Constraint rejects conflicting terminal timestamps');
 select throws_ok($$update public.operation_approval_tracking set approval_status='rejected',approved_at=null,rejected_at=null,cancelled_at=null where operation_id='40000000-0000-0000-0000-000000000001'$$,'23514',null,'Constraint rejects terminal state without its timestamp');
 set local session_replication_role=origin;
-select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000002","role":"authenticated","aal":"aal2"}',true);
 set local role authenticated;
 select is(private.proposal_tracking_operation_visible('40000000-0000-0000-0000-000000000001'),false,'RLS helper denies operation existence to unauthorized operator');
 select throws_ok($$select * from private.proposal_tracking_rows('{}',current_date,true)$$,'42501',null,'Private rows helper cannot bypass financial permission');
@@ -173,5 +173,17 @@ select ok(not exists(select 1 from public.role_permissions where role_key in ('o
 select is((select count(*)::int from public.role_permissions where role_key in ('admin','manager') and permission_key in ('proposal_tracking.read','proposal_tracking.manage','proposal_reports.read','proposal_reports.financial')),8,'Admin and manager get all four permissions');
 select ok((select relrowsecurity from pg_class where oid='public.operation_approval_tracking'::regclass),'RLS enabled');
 select ok(not exists(select 1 from public.operation_approval_tracking t left join public.operations o on (o.organization_id,o.id)=(t.organization_id,t.operation_id) where o.id is null),'Referential integrity preserved');
+-- The deployed staging baseline requires a completed MFA challenge.
+select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated","aal":"aal1"}',true);
+set local role authenticated;
+select throws_ok($$select public.proposal_tracking_report()$$,'42501',null,'AAL1 manager cannot read report');
+select throws_ok($$select public.proposal_tracking_options()$$,'42501',null,'AAL1 manager cannot read options');
+select throws_ok($$select public.proposal_tracking_operation_search('QA')$$,'42501',null,'AAL1 manager cannot search operations');
+select throws_ok($$select public.save_proposal_tracking('40000000-0000-0000-0000-000000000011',null,'{}')$$,'42501',null,'AAL1 manager cannot create tracking');
+select is((select count(*)::int from public.operation_approval_tracking),0,'AAL1 manager cannot read tracking table');
+select is(private.proposal_tracking_operation_visible('40000000-0000-0000-0000-000000000001'),false,'AAL1 manager cannot infer operation visibility');
+reset role;
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='operation_approval_tracking' and policyname='operation_approval_tracking_require_aal2' and permissive='RESTRICTIVE'),'Tracking table has restrictive MFA policy');
+
 select * from finish();
 rollback;

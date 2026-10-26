@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado atual aprovado: schema executado e validado no Supabase local, com migrations até `016`. O frontend usa Supabase para Auth/MFA, profiles/permissions, todos os módulos de negócio, Administração de Usuários e Administração de Catálogos. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
+> Estado do schema versionado: migrations até `023`. As Migrations 019 e 020 implementam o contrato da Central de Pendências; a 021 exige MFA `aal2` no backend; a 022 corrige o status HTTP do conflito de versão. O frontend usa Supabase para Auth/MFA, profiles/permissions e os módulos de negócio, inclusive a Central de Pendências. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -42,8 +42,23 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 14 | `202609040014_files_manage_attachment_visibility.sql` | leitura de metadados para gestão independente de acesso ao conteúdo |
 | 15 | `202609040015_file_gateway_sync.sql` | instâncias de Gateway por tenant, claim/lease, estados de sincronização, segunda localização e auditoria |
 | 16 | `202609040016_on_demand_remote_copy.sql` | jobs tenant-aware para disponibilização remota, RPCs de claim/upload/conclusão/falha e auditoria |
+| 17 | `202609150017_file_gateway_service_role_select.sql` | leitura mínima pelo `service_role` para a Edge Function do File Gateway |
+| 18 | `202609240018_admin_users_service_role_reads.sql` | leitura mínima pelo `service_role` para a Edge Function de administração de usuários |
+| 19 | `202610080019_pending_issues_foundation.sql` | role Técnico, permissões da Central, acompanhamento, timeline funcional, RLS e auditoria |
+| 20 | `202610080020_pending_issues_detection_contract.sql` | cinco detectores atuais, reconciliação idempotente, edição gerencial restrita, lista paginada e resumo autorizado da Central |
+| 21 | `202610140021_enforce_mfa_aal2.sql` | helper privado de AAL2, gate compartilhado de permissões, RLS restritiva e Storage privado protegidos após MFA |
+| 22 | `202610150022_fix_pending_issue_conflict_status.sql` | conflito de versão da Central como `PT409`/HTTP 409, sem retry de serialização |
+| 23 | `202610260023_proposal_approval_tracking.sql` | acompanhamento 1:1, relatório agregado, permissões financeiras, RLS, MFA e auditoria; ver `PROPOSAL_TRACKING_VALIDATION.md` |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
+
+### MFA no backend (Migration 021)
+
+`private.current_user_has_aal2()` lê o claim `aal` do JWT validado pelo Supabase. `private.has_permission()` exige `aal2` antes das verificações existentes de profile, role, organização e permission. `current_user_permissions()` retorna vazio em `aal1`. Policies restritivas em todas as 32 tabelas públicas exigem `aal2` para dados de negócio; a única exceção de leitura é o próprio `profile`, necessário para a interface descobrir enrollment/challenge. Escritas em `profiles` exigem `aal2`. O bucket privado `rural-documents` também tem policy restritiva; suas regras anteriores de permission e prefixo de organização continuam válidas.
+
+As RPCs acessíveis ao usuário usam o gate compartilhado de permission; `current_user_permissions()` aplica `aal2` diretamente. As RPCs de sincronização exclusivas do `service_role` continuam reservadas ao File Gateway. As Edge Functions `admin-users`, `document-files` e `generate-report` exigem `aal2` após `getUser(token)` validar o mesmo JWT; retornam HTTP 403 com código `mfa_required` e mensagem de domínio. O `file-gateway` mantém autenticação por token de instância e não recebe JWT de usuário.
+
+Para validar **somente no Supabase local**, após aplicar a migration local, execute `supabase/validation/mfa-aal2-local.sql` com `psql -v ON_ERROR_STOP=1`. O teste exige um admin local ativo, cria fixtures dentro de uma transação e termina em `ROLLBACK`. Ele cobre `aal1` negado, `aal2` permitido, permission ausente, outro tenant e profile/organização inativos. Execute `node --experimental-strip-types --test scripts/test-mfa-backend.mjs` para o helper. Com as quatro variáveis `MFA_LOCAL_URL`, `MFA_LOCAL_ANON_KEY`, `MFA_LOCAL_JWT_SECRET` e `MFA_LOCAL_ACTOR_ID` obtidas exclusivamente da stack local, o mesmo script também chama as três Edge Functions por HTTP com JWTs de teste `aal1`/`aal2`. Não grave nem publique esses valores.
 
 ## Catálogo de tabelas
 
@@ -56,6 +71,7 @@ A ordem é obrigatória: cada migration referencia somente objetos criados anter
 | Documentos | `document_types`, `rural_documents`, `document_attachments`, `attachment_locations`, `file_access_log` | documentos, anexos lógicos, localizações físicas e acessos |
 | CAR | `car_records` | histórico de CAR por fazenda/matrícula |
 | Governança | `audit_log`, `report_templates`, `report_log` | trilha imutável e geração de relatórios |
+| Central de Pendências | `pending_issue_management`, `pending_issue_events` | acompanhamento persistente e timeline funcional; detecção e indicadores são derivados pelas funções da Migration 020 |
 
 ## Relacionamentos e cardinalidades
 
@@ -110,11 +126,25 @@ erDiagram
 
 ## RLS e segurança
 
-Todas as 29 tabelas empresariais/governança têm RLS habilitado, além das policies específicas de `storage.objects`. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID ou object key conhecido nunca substitui autorização.
+Todas as 32 tabelas públicas versionadas têm RLS habilitado, além das policies específicas de `storage.objects`. `anon` não recebe acesso. Policies separam `SELECT`, `INSERT`, `UPDATE` e, apenas nas relações técnicas, `DELETE`. Toda tabela empresarial exige simultaneamente a organização do profile ativo e a permission granular correspondente. Valores de `operation_financials` e `guarantee_financials` exigem `financial.read`/`financial.write`; ocultá-los apenas no React não é aceito. UUID ou object key conhecido nunca substitui autorização.
 
-`audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de roles/permissions exigem `permissions.manage`, enquanto os catálogos empresariais exigem `catalogs.manage` para escrita. Nenhuma função expõe `service_role`.
+`audit_log` é somente leitura para `audit.read`; eventos de `operation_financials` e `guarantee_financials` exigem adicionalmente `financial.read`, e registros de `pending_issue_management` ou `pending_issue_events` exigem `pending_issues.read`. `file_access_log` só é escrito pela função controlada `log_file_access`; catálogos de roles/permissions exigem `permissions.manage`, enquanto os catálogos empresariais exigem `catalogs.manage` para escrita. Nenhuma função expõe `service_role`.
 
-Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuração inicial, sem usuários ou dados pessoais. Permissões financeiras e de exportação permanecem entradas independentes do catálogo.
+Os roles genéricos `admin`, `manager`, `operator` e `viewer` são configuração inicial, sem usuários ou dados pessoais. A Migration 019 acrescenta `technician` com somente `pending_issues.read`, `pending_issues.manage` e `pending_issues.financial_read`; `admin` também recebe essas três permissões. `pending_issues.financial_read` não concede `financial.read` nem acesso direto às tabelas financeiras. Na Migration 020, valores são expostos somente pelas RPCs da Central, após validação interna da permissão.
+
+### Central de Pendências: contratos da Migration 020
+
+`private.detect_pending_issues(organization_id)` deriva apenas condições atuais: documento ativo com tipo e fazenda ativos, conforme `rural_documents_with_validity` (`expired` ou `expiring` em até 30 dias); garantia ativa, não excluída, com término passado ou nos próximos 30 dias; operação ativa, não excluída, após a data de término. Nenhuma das três fontes logicamente excluídas é detectada. Datas e dias são derivados em tempo de consulta. Não há inferência de inadimplência.
+
+`reconcile_pending_issues()` exige `pending_issues.manage` e deriva o tenant do usuário autenticado. É o único contrato de criação de acompanhamentos: insere somente condições detectadas e ausentes; a chave única da 019 evita duplicatas concorrentes. A 020 revoga `INSERT`, `UPDATE` e `DELETE` diretos de `authenticated` sobre `pending_issue_management` e remove as policies de escrita direta; preserva `SELECT` com RLS por tenant e permissão. Quando uma condição desaparece ou reaparece, o registro e seu status são preservados. O evento `detected` surge somente na criação, pelo trigger da 019. Não há cron nesta etapa.
+
+`list_pending_issues(...)` exige `pending_issues.read` e retorna até 100 registros por página, com filtros de status, tipo, responsável, detecção atual, prazo interno vencido, operação, instituição, fazenda e busca por número/nome da fonte. Oferece quatro ordenações fixas. Cada linha inclui `currently_detected` e `needs_reopen_review` (`true` quando a condição ainda existe e o status é `resolved` ou `justified`), datas, responsável e relacionamentos em arrays JSON, preservando múltiplas matrículas, fazendas e proprietários. Para garantias, o array distingue vínculos da garantia e da operação. Documentos não recebem operação ou valor financeiro por inferência.
+
+`get_pending_issue_summary()` exige `pending_issues.read`. O contador de abertas inclui exatamente `open`, `in_analysis` e `in_progress`; exclui `resolved` e `justified`. Os demais indicadores incluem condições atuais, revisão de reabertura, operações distintas afetadas, prazos internos vencidos, ausência de responsável e maior atraso objetivo. Operações financeiras são contadas uma vez por operação atualmente afetada: usa-se `operation_financials.amount` quando presente; sem esse valor, somam-se valores das garantias distintas atualmente afetadas. Ausência de valor conhecido produz `NULL` no total quando não há outros valores conhecidos e entra em `operations_without_financial_value`. Documentos não compõem o total. Sem `pending_issues.financial_read`, lista e resumo retornam `NULL` nos campos financeiros.
+
+`list_pending_issue_assignees()` exige `pending_issues.manage` e usa o tenant da sessão. Retorna apenas `profile_id`, `full_name`, `role_key` e `role_name` de profiles ativos cujo role está ativo e possui `pending_issues.manage`. É o contrato do seletor “Responsável”; a atribuição é revalidada pelo trigger da 019 no momento da escrita. O Técnico não precisa de leitura geral de `profiles`, roles, catálogos ou Administração de Usuários.
+
+A timeline é lida diretamente de `pending_issue_events` com filtro por `pending_issue_id`, ordenação por `created_at` e `event_order`, e paginação. O `SELECT` e a policy da 019 exigem simultaneamente o tenant e `pending_issues.read`; não há escrita direta pelo navegador. Para editar, a UI chama `update_pending_issue_management(p_pending_issue_id, p_expected_version, p_assigned_to, p_status, p_resolution_due_date, p_justification)` com um snapshot completo dos quatro campos gerenciais. `NULL` em campo opcional significa limpá-lo, nunca omitir a alteração. A RPC exige `pending_issues.manage`, deriva o tenant da sessão, atualiza somente esses campos e retorna a nova `version`. Versão antiga gera conflito (`PT409`, HTTP 409), sem alteração nem retry de serialização; ID ausente ou de outro tenant gera `P0002`. Os triggers da 019 incrementam `version`, derivam autoria e `resolved_at`, validam responsável/status/justificativa e registram timeline e auditoria. `add_pending_issue_note()` continua sendo o contrato separado para observações. O fluxo da Central para Admin/Técnico é reconciliar, listar e carregar resumo usando somente as três permissões da Central. Não há classificação automática de severidade.
 
 ## Bootstrap da V1
 

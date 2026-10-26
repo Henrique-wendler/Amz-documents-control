@@ -102,7 +102,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           {!loading && !error && data && !isEmpty ? (
             <div className="dashboard-sections">
               <section className="dashboard-kpis" aria-label="Indicadores principais">
-                {data.kpis.map((item) => <KpiCard item={item} key={item.id} />)}
+                {data.kpis.map((item) => <KpiCard item={item} onNavigate={onNavigate} key={item.id} />)}
               </section>
 
               <div className="dashboard-grid dashboard-grid--primary">
@@ -110,7 +110,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <OperationsStatusChart data={data.operationsByStatus} />
                 </SectionCard>
                 <SectionCard title="Pendências e alertas" subtitle="Itens que exigem acompanhamento">
-                  <AlertsPanel items={data.alerts} onSelect={(item) => notify(`${item.title}: ${item.count} ocorrência(s).`)} />
+                  <AlertsPanel items={data.alerts} onSelect={(item) => onNavigate(item.id === "documents" ? "/documentos"
+                    : item.id === "owners" ? "/matriculas" : "/")} />
                 </SectionCard>
               </div>
 

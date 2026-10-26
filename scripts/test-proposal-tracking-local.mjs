@@ -1,5 +1,5 @@
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { cp, mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { resolve, join, relative, isAbsolute } from "node:path";
 import { spawnSync } from "node:child_process";
 
 // Disposable project with separate ports. Never reset the operator's Supabase project.
@@ -22,6 +22,15 @@ await writeFile(join(configuration, "config.toml"), config);
 const migrations = (await readdir(join(root, "supabase", "migrations")))
   .filter((name) => name.endsWith(".sql"))
   .sort();
+// Keep the disposable copy consistent after a migration rename.
+for (const name of await readdir(join(configuration, "migrations"))) {
+  if (!name.endsWith(".sql") || migrations.includes(name)) continue;
+  const stale = resolve(configuration, "migrations", name);
+  const within = relative(qa, stale);
+  if (isAbsolute(within) || within.startsWith(".."))
+    throw new Error("Refusing to remove a migration outside the isolated QA project.");
+  await unlink(stale);
+}
 for (const name of migrations)
   await cp(
     join(root, "supabase", "migrations", name),

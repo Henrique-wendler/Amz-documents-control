@@ -6,10 +6,12 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 
 - [ ] `npm run check:staging:static` aprovado.
 - [ ] `supabase/validation/staging-readiness.sql` aprovado.
-- [ ] Migrations remotas mostram exatamente `001–017` aplicadas.
+- [ ] Após o deploy aprovado da Migration 023, migrations remotas mostram exatamente `001–023` aplicadas.
 - [ ] Frontend e API usam HTTPS; navegador não apresenta mixed content.
 - [ ] CORS aceita apenas a origem HTTPS de staging.
 - [ ] Nenhum secret aparece no bundle, logs do navegador ou repositório.
+- [ ] `nosniff`, `Referrer-Policy`, proteção contra framing, `Permissions-Policy` e CSP chegam por HTTPS nas rotas da SPA; console sem violação inesperada em Auth, Storage e exportações.
+- [ ] Plano de backup de banco e objetos, responsáveis, RPO/RTO e ensaio de restauração isolado estão aprovados conforme [`backup-restore-runbook.md`](backup-restore-runbook.md).
 
 ## Auth e sessão
 
@@ -19,6 +21,8 @@ Execute este checklist somente no projeto Cloud identificado como `staging`, com
 - [ ] Convite por Admin funciona e retorna somente à origem de staging.
 - [ ] Enrollment e challenge MFA TOTP funcionam.
 - [ ] MFA incompleto não acessa rotas protegidas.
+- [ ] JWT `aal1` permite ler apenas o próprio profile para concluir MFA; owners, farms, escrita, RPCs de negócio, Pendências, Storage privado e as três Edge Functions de usuário são negados diretamente pelo backend.
+- [ ] JWT `aal2` permite as mesmas operações somente com permission, perfil e organização ativos e tenant correto.
 - [ ] Recovery chega ao e-mail fictício, abre `/redefinir-senha` uma vez e permite a nova senha.
 - [ ] Logout encerra sessão e reload restaura somente sessão válida.
 - [ ] Profile ausente/inativo continua bloqueado.

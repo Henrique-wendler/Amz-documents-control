@@ -64,6 +64,9 @@ create policy approval_tracking_select on public.operation_approval_tracking for
 using(private.same_organization(organization_id) and
  (private.has_permission('proposal_tracking.read') or private.has_permission('proposal_tracking.manage') or private.has_permission('proposal_reports.read'))
  and private.proposal_tracking_operation_visible(operation_id));
+create policy operation_approval_tracking_require_aal2 on public.operation_approval_tracking
+as restrictive for all to authenticated
+using (private.current_user_has_aal2()) with check (private.current_user_has_aal2());
 -- Writes are RPC-only, so metadata and optimistic locking cannot be bypassed through REST.
 
 create function private.proposal_tracking_require(p_permission text) returns uuid

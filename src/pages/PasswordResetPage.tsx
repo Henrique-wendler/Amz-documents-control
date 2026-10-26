@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Field, Input, MessageBar, MessageBarBody, Spinner } from "@fluentui/react-components";
 import { Key20Regular, LockClosed20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../contexts/AuthContext";
+import { BrandLogo } from "../components/BrandLogo";
 
 const validatePassword = (password: string) => {
   if (password.length < 10) return "Use pelo menos 10 caracteres.";
@@ -79,6 +80,7 @@ export function PasswordResetPage() {
     <main className="login-page">
       <section className="login-panel" aria-labelledby="reset-title">
         <div className="login-panel__brand">
+          <BrandLogo />
           <span>Acesso seguro</span>
           <strong>Redefinição de senha</strong>
         </div>

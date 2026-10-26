@@ -1,5 +1,7 @@
 import type { ReportMetric } from "../../types/report";
+import { MetricCard } from "../MetricCard";
 
 export function ReportSummary({ metrics }: { metrics: ReportMetric[] }) {
-  return <div className="report-summary" aria-label="Resumo do relatório">{metrics.map((metric) => <article key={metric.label}><small>{metric.label}</small><strong>{metric.value}</strong></article>)}</div>;
+  return <div className="report-summary" aria-label="Resumo do relatório">{metrics.map((metric) =>
+    <MetricCard key={metric.label} label={metric.label} value={metric.value} />)}</div>;
 }
