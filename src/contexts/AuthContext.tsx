@@ -218,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    const verifiedFactor = factors.totp[0];
+    const verifiedFactor = factors.totp.find((factor) => factor.status === "verified");
     if (!verifiedFactor && requiresMfaEnrollment(loadedProfile)) {
       setMfaEnrollment(undefined);
       setMfaFactorId(undefined);
