@@ -13,7 +13,7 @@ Data: 26/10/2026.
 
 ## Schema e migration
 
-Nova migration pendente: `supabase/migrations/202610260023_proposal_approval_tracking.sql`.
+Migration aplicada somente em homologação: `supabase/migrations/202610260023_proposal_approval_tracking.sql`.
 A sequência 001–022 da homologação foi incorporada sem editar seus arquivos. O número 019 pertence à Central de Pendências; o acompanhamento foi renumerado para 023 antes de sua primeira aplicação remota.
 
 Nova tabela `public.operation_approval_tracking`:
@@ -153,7 +153,7 @@ Carregamento, vazio, erro, retry, acesso negado e conflitos de edição estão t
 Consultas obsoletas são descartadas; a busca de operações usa debounce e limite no servidor.
 Tabelas possuem rolagem horizontal e os agrupamentos passam para uma coluna abaixo de 1.200px, preservando as demais telas.
 
-## Validação executada
+## Validação inicial — checkpoint histórico de 26/10/2026
 
 Ambiente: Windows; Node 24.19.0; Supabase CLI 2.116.0; PostgreSQL local 17.6.
 Projeto local isolado: `proposal-tracking-qa`, API 55421, PostgreSQL 55422.
@@ -237,17 +237,17 @@ Evidências locais, ignoradas pelo Git:
 
 As evidências HTTP não contêm tokens, segredos ou chaves de acesso. Os logs locais de inicialização do Supabase continuam ignorados e não devem ser publicados.
 
-A sequência 001–019 foi reaplicada desde zero; SQL 103 PASS, frontend 35 PASS, build PASS, staging estático PASS e git diff --check PASS. Nenhuma migration foi executada em produção. Exportação gerencial XLSX/PDF, integração desktop e QA manual em staging continuam pendentes.
+No checkpoint anterior à reconciliação, a sequência 001–019 foi reaplicada desde zero; SQL 103 PASS, frontend 35 PASS, build PASS, staging estático PASS e git diff --check PASS. Nenhuma migration foi executada em produção. Exportação gerencial XLSX/PDF, integração desktop e QA manual em staging continuam pendentes.
 
 ## Limitações, riscos e próximos passos
 
 1. Exportação gerencial XLSX/PDF fica para a próxima subetapa. O generate-report atual tem sete tipos fixos, modelos de filtros e regras financeiras próprias. A extensão deve reutilizar generate-report/report_log e as permissões novas, com testes próprios, sem um gerador paralelo no navegador.
 2. Integração desktop → web não implementada. Futuro endpoint/Edge Function autenticado deverá usar identificador externo, deduplicação e reserva do número oficial no servidor para múltiplos desktops. Numeração local AAAA-NNNN pode colidir entre máquinas; não foi alterada aqui.
-3. Migration e deploy remotos pendentes de revisão. Este relatório confirma testes locais; não confirma publicação em produção nem QA manual autenticado em staging.
+3. Migration 023 e preview publicados somente em homologação. QA autenticado e perfis concluídos; ver PROPOSAL_TRACKING_HOMOLOGATION.md. Produção permanece fora desta validação.
 4. Build informa chunk acima de 500kB. Otimização de bundle pode ser avaliada separadamente.
 5. npm audit apontou dois alertas high em dependências de desenvolvimento: Vite 7.3.6 e source-map-js 1.2.1. Essas versões constam do package-lock no HEAD base e não foram atualizadas neste módulo; remediação precisa de etapa de manutenção própria.
 6. Os testes podem emitir avisos de sourcemaps ausentes em pacotes Fluent UI/Griffel/Tabster. As bibliotecas reais foram carregadas e os testes passaram.
-7. Nenhum defeito funcional identificado nos testes executados. QA manual da nova página em staging permanece pendente, após revisão e aplicação controlada da migration.
+7. QA autenticado do manager, report-no-financial, no-report e operator concluído. A divergência dos KPIs foi explicada pelos fixtures/data e corrigida somente nos dados QA. Observações e evidências constam em PROPOSAL_TRACKING_HOMOLOGATION.md.
 
 ## Arquivos alterados
 
@@ -310,4 +310,8 @@ Esta seção atualiza o checkpoint anterior; os resultados 001–019/103 SQL aci
 
 Total automatizado: 172 testes, além das 26 verificações HTTP. Evidências sanitizadas em .tmp/homologation-20261026; logs locais e credenciais não entram no Git.
 
-Aplicação da 023, preview reconciliado, usuários sintéticos e QA remoto são registrados em documento próprio após a publicação. Este registro de revisão local não constitui aceite de QA manual nem GO para merge.
+A aplicação da 023, o preview, os usuários sintéticos e o QA remoto concluído estão registrados em PROPOSAL_TRACKING_HOMOLOGATION.md. A revisão e o fechamento não executaram merge em main.
+
+## Fechamento de homologação — 27/10/2026
+
+O código funcional de referência é 62b24ce16e0457856dc1a3bf595d3450cf1cfe78. A migration 023 já foi aplicada exclusivamente em iglciwizbxtkfwlboihe; não foi reaplicada neste fechamento. O aumento para 26 atrasadas foi explicado por vencimento de fixtures de paginação e mudança da data operacional, sem duplicatas ou defeito na fórmula. O cenário foi reduzido a nove operações determinísticas, com três execuções idempotentes, e validado por RPC, UI manager AAL2, auditoria por alteração, aprovação e restauração. Resultados detalhados e o estado de cada perfil constam em [PROPOSAL_TRACKING_HOMOLOGATION.md](PROPOSAL_TRACKING_HOMOLOGATION.md). Essa seção atualiza os checkpoints históricos acima; não autoriza merge ou produção.
