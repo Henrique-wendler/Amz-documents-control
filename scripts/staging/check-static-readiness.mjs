@@ -11,11 +11,11 @@ const migrationFiles = (await readdir(migrationDirectory))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 const migrationNumbers = migrationFiles.map((name) => Number(name.match(/^(\d{12})_/)?.[1].slice(-3)));
-const expectedNumbers = Array.from({ length: 18 }, (_, index) => index + 1);
-if (migrationFiles.length === 18 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
-  pass("migrations 001-018 are present in order");
+const expectedNumbers = Array.from({ length: 23 }, (_, index) => index + 1);
+if (migrationFiles.length === 23 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
+  pass("migrations 001-023 are present in order");
 } else {
-  fail(`expected migrations 001-018; found ${migrationFiles.join(", ")}`);
+  fail(`expected migrations 001-023; found ${migrationFiles.join(", ")}`);
 }
 
 const expectedFunctions = ["admin-users", "document-files", "file-gateway", "generate-report"];
@@ -38,6 +38,31 @@ for (const functionName of expectedFunctions) {
     fail(`Edge Function ${functionName} entrypoint is missing`);
   }
 }
+const reportAssets = ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LICENSE_LIBERATION", "amazon-agro-logo.jpg"];
+for (const asset of reportAssets) {
+  try {
+    if (!(await readFile(resolve(root, "supabase", "functions", "generate-report", "assets", asset))).length) {
+      fail(`report asset ${asset} is empty`);
+    }
+  } catch {
+    fail(`report asset ${asset} is missing`);
+  }
+}
+if (!supabaseConfig.includes('static_files = ["./functions/generate-report/assets/*"]')) {
+  fail("generate-report assets are not bundled as static files");
+}
+try {
+  const [publicLogo, reportLogo] = await Promise.all([
+    readFile(resolve(root, "public", "amazon-agro-logo.jpg")),
+    readFile(resolve(root, "supabase", "functions", "generate-report", "assets", "amazon-agro-logo.jpg")),
+  ]);
+  if (!publicLogo.equals(reportLogo)) fail("frontend and PDF logos differ");
+} catch {
+  fail("Amazon Agro logo is missing from frontend or PDF assets");
+}
+if (!failures.some((message) => message.startsWith("report asset") || message.includes("generate-report assets"))) {
+  pass("Unicode PDF fonts and the Amazon Agro logo are present and configured for bundling");
+}
 
 const publicEnvironment = await readFile(resolve(root, ".env.example"), "utf8");
 const functionEnvironment = await readFile(resolve(root, "supabase", "functions", ".env.example"), "utf8");
@@ -53,11 +78,16 @@ if (/^(?:SUPABASE_SERVICE_ROLE_KEY|GATEWAY_TOKEN)=\S+/mi.test(`${functionEnviron
   pass("backend and Gateway environment examples contain no secret values");
 }
 
+const sharedFunctionDirectory = resolve(root, "supabase", "functions", "_shared");
+const sharedFunctionFiles = (await readdir(sharedFunctionDirectory, { recursive: true }))
+  .filter((name) => /\.(?:ts|tsx|js|mjs)$/.test(name))
+  .map((name) => resolve(sharedFunctionDirectory, name));
 const runtimeFiles = [
   ...(await readdir(resolve(root, "src"), { recursive: true }))
     .filter((name) => /\.(?:ts|tsx)$/.test(name))
     .map((name) => resolve(root, "src", name)),
   ...expectedFunctions.map((name) => resolve(root, "supabase", "functions", name, "index.ts")),
+  ...sharedFunctionFiles,
   ...(await readdir(resolve(root, "gateway", "src")))
     .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
     .map((name) => resolve(root, "gateway", "src", name)),
@@ -84,7 +114,12 @@ if (/insert into storage\.buckets[\s\S]*?'rural-documents'[\s\S]*?false/i.test(a
 } else {
   fail("private rural-documents bucket provisioning was not found");
 }
-for (const permission of ["users.manage", "catalogs.manage", "files.read", "files.manage", "reports.read", "reports.generate", "reports.export", "financial.read"]) {
+for (const permission of [
+  "proposal_tracking.read", "proposal_tracking.manage", "proposal_reports.read", "proposal_reports.financial",
+  "users.manage", "catalogs.manage", "files.read", "files.manage",
+  "reports.read", "reports.generate", "reports.export", "financial.read",
+  "pending_issues.read", "pending_issues.manage", "pending_issues.financial_read",
+]) {
   if (!allMigrations.includes(`'${permission}'`)) fail(`required permission ${permission} was not found in migrations`);
 }
 if (!failures.some((message) => message.startsWith("required permission"))) pass("critical staging permissions are provisioned by migrations");

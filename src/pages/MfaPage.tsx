@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Field, Input, MessageBar, MessageBarBody, Spinner } from "@fluentui/react-components";
 import { Checkmark20Regular, Copy20Regular, Key20Regular, LockClosed20Regular, ShieldKeyhole20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../contexts/AuthContext";
+import { BrandLogo } from "../components/BrandLogo";
 
 const normalizeCode = (value: string) => value.replace(/\D/g, "").slice(0, 6);
 
@@ -52,6 +53,7 @@ export function MfaPage() {
     <main className="login-page">
       <section className="login-panel" aria-labelledby="mfa-title">
         <div className="login-panel__brand">
+          <BrandLogo />
           <span>Proteção adicional</span>
           <strong>Autenticação em duas etapas</strong>
         </div>

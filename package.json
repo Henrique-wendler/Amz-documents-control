@@ -6,8 +6,16 @@
   "scripts": {
     "dev": "vite --configLoader runner",
     "build": "tsc -b && vite build --configLoader runner",
+    "check:encoding": "node scripts/check-encoding.mjs",
+    "test:pending-issues": "node --experimental-strip-types --test scripts/test-pending-issues.mjs",
+    "test:pending-conflict:local": "node --test scripts/test-pending-issue-conflict-local.mjs",
+    "test:mfa-backend": "node --experimental-strip-types --test scripts/test-mfa-backend.mjs",
+    "test:report-pdf": "node --test scripts/test-report-pdf.mjs",
+    "test:security-headers": "node --test scripts/test-frontend-security-headers.mjs",
     "preview": "vite preview --configLoader runner",
-    "check:staging:static": "node scripts/staging/check-static-readiness.mjs"
+    "check:staging:static": "node scripts/staging/check-static-readiness.mjs",
+    "test": "vitest run",
+    "test:proposal-tracking:db": "node scripts/test-proposal-tracking-local.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.72.5",
@@ -17,11 +25,15 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.2",
+    "jsdom": "^30.1.3",
     "supabase": "^2.116.0",
     "typescript": "~5.9.2",
-    "vite": "^7.1.3"
+    "vite": "^7.1.3",
+    "vitest": "^5.0.5"
   }
 }

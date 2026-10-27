@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Toast, ToastTitle, Toaster, useToastController } from "@fluentui/react-components";
+import { Badge, Button, Toast, ToastTitle, Toaster, useToastController } from "@fluentui/react-components";
 import { Header } from "../components/Header";
 import { DashboardMessageState } from "../components/dashboard/DashboardState";
 import { ReportFiltersPanel } from "../components/reports/ReportFiltersPanel";
 import { ReportGrid } from "../components/reports/ReportGrid";
 import { ReportSummary } from "../components/reports/ReportSummary";
+import { ReportAnalysis } from "../components/reports/ReportAnalysis";
 import { ReportTypeCards } from "../components/reports/ReportTypeCards";
 import { SectionCard } from "../components/SectionCard";
 import { Sidebar } from "../components/Sidebar";
@@ -23,6 +24,8 @@ export function RelatoriosPage({ onNavigate }: Props) {
   const canIncludeFinancial = hasPermission("financial.read") && hasPermission("reports.financial");
   const [type, setType] = useState<ReportType>("farms");
   const [filters, setFilters] = useState<ReportFilters>(initialReportFilters);
+  const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(initialReportFilters);
+  const [selectedAnalysis, setSelectedAnalysis] = useState<{ chart: string; key: string }>();
   const [report, setReport] = useState<ReportViewModel>();
   const [options, setOptions] = useState<ReportFilterOptions>(() => reportService.getInitialFilterOptions("farms"));
   const [generating, setGenerating] = useState(true);
@@ -34,6 +37,8 @@ export function RelatoriosPage({ onNavigate }: Props) {
   const generate = useCallback(async (nextType: ReportType, nextFilters: ReportFilters) => {
     const currentRequest = ++requestId.current;
     setGenerating(true);
+    setReport(undefined);
+    setSelectedAnalysis(undefined);
     setError(undefined);
     try {
       if (!canRead) throw new Error("Você não possui permissão para consultar relatórios.");
@@ -42,20 +47,31 @@ export function RelatoriosPage({ onNavigate }: Props) {
       if (currentRequest !== requestId.current) return;
       setReport(loaded.report);
       setOptions(loaded.options);
+      setAppliedFilters({ ...nextFilters });
+      setSelectedAnalysis(undefined);
     } catch (caught) {
       if (currentRequest !== requestId.current) return;
       setReport(undefined);
-      setError(caught instanceof Error && caught.message.includes("permissão") ? caught.message : "Tente novamente para atualizar a pré-visualização.");
+      setError(caught instanceof Error && (/permissão|pré-visualização/i).test(caught.message)
+        ? caught.message : "Tente novamente para atualizar a pré-visualização.");
     } finally {
       if (currentRequest === requestId.current) setGenerating(false);
     }
   }, [canIncludeFinancial, canRead]);
   useEffect(() => { void generate("farms", initialReportFilters); }, [generate]);
-  const selectType = (nextType: ReportType) => { const nextFilters = { ...initialReportFilters }; setType(nextType); setFilters(nextFilters); setOptions(reportService.getInitialFilterOptions(nextType)); void generate(nextType, nextFilters); };
+  const selectType = (nextType: ReportType) => {
+    const nextFilters = { ...initialReportFilters };
+    setType(nextType);
+    setFilters(nextFilters);
+    setReport(undefined);
+    setSelectedAnalysis(undefined);
+    setOptions(reportService.getInitialFilterOptions(nextType));
+    void generate(nextType, nextFilters);
+  };
   const exportReport = async (format: ReportExportFormat) => {
     setExporting(true);
     try {
-      const result = await reportExportService.download(type, filters, canIncludeFinancial, format);
+      const result = await reportExportService.download(type, appliedFilters, canIncludeFinancial, format);
       const reference = result.reportId ? ` · ID ${result.reportId.slice(0, 8)}` : "";
       const formatLabel = format === "pdf" ? "PDF" : "Excel";
       dispatchToast(<Toast><ToastTitle>{formatLabel} gerado com segurança{reference}.</ToastTitle></Toast>, { intent: "success", timeout: 4500 });
@@ -66,12 +82,22 @@ export function RelatoriosPage({ onNavigate }: Props) {
       setExporting(false);
     }
   };
+  const activeChart = report?.analysisCharts.find((chart) => chart.title === selectedAnalysis?.chart);
+  const activeItem = activeChart?.items.find((item) => item.key === selectedAnalysis?.key);
+  const visibleRows = activeItem && report ? report.rows.filter((item) => activeItem.rowIds.includes(item.id)) : report?.rows ?? [];
+  const unappliedFilters = JSON.stringify(filters) !== JSON.stringify(appliedFilters);
   return <div className="app-shell"><Sidebar activePath="/relatorios" onNavigate={onNavigate} /><div className="app-workspace"><Header title="Relatórios" subtitle="Consultas consolidadas e exportação de informações" refreshing={generating} onRefresh={() => void generate(type, filters)} /><main className="main-content reports-content">
     <ReportTypeCards items={reportDefinitions} selected={type} onSelect={selectType} />
     <SectionCard className="report-filter-card" title="Filtros do relatório" subtitle={`Configure a consulta de ${reportDefinitions.find((item) => item.id === type)?.title.toLocaleLowerCase("pt-BR")}`}><ReportFiltersPanel type={type} value={filters} options={options} generating={generating} exporting={exporting} canGenerate={canGenerate} canExport={canExport} onChange={setFilters} onGenerate={() => void generate(type, filters)} onExport={(format) => void exportReport(format)} /></SectionCard>
-    {error ? <DashboardMessageState kind="error" title="Não foi possível gerar o relatório" description={error} onRetry={() => void generate(type, filters)} /> : <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{report?.rows.length ?? 0} registros</Badge>}>
+    {unappliedFilters ? <p className="report-filter-notice" role="status">Há filtros não aplicados. Gere o relatório para atualizar a análise; a exportação usa os últimos filtros aplicados.</p> : null}
+    {error ? <DashboardMessageState kind="error" title="Não foi possível gerar o relatório" description={error} onRetry={() => void generate(type, filters)} /> : <SectionCard className="report-preview-card" title={`Pré-visualização · ${report?.title ?? "Relatório"}`} subtitle={report ? `Gerado em ${report.generatedAt}` : "Preparando relatório"} action={<Badge appearance="tint" color="subtle">{visibleRows.length} registros</Badge>}>
+      {generating ? <div className="report-charts-loading" role="status">Carregando indicadores e gráficos do relatório…</div> : null}
       {report ? <ReportSummary metrics={report.metrics} /> : null}
-      <ReportGrid columns={report?.columns ?? []} rows={report?.rows ?? []} loading={generating} />
+      {report?.analysisCharts.length ? <ReportAnalysis charts={report.analysisCharts} selected={selectedAnalysis}
+        onSelect={(chart, key) => setSelectedAnalysis((current) => current?.chart === chart && current.key === key ? undefined : { chart, key })} /> : null}
+      {activeItem ? <div className="report-drilldown" role="status"><span>Tabela: {activeChart?.title} · {activeItem.label} ({visibleRows.length} registros)</span>
+        <Button size="small" appearance="subtle" onClick={() => setSelectedAnalysis(undefined)}>Mostrar todos</Button></div> : null}
+      <ReportGrid columns={report?.columns ?? []} rows={visibleRows} loading={generating} />
     </SectionCard>}
   </main></div><Toaster toasterId={toasterId} position="top-end" /></div>;
 }

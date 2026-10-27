@@ -390,6 +390,7 @@ entrypoint = "./functions/admin-users/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/generate-report/index.ts"
+static_files = ["./functions/generate-report/assets/*"]
 
 [functions.document-files]
 enabled = true

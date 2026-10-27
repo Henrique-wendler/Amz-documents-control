@@ -25,12 +25,15 @@ import { FazendasPage } from "./pages/FazendasPage";
 import { MatriculasPage } from "./pages/MatriculasPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
 import { CarPage } from "./pages/CarPage";
+import { ProposalTrackingPage } from "./pages/ProposalTrackingPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaPage } from "./pages/MfaPage";
 import { PasswordResetPage } from "./pages/PasswordResetPage";
 import { UsersPage } from "./pages/UsersPage";
 import { CatalogsPage } from "./pages/CatalogsPage";
+import { PendingIssuesPage } from "./pages/PendingIssuesPage";
+import { authenticatedLandingPath } from "./services/pendingIssuePresentation";
 import { useAuth } from "./contexts/AuthContext";
 import { usePermissions } from "./hooks/usePermissions";
 
@@ -47,7 +50,7 @@ const emptyItem = emptyGuaranteeItemForm();
 
 export default function App() {
   const { session, profile, stage: authStage, loading: authLoading } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, permissions } = usePermissions();
   const financialAccess = useMemo(() => ({
     readFinancial: hasPermission("financial.read"),
     writeFinancial: hasPermission("financial.write"),
@@ -98,9 +101,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (profile) void loadData();
+    if (profile && currentPath === "/") void loadData(false, new URLSearchParams(window.location.search).get("id") ?? undefined);
     else setData(undefined);
-  }, [profile?.id, financialAccess.readFinancial, financialAccess.writeFinancial]);
+  }, [profile?.id, currentPath, financialAccess.readFinancial, financialAccess.writeFinancial]);
 
   useEffect(() => {
     const handlePopState = () => setCurrentPath(window.location.pathname.replace(/\/+$/, "") || "/");
@@ -111,7 +114,7 @@ export default function App() {
   useEffect(() => {
     if (authLoading) return;
     const nextPath = authStage === "authenticated"
-      ? ["/login", "/mfa", "/redefinir-senha"].includes(currentPath) ? "/dashboard" : currentPath
+      ? ["/login", "/mfa", "/redefinir-senha"].includes(currentPath) ? authenticatedLandingPath(permissions) : currentPath
       : authStage === "mfa_enrollment" || authStage === "mfa_challenge"
         ? "/mfa"
         : authStage === "password_recovery"
@@ -122,14 +125,14 @@ export default function App() {
       window.history.replaceState({}, "", nextPath);
       setCurrentPath(nextPath);
     }
-  }, [authLoading, authStage, currentPath]);
+  }, [authLoading, authStage, currentPath, permissions]);
 
   const navigate = (path: string) => {
     const targetPath = new URL(path, window.location.origin).pathname.replace(/\/+$/, "") || "/";
     if (path === `${currentPath}${window.location.search}`) return;
     window.history.pushState({}, "", path);
     setCurrentPath(targetPath);
-    if (targetPath === "/") void loadData(false, new URL(path, window.location.origin).searchParams.get("id") ?? undefined);
+    if (targetPath === "/" && currentPath === "/") void loadData(false, new URL(path, window.location.origin).searchParams.get("id") ?? undefined);
   };
 
   const activeGuarantees = useMemo(
@@ -183,6 +186,14 @@ export default function App() {
 
   if (currentPath === "/car") {
     return <CarPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/acompanhamento-propostas") {
+    return <ProposalTrackingPage onNavigate={navigate} />;
+  }
+
+  if (currentPath === "/pendencias") {
+    return <PendingIssuesPage onNavigate={navigate} />;
   }
 
   if (currentPath === "/relatorios") {

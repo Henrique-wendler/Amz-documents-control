@@ -10,17 +10,17 @@ declare
     '202608270005', '202608270006', '202608280007', '202608280008',
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
-    '202609150017','202609240018'
+    '202609150017', '202609240018', '202610080019', '202610080020',
+    '202610140021', '202610150022', '202610260023'
   ];
   applied_versions text[];
 begin
   select array_agg(version order by version)
     into applied_versions
-  from supabase_migrations.schema_migrations
-  where version = any(expected_versions);
+  from supabase_migrations.schema_migrations;
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history is incomplete or out of order. Expected 001-018.';
+    raise exception 'Migration history differs from the expected 001-023 set.';
   end if;
 end;
 $$;
@@ -35,7 +35,7 @@ declare
     'guarantee_financials', 'guarantee_items', 'document_types', 'rural_documents',
     'document_attachments', 'file_access_log', 'car_records', 'audit_log',
     'report_templates', 'report_log', 'attachment_locations', 'file_gateway_instances',
-    'remote_copy_jobs'
+    'remote_copy_jobs', 'pending_issue_management', 'pending_issue_events', 'operation_approval_tracking'
   ];
   missing text[];
   without_rls text[];
@@ -65,31 +65,139 @@ do $$
 declare
   broad_policies text[];
   missing_permissions text[];
+  technician_permissions text[];
+  missing_central_policies text[];
 begin
   select array_agg(format('%I.%I', schemaname, tablename) order by schemaname, tablename)
     into broad_policies
   from pg_policies
   where 'authenticated' = any(roles)
-    and cmd = 'ALL';
+    and cmd = 'ALL'
+    and permissive = 'PERMISSIVE';
 
   if broad_policies is not null then
     raise exception 'Broad authenticated ALL policies found: %', array_to_string(broad_policies, ', ');
   end if;
 
-  select array_agg(permission_key order by permission_key)
+  select array_agg(required.permission_key order by required.permission_key)
     into missing_permissions
   from unnest(array[
     'users.manage', 'catalogs.manage', 'files.read', 'files.manage',
     'reports.read', 'reports.generate', 'reports.export', 'reports.financial',
-    'financial.read', 'financial.write', 'audit.read'
-  ]) permission_key
+    'financial.read', 'financial.write', 'audit.read',
+    'pending_issues.read', 'pending_issues.manage', 'pending_issues.financial_read',
+    'proposal_tracking.read', 'proposal_tracking.manage', 'proposal_reports.read', 'proposal_reports.financial'
+  ]) required(permission_key)
   where not exists (
     select 1 from public.permissions permission
-    where permission.permission_key = permission_key
+    where permission.permission_key = required.permission_key
   );
 
   if missing_permissions is not null then
     raise exception 'Required permissions are missing: %', array_to_string(missing_permissions, ', ');
+  end if;
+
+  select array_agg(permission_key order by permission_key)
+    into technician_permissions
+  from public.role_permissions
+  where role_key = 'technician';
+
+  if technician_permissions is distinct from array[
+    'pending_issues.financial_read', 'pending_issues.manage', 'pending_issues.read'
+  ] then
+    raise exception 'Technician must have exactly the three Central permissions.';
+  end if;
+
+  if (select count(*) from public.role_permissions
+      where role_key = 'admin' and permission_key like 'pending_issues.%') <> 3
+    or exists (select 1 from public.role_permissions
+      where role_key in ('manager', 'operator', 'viewer')
+        and permission_key like 'pending_issues.%') then
+    raise exception 'Central permissions are assigned to an unexpected role.';
+  end if;
+
+  select array_agg(policy_name order by policy_name)
+    into missing_central_policies
+  from unnest(array[
+    'pending_issue_management_select', 'pending_issue_events_select'
+  ]) policy_name
+  where not exists (
+    select 1 from pg_policies policy
+    where policy.schemaname = 'public'
+      and policy.tablename = case
+        when policy_name = 'pending_issue_events_select' then 'pending_issue_events'
+        else 'pending_issue_management'
+      end
+      and policy.policyname = policy_name
+  );
+
+  if missing_central_policies is not null then
+    raise exception 'Central RLS policies are missing: %', array_to_string(missing_central_policies, ', ');
+  end if;
+
+  if has_table_privilege('authenticated', 'public.pending_issue_events', 'INSERT')
+    or has_table_privilege('authenticated', 'public.pending_issue_events', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.pending_issue_events', 'DELETE') then
+    raise exception 'Browser role can mutate the Central event history directly.';
+  end if;
+end;
+$$;
+
+do $$
+declare
+  missing_aal2_policies text[];
+begin
+  select array_agg(table_ref.tablename order by table_ref.tablename)
+    into missing_aal2_policies
+  from pg_tables table_ref
+  where schemaname = 'public'
+    and not exists (
+      select 1 from pg_policies policy
+      where policy.schemaname = 'public'
+        and policy.tablename = table_ref.tablename
+        and policy.policyname = case
+          when table_ref.tablename = 'profiles' then 'profiles_require_aal2_select'
+          else table_ref.tablename || '_require_aal2'
+        end
+        and policy.permissive = 'RESTRICTIVE'
+        and 'authenticated' = any(policy.roles)
+        and policy.qual like '%current_user_has_aal2%'
+        and (table_ref.tablename = 'profiles'
+          or policy.with_check like '%current_user_has_aal2%')
+    );
+
+  if missing_aal2_policies is not null then
+    raise exception 'Missing restrictive aal2 policies: %', array_to_string(missing_aal2_policies, ', ');
+  end if;
+
+  if to_regprocedure('private.current_user_has_aal2()') is null
+    or has_function_privilege('anon', 'private.current_user_has_aal2()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'private.current_user_has_aal2()', 'EXECUTE')
+    or not exists (
+      select 1 from pg_policies policy
+      where policy.schemaname = 'storage'
+        and policy.tablename = 'objects'
+        and policy.policyname = 'rural_documents_require_aal2'
+        and policy.permissive = 'RESTRICTIVE'
+        and 'authenticated' = any(policy.roles)
+        and policy.qual like '%current_user_has_aal2%'
+        and policy.with_check like '%current_user_has_aal2%'
+    ) or exists (
+      select 1 from unnest(array[
+        'profiles_require_aal2_insert', 'profiles_require_aal2_update',
+        'profiles_require_aal2_delete'
+      ]) policy_name
+      where not exists (
+        select 1 from pg_policies policy
+        where policy.schemaname = 'public'
+          and policy.tablename = 'profiles'
+          and policy.policyname = policy_name
+          and policy.permissive = 'RESTRICTIVE'
+          and 'authenticated' = any(policy.roles)
+          and coalesce(policy.qual, policy.with_check) like '%current_user_has_aal2%'
+      )
+    ) then
+    raise exception 'Backend aal2 helper, grants or Storage policy is missing.';
   end if;
 end;
 $$;
@@ -131,13 +239,23 @@ do $$
 declare
   required_functions text[] := array[
     'public.current_user_permissions()',
+    'public.proposal_tracking_report(jsonb,integer,integer)',
+    'public.proposal_tracking_options()',
+    'public.proposal_tracking_operation_search(text)',
+    'public.save_proposal_tracking(uuid,integer,jsonb)',
     'public.create_ownership_link(uuid,uuid,text,numeric,text,date,date)',
     'public.update_ownership_link(uuid,integer,uuid,text,numeric,text,date,date)',
     'public.save_operation_transactional(uuid,integer,text,uuid,text,text,date,date,text,uuid[],uuid,numeric,integer)',
     'public.save_guarantee_transactional(uuid,integer,uuid,text,text,smallint,text,date,date,text,uuid[],uuid,uuid[],numeric,integer)',
     'public.begin_document_upload(uuid,text,text,bigint)',
     'public.finalize_document_upload(uuid,uuid,text,bigint,text)',
-    'public.request_attachment_remote_copy(uuid,uuid)'
+    'public.request_attachment_remote_copy(uuid,uuid)',
+    'public.add_pending_issue_note(uuid,text)',
+    'public.reconcile_pending_issues()',
+    'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)',
+    'public.list_pending_issues(text,text,uuid,boolean,boolean,uuid,uuid,uuid,text,text,integer,integer)',
+    'public.get_pending_issue_summary()',
+    'public.list_pending_issue_assignees()'
   ];
   missing text[];
   gateway_function text;
@@ -149,6 +267,52 @@ begin
 
   if missing is not null then
     raise exception 'Required functions/RPCs are missing: %', array_to_string(missing, ', ');
+  end if;
+
+  if position('PT409' in pg_get_functiondef(
+      'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)'::regprocedure
+    )) = 0 then
+    raise exception 'Central version conflict must use SQLSTATE PT409.';
+  end if;
+
+  if has_function_privilege('anon', 'public.add_pending_issue_note(uuid,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.add_pending_issue_note(uuid,text)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.prepare_pending_issue_management()', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.write_pending_issue_history()', 'EXECUTE') then
+    raise exception 'Central function grants are not restricted as expected.';
+  end if;
+
+  if has_function_privilege('anon', 'public.reconcile_pending_issues()', 'EXECUTE')
+    or has_function_privilege('anon', 'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.list_pending_issues(text,text,uuid,boolean,boolean,uuid,uuid,uuid,text,text,integer,integer)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.get_pending_issue_summary()', 'EXECUTE')
+    or has_function_privilege('anon', 'public.list_pending_issue_assignees()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.reconcile_pending_issues()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.update_pending_issue_management(uuid,integer,uuid,text,date,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.list_pending_issues(text,text,uuid,boolean,boolean,uuid,uuid,uuid,text,text,integer,integer)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.get_pending_issue_summary()', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.list_pending_issue_assignees()', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.detect_pending_issues(uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.reconcile_pending_issues_for_organization(uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'private.pending_issue_snapshot(uuid)', 'EXECUTE') then
+    raise exception 'Central detection/read functions have unexpected grants.';
+  end if;
+
+  if not has_table_privilege('authenticated', 'public.pending_issue_management', 'SELECT')
+    or has_table_privilege('authenticated', 'public.pending_issue_management', 'INSERT')
+    or has_table_privilege('authenticated', 'public.pending_issue_management', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.pending_issue_management', 'DELETE')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'SELECT')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'INSERT')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'UPDATE')
+    or has_table_privilege('anon', 'public.pending_issue_management', 'DELETE')
+    or exists (
+      select 1 from pg_policies policy
+      where policy.schemaname = 'public'
+        and policy.tablename = 'pending_issue_management'
+        and policy.policyname in ('pending_issue_management_insert', 'pending_issue_management_update')
+    ) then
+    raise exception 'Central management table grants/policies allow unexpected direct writes.';
   end if;
 
   foreach gateway_function in array array[
@@ -199,8 +363,8 @@ end;
 $$;
 
 select
-  18 as migrations_validated,
-  30 as public_tables_validated,
+  23 as migrations_validated,
+  33 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;
 

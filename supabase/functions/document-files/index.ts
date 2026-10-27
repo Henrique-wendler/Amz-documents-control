@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
+import { verifiedJwtHasAal2 } from "../_shared/verifiedJwtAal.ts";
 
 type JsonRecord = Record<string, unknown>;
 type FileAction = "prepare-upload" | "finalize-upload" | "abort-upload" | "download" | "remove-location" | "request-remote-copy";
@@ -180,6 +181,7 @@ const requireContext = async (request: Request): Promise<FileContext> => {
   });
   const { data: userData, error: userError } = await client.auth.getUser(token);
   if (userError || !userData.user) throw new HttpError(401, "Sessão inválida ou expirada.", "invalid_session");
+  if (!verifiedJwtHasAal2(token)) throw new HttpError(403, "Confirme sua autenticação em duas etapas para continuar.", "mfa_required");
 
   const [{ data: profile, error: profileError }, { data: permissionRows, error: permissionError }] = await Promise.all([
     client.from("profiles").select("id,organization_id,status").eq("id", userData.user.id).eq("status", "active").maybeSingle(),

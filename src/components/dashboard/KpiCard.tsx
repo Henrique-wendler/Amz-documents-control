@@ -8,9 +8,11 @@ import {
 } from "@fluentui/react-icons";
 import type { ComponentType } from "react";
 import type { DashboardKpi } from "../../types/dashboard";
+import { MetricCard } from "../MetricCard";
 
 interface KpiCardProps {
   item: DashboardKpi;
+  onNavigate?: (path: string) => void;
 }
 
 const icons: Record<DashboardKpi["icon"], ComponentType> = {
@@ -22,16 +24,13 @@ const icons: Record<DashboardKpi["icon"], ComponentType> = {
   pending: Warning24Regular,
 };
 
-export function KpiCard({ item }: KpiCardProps) {
+const destinations: Partial<Record<DashboardKpi["id"], string>> = {
+  farms: "/fazendas", registries: "/matriculas", pending: "/documentos",
+};
+
+export function KpiCard({ item, onNavigate }: KpiCardProps) {
   const Icon = icons[item.icon];
-  return (
-    <article className={`dashboard-kpi${item.tone === "warning" ? " dashboard-kpi--warning" : ""}`}>
-      <div className="dashboard-kpi__top">
-        <span>{item.label}</span>
-        <span className="dashboard-kpi__icon" aria-hidden="true"><Icon /></span>
-      </div>
-      <strong>{item.value}</strong>
-      <small>{item.detail}</small>
-    </article>
-  );
+  const destination = destinations[item.id];
+  return <MetricCard label={item.label} value={item.value} detail={item.detail} icon={<Icon />}
+    tone={item.tone} onClick={destination && onNavigate ? () => onNavigate(destination) : undefined} />;
 }

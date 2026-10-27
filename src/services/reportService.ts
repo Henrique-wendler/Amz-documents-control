@@ -1,7 +1,8 @@
 import { reportQueryRepository, type ReportSnapshot } from "../repositories/reportQueryRepository";
+import { buildFarmAreaChart } from "../../supabase/functions/_shared/farmAreaChart";
 import type {
   ReportColumn, ReportDefinition, ReportFilterOptions, ReportFilters, ReportLoadResult,
-  ReportMetric, ReportRow, ReportType, ReportViewModel,
+  ReportAnalysisChart, ReportChart, ReportMetric, ReportRow, ReportType, ReportViewModel,
 } from "../types/report";
 import { formatArea, formatCurrency, formatIsoDate } from "./searchUtils";
 import { carStatusLabels, documentValidityLabels, operationStatusLabels } from "./statusLabels";
@@ -101,7 +102,7 @@ const createContext = (snapshot: ReportSnapshot): ReportContext => {
   };
 };
 
-type ReportBody = Pick<ReportViewModel, "columns" | "rows" | "metrics">;
+type ReportBody = Pick<ReportViewModel, "columns" | "rows" | "metrics" | "chart">;
 
 const buildFarms = (snapshot: ReportSnapshot, filters: ReportFilters): ReportBody => {
   const registrationCountByFarm = new Map<string, number>();
@@ -110,7 +111,10 @@ const buildFarms = (snapshot: ReportSnapshot, filters: ReportFilters): ReportBod
   return {
     columns: columns([["name", "Fazenda"], ["location", "Município / UF"], ["area", "Área total", "end"], ["registrations", "Matrículas", "end"], ["status", "Situação"], ["updated", "Atualizado em"]]),
     rows: records.map((farm) => row(farm.id, { name: farm.name, location: `${farm.municipality} / ${farm.state}`, area: formatArea(farm.totalArea), registrations: count(registrationCountByFarm.get(farm.id) ?? 0), status: labels.entity[farm.status], updated: farm.updatedAt })),
-    metrics: [...baseMetrics(records.length), sumMetric("Área total", records.reduce((sum, farm) => sum + farm.totalArea, 0), formatArea)],
+    metrics: [...baseMetrics(records.length), sumMetric("Área total", records.reduce((sum, farm) => sum + farm.totalArea, 0), formatArea),
+      { label: "Fazendas ativas", value: count(records.filter((farm) => farm.status === "active").length) },
+      { label: "Municípios", value: count(new Set(records.map((farm) => `${farm.municipality}/${farm.state}`)).size) }],
+    chart: buildFarmAreaChart(records),
   };
 };
 
@@ -136,7 +140,8 @@ const buildRegistrations = (snapshot: ReportSnapshot, filters: ReportFilters, co
       owners: [...(context.ownerIdsByRegistration.get(registration.id) ?? [])].map((id) => context.ownerById.get(id)?.name).filter(Boolean).join(", ") || "—",
       hp: "Pendente de definição", area: formatArea(registration.legalArea ?? 0), status: labels.entity[registration.status], updated: registration.updatedAt,
     })),
-    metrics: [...baseMetrics(records.length), sumMetric("Área legal", records.reduce((sum, registration) => sum + (registration.legalArea ?? 0), 0), formatArea), { label: "HP", value: "Pendente de definição" }],
+    metrics: [...baseMetrics(records.length), { label: "Matrículas ativas", value: count(records.filter((registration) => registration.status === "active").length) },
+      sumMetric("Área legal", records.reduce((sum, registration) => sum + (registration.legalArea ?? 0), 0), formatArea)],
   };
 };
 
@@ -166,6 +171,7 @@ const buildOperations = (snapshot: ReportSnapshot, filters: ReportFilters, conte
       ...baseMetrics(records.length),
       ...(includeFinancial ? [sumMetric("Valor das operações", records.reduce((sum, operation) => sum + (operation.amount ?? 0), 0), formatCurrency)] : []),
       { label: "Operações ativas", value: count(records.filter((operation) => operation.status === "active").length) },
+      { label: "Em análise", value: count(records.filter((operation) => operation.status === "under_review").length) },
     ],
   };
 };
@@ -203,6 +209,11 @@ const buildGuarantees = (snapshot: ReportSnapshot, filters: ReportFilters, conte
       ...baseMetrics(records.length),
       ...(includeFinancial ? [sumMetric("Valor das garantias", records.reduce((sum, guarantee) => sum + (guarantee.amount ?? 0), 0), formatCurrency)] : []),
       { label: "Garantias ativas", value: count(records.filter((guarantee) => guarantee.status === "active").length) },
+      { label: "Vencem em 30 dias", value: count(records.filter((guarantee) => {
+        const date = toCivilDate(guarantee.endDate);
+        const days = date ? civilDaysBetween(todayCivil(), date) : undefined;
+        return guarantee.status === "active" && days !== undefined && days >= 0 && days <= 30;
+      }).length) },
     ],
   };
 };
@@ -227,7 +238,11 @@ const buildDocuments = (snapshot: ReportSnapshot, filters: ReportFilters, contex
       registration: document.registrationId ? context.registrationById.get(document.registrationId)?.number ?? "—" : "—",
       validity: formatReportDate(document.expirationDate), status: documentValidityLabels[document.validityStatus],
     })),
-    metrics: [...baseMetrics(records.length), { label: "Vencidos ou a vencer", value: count(expirationCount) }, { label: "Com validade", value: count(records.filter((document) => Boolean(document.expirationDate)).length) }],
+    metrics: [...baseMetrics(records.length),
+      { label: "Válidos", value: count(records.filter((document) => document.validityStatus === "active").length) },
+      { label: "Vencendo", value: count(records.filter((document) => document.validityStatus === "expiring").length) },
+      { label: "Vencidos", value: count(records.filter((document) => document.validityStatus === "expired").length) },
+      { label: "Vencidos ou a vencer", value: count(expirationCount) }],
   };
 };
 
@@ -255,6 +270,95 @@ const buildReport = (type: ReportType, snapshot: ReportSnapshot, filters: Report
   return buildCar(snapshot, filters, context);
 };
 
+const categoryChart = (
+  title: string, description: string, rows: ReportRow[], categories: (row: ReportRow) => string[],
+  centerLabel: string, valueUnit: ReportAnalysisChart["valueUnit"] = "registro",
+): ReportAnalysisChart => {
+  const groups = new Map<string, Set<string>>();
+  rows.forEach((item) => [...new Set(categories(item))].forEach((label) => {
+    const key = label.trim() || "Sem informação";
+    const ids = groups.get(key) ?? new Set<string>();
+    ids.add(item.id);
+    groups.set(key, ids);
+  }));
+  const ranked = [...groups.entries()].sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0], "pt-BR"));
+  const visible = ranked.slice(0, 5)
+    .map(([label, ids]) => ({ key: label, label, value: ids.size, rowIds: [...ids] }));
+  if (ranked.length > 5) {
+    const remaining = ranked.slice(5);
+    const ids = new Set(remaining.flatMap(([, group]) => [...group]));
+    visible.push({ key: "__remaining__", label: "Outros", value: remaining.reduce((total, [, group]) => total + group.size, 0), rowIds: [...ids] });
+  }
+  return { title, description, centerLabel, valueUnit, items: visible };
+};
+
+const farmAreaAnalysisChart = (chart: ReportChart, rows: ReportRow[]): ReportAnalysisChart => {
+  const individualIds = new Set(chart.items.filter((item) => item.id !== "others").map((item) => item.id));
+  return {
+    title: chart.title, description: "Participação de cada propriedade na área total filtrada",
+    centerLabel: "Área total", centerValue: chart.displayTotalArea,
+    items: chart.items.map((item) => ({
+      key: item.id, label: item.label, value: item.area, displayValue: item.displayArea,
+      rowIds: item.id === "others" ? rows.filter((row) => !individualIds.has(row.id)).map((row) => row.id) : [item.id],
+    })),
+  };
+};
+
+const buildAnalysisCharts = (type: ReportType, rows: ReportRow[], snapshot: ReportSnapshot, farmArea?: ReportChart): ReportAnalysisChart[] => {
+  const byField = (field: string) => (item: ReportRow) => [item.values[field] || "Sem informação"];
+  const centerLabels: Record<ReportType, string> = {
+    farms: "Fazendas", owners: "Proprietários", registrations: "Matrículas", operations: "Operações",
+    guarantees: "Garantias", documents: "Documentos", car: "Registros CAR",
+  };
+  const category = (title: string, description: string, categories: (row: ReportRow) => string[]) =>
+    categoryChart(title, description, rows, categories, centerLabels[type]);
+  if (type === "farms") return [
+    ...(farmArea ? [farmAreaAnalysisChart(farmArea, rows)] : []),
+    category("Fazendas por município / UF", "Quantidade de propriedades por localização", byField("location")),
+  ];
+  if (type === "owners") return [
+    category("Proprietários por tipo", "Pessoa física e pessoa jurídica", byField("type")),
+    category("Proprietários por situação", "Situação dos cadastros filtrados", byField("status")),
+  ];
+  if (type === "registrations") return [
+    category("Matrículas por fazenda", "Quantidade de registros em cada propriedade", byField("farm")),
+    category("Matrículas por situação", "Situação dos registros filtrados", byField("status")),
+  ];
+  if (type === "operations") return [
+    category("Operações por situação", "Distribuição das operações filtradas", byField("status")),
+    category("Operações por instituição", "Instituições associadas às operações", byField("bank")),
+  ];
+  if (type === "guarantees") {
+    const guaranteeById = new Map(snapshot.guarantees.map((item) => [item.id, item]));
+    const typeById = new Map(snapshot.guaranteeTypes.map((item) => [item.id, item.name]));
+    return [
+      categoryChart("Garantias por tipo", "Uma garantia com vários tipos aparece em cada vínculo", rows, (item) => {
+        const types = guaranteeById.get(item.id)?.types ?? [];
+        return types.length ? types.map((link) => typeById.get(link.guaranteeTypeId) ?? "Sem tipo") : ["Sem tipo"];
+      }, "Vínculos de tipo", "vínculo"),
+      category("Garantias por situação", "Situação das garantias filtradas", byField("status")),
+    ];
+  }
+  if (type === "documents") {
+    const documentById = new Map(snapshot.documents.map((item) => [item.id, item]));
+    const today = todayCivil();
+    return [
+      category("Documentos por vencimento", "Faixas de validade dos documentos filtrados", (item) => {
+        const date = toCivilDate(documentById.get(item.id)?.expirationDate);
+        if (!date) return ["Sem validade informada"];
+        const days = civilDaysBetween(today, date);
+        return [days < 0 ? "Vencidos" : days <= 30 ? "Até 30 dias" : days <= 60 ? "31 a 60 dias"
+          : days <= 90 ? "61 a 90 dias" : "Mais de 90 dias"];
+      }),
+      category("Documentos por tipo", "Tipos documentais filtrados", (item) => [documentById.get(item.id)?.type ?? "Sem tipo"]),
+    ];
+  }
+  return [
+    category("CAR por situação", "Situação dos cadastros filtrados", byField("status")),
+    category("CAR por fazenda", "Cadastros por propriedade", byField("farm")),
+  ];
+};
+
 const buildFilterOptions = (type: ReportType, snapshot?: ReportSnapshot): ReportFilterOptions => ({
   farms: (snapshot?.farms ?? []).map((farm) => ({ value: farm.id, label: farm.name })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
   banks: (snapshot?.institutions ?? []).map((item) => item.name).sort((a, b) => a.localeCompare(b, "pt-BR")),
@@ -269,8 +373,10 @@ export const reportService = {
     if (mode === "error") throw new Error("Não foi possível gerar o relatório.");
     const snapshot = await reportQueryRepository.load(type, includeFinancial);
     const definition = reportDefinitions.find((item) => item.id === type)!;
+    const body = buildReport(type, snapshot, filters, includeFinancial);
     return {
-      report: { type, title: definition.title, ...buildReport(type, snapshot, filters, includeFinancial), generatedAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) },
+      report: { type, title: definition.title, ...body, analysisCharts: buildAnalysisCharts(type, body.rows, snapshot, body.chart),
+        generatedAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) },
       options: buildFilterOptions(type, snapshot),
     };
   },
