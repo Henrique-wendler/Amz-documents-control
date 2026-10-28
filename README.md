@@ -10,7 +10,7 @@ Este README apresenta o estado técnico aprovado e o caminho de onboarding para 
 - Todos os módulos de negócio usam Supabase.
 - Autenticação, recuperação de senha e MFA TOTP estão funcionais.
 - Administração de Usuários e Administração de Catálogos estão concluídas no escopo atual.
-- O schema é reproduzido pelas migrations `001` a `023`.
+- O schema desta branch é reproduzido pelas migrations `001` a `024`; a integração desktop da 024 foi validada somente localmente nesta fase.
 - A Fase A de arquivos usa Supabase Storage privado para upload e download remoto, preservando referências legadas de servidor interno.
 - A Fase B inclui um File Gateway outbound-only para cópia Cloud → diretório Windows/HD, com tenant por instância, lease, SHA-256 e idempotência.
 - A Fase C disponibiliza sob demanda referências legadas do servidor no Storage privado, sem varredura em massa ou exclusão da cópia local.
@@ -62,6 +62,10 @@ A função `admin-users` valida a sessão, a permission `users.manage` e o `orga
 A Administração de Catálogos usa o fluxo padrão de repositories e é protegida por `catalogs.manage` e RLS.
 
 O upload/download documental usa `Component → Service → Repository → Edge Function → Supabase Storage/PostgreSQL`. A função `document-files` valida sessão, tenant e `files.read`/`files.manage`; os bytes seguem diretamente para o Storage por autorização temporária, sem atravessar a função durante o upload.
+
+## API de propostas desktop (FASE 2)
+
+A função `sync-desktop-proposal` recebe somente metadados do desktop, exige JWT válido/AAL2 e `desktop_proposals.sync`, deriva o tenant do profile e preserva o acompanhamento gerencial existente. A migration 024 e a função foram validadas apenas no stack local descartável; nenhuma implantação remota foi realizada nesta fase. Contrato, autoridade dos campos, permissões e evidências estão em [DESKTOP_PROPOSAL_SYNC_API_VALIDATION.md](DESKTOP_PROPOSAL_SYNC_API_VALIDATION.md).
 
 ## Tecnologias
 
@@ -154,6 +158,7 @@ As migrations ficam em `supabase/migrations/` e atualmente vão de:
 202610140021_enforce_mfa_aal2.sql
 202610150022_fix_pending_issue_conflict_status.sql
 202610260023_proposal_approval_tracking.sql
+202610280024_desktop_proposal_synchronization.sql
 ```
 
 Elas devem ser executadas na ordem existente. Alterações de schema, RLS, functions SQL ou permissions devem ser feitas em migration incremental; migrations já aplicadas não devem ser reescritas silenciosamente.

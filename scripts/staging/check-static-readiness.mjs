@@ -11,14 +11,14 @@ const migrationFiles = (await readdir(migrationDirectory))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 const migrationNumbers = migrationFiles.map((name) => Number(name.match(/^(\d{12})_/)?.[1].slice(-3)));
-const expectedNumbers = Array.from({ length: 23 }, (_, index) => index + 1);
-if (migrationFiles.length === 23 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
-  pass("migrations 001-023 are present in order");
+const expectedNumbers = Array.from({ length: 24 }, (_, index) => index + 1);
+if (migrationFiles.length === 24 && JSON.stringify(migrationNumbers) === JSON.stringify(expectedNumbers)) {
+  pass("migrations 001-024 are present in order");
 } else {
-  fail(`expected migrations 001-023; found ${migrationFiles.join(", ")}`);
+  fail(`expected migrations 001-024; found ${migrationFiles.join(", ")}`);
 }
 
-const expectedFunctions = ["admin-users", "document-files", "file-gateway", "generate-report"];
+const expectedFunctions = ["admin-users", "document-files", "file-gateway", "generate-report", "sync-desktop-proposal"];
 const supabaseConfig = await readFile(resolve(root, "supabase", "config.toml"), "utf8");
 if (/\[db\.seed\]\s*(?:#[^\r\n]*(?:\r?\n|$)\s*)*enabled\s*=\s*false/.test(supabaseConfig)) {
   pass("automatic database seed is disabled");
@@ -115,6 +115,7 @@ if (/insert into storage\.buckets[\s\S]*?'rural-documents'[\s\S]*?false/i.test(a
   fail("private rural-documents bucket provisioning was not found");
 }
 for (const permission of [
+  "desktop_proposals.sync",
   "proposal_tracking.read", "proposal_tracking.manage", "proposal_reports.read", "proposal_reports.financial",
   "users.manage", "catalogs.manage", "files.read", "files.manage",
   "reports.read", "reports.generate", "reports.export", "financial.read",
