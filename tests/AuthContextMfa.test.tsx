@@ -156,3 +156,20 @@ describe('password recovery retains verified-only semantics', () => {
         expect(api.rpc).not.toHaveBeenCalled();
     });
 });
+
+it('administrative reset then normal login returns to enrollment with a new factor', async () => {
+    const {result}=await initialize([verified], 'aal2');
+    expect(result.current.stage).toBe('authenticated');
+    act(()=>listener('SIGNED_OUT',null));
+    factors=[]; level='aal1';
+    act(()=>listener('SIGNED_IN',session));
+    await waitFor(()=>expect(result.current.stage).toBe('mfa_enrollment'));
+    expect(result.current.permissions).toEqual([]);
+    await act(async()=>{await result.current.startMfaEnrollment();});
+    expect(factors).toEqual([factor('new-factor','unverified')]);
+    expect(result.current.mfaEnrollment?.secret).toBe('NEW-UNIT-TEST-KEY');
+    await act(async()=>{await result.current.verifyMfaEnrollment('123456');});
+    expect(result.current.stage).toBe('authenticated');
+    expect(level).toBe('aal2');
+    expect(result.current.mfaEnrollment).toBeUndefined();
+});

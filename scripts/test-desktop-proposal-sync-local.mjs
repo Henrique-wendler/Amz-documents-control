@@ -16,7 +16,7 @@ const settings=(await readFile(join(root,"supabase/config.toml"),"utf8"))
 if(!settings.includes(`project_id = "${project}"`)||!settings.includes("port = 56422")) throw Error("Unsafe QA config");
 await writeFile(join(config,"config.toml"),settings);
 const migrations=(await readdir(join(root,"supabase/migrations"))).filter(v=>v.endsWith(".sql")).sort();
-if(migrations.length!==24||!migrations[23].startsWith("202610280024_")) throw Error("Expected clean migrations 001–024");
+if(migrations.length!==25||!migrations[24].startsWith("202610290025_")) throw Error("Expected clean migrations 001–025");
 for(const name of await readdir(join(config,"migrations"))) if(!migrations.includes(name)) await unlink(join(config,"migrations",name));
 for(const name of migrations) await cp(join(root,"supabase/migrations",name),join(config,"migrations",name));
 for(const name of (await readdir(join(root,"supabase/tests"))).filter(v=>v.endsWith(".sql"))) await cp(join(root,"supabase/tests",name),join(config,"tests",name));
@@ -34,7 +34,7 @@ function run(label,args,timeout=300000){
 await run("start",["start","--exclude","studio,pgadmin,pgmeta,imgproxy,realtime,logflare,vector,edge-runtime,supavisor,inbucket"]);
 await run("reset",["db","reset","--local"]);
 await run("db-tests",["test","db"]);
-process.stdout.write("Clean local reset 001–024: PASS\n");
+process.stdout.write("Clean local reset 001–025: PASS\n");
 if(!flags.includes("--database-only")){
  const result=spawnSync(process.execPath,[join(root,"scripts/test-desktop-proposal-sync-http.mjs")],{cwd:root,encoding:"utf8",timeout:480000,maxBuffer:16000000});
  await writeFile(join(qa,"http.log"),(result.stdout??"")+"\n"+(result.stderr??""));

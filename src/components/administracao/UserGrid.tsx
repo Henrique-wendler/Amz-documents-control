@@ -12,6 +12,7 @@ interface UserGridProps {
   onEdit: (user: ManagedUser) => void;
   onToggleStatus: (user: ManagedUser) => void;
   onSendRecovery: (user: ManagedUser) => void;
+  onResetMfa: (user: ManagedUser) => void;
 }
 
 const formatTimestamp = (value?: string) => value ? new Intl.DateTimeFormat("pt-BR", {
@@ -22,13 +23,13 @@ const formatTimestamp = (value?: string) => value ? new Intl.DateTimeFormat("pt-
 
 const textCell = (value: string, strong = false) => <Tooltip content={value} relationship="description"><span className={`search-cell-text${strong ? " search-cell-text--strong" : ""}`}>{value}</span></Tooltip>;
 
-export function UserGrid({ users, roles, loading, onEdit, onToggleStatus, onSendRecovery }: UserGridProps) {
+export function UserGrid({ users, roles, loading, onEdit, onToggleStatus, onSendRecovery, onResetMfa }: UserGridProps) {
   const roleNames = useMemo(() => new Map(roles.map((role) => [role.key, role.name])), [roles]);
   const columns: TableColumnDefinition<ManagedUser>[] = useMemo(() => [
     createTableColumn({ columnId: "name", compare: (a, b) => a.fullName.localeCompare(b.fullName, "pt-BR"), renderHeaderCell: () => "Nome", renderCell: (user) => textCell(user.fullName, true) }),
     createTableColumn({ columnId: "email", compare: (a, b) => a.email.localeCompare(b.email), renderHeaderCell: () => "E-mail", renderCell: (user) => textCell(user.email || "E-mail indisponível") }),
     createTableColumn({ columnId: "role", compare: (a, b) => a.roleKey.localeCompare(b.roleKey), renderHeaderCell: () => "Perfil", renderCell: (user) => roleNames.get(user.roleKey) ?? user.roleKey }),
-    createTableColumn({ columnId: "mfa", compare: (a, b) => Number(a.mfaConfigured) - Number(b.mfaConfigured), renderHeaderCell: () => "MFA", renderCell: (user) => <Badge appearance="tint" color={user.mfaConfigured ? "success" : "warning"}>{user.mfaConfigured ? "Configurado" : "Pendente"}</Badge> }),
+    createTableColumn({ columnId: "mfa", compare: (a, b) => Number(a.mfaConfigured) - Number(b.mfaConfigured), renderHeaderCell: () => "MFA", renderCell: (user) => <Badge appearance="tint" color={user.mfaConfigured ? "success" : "warning"}>{user.mfaConfigured ? "MFA configurado" : "MFA não configurado"}</Badge> }),
     createTableColumn({ columnId: "status", compare: (a, b) => a.status.localeCompare(b.status), renderHeaderCell: () => "Situação", renderCell: (user) => <StatusBadge status={user.status === "active" ? "Ativo" : "Inativo"} /> }),
     createTableColumn({ columnId: "created", compare: (a, b) => a.createdAt.localeCompare(b.createdAt), renderHeaderCell: () => "Criado em", renderCell: (user) => formatTimestamp(user.createdAt) }),
     createTableColumn({ columnId: "lastAccess", compare: (a, b) => (a.lastSignInAt ?? "").localeCompare(b.lastSignInAt ?? ""), renderHeaderCell: () => "Último acesso", renderCell: (user) => formatTimestamp(user.lastSignInAt) }),
@@ -39,6 +40,7 @@ export function UserGrid({ users, roles, loading, onEdit, onToggleStatus, onSend
         <Menu positioning="below-end">
           <MenuTrigger disableButtonEnhancement><Button appearance="subtle" size="small" icon={<MoreHorizontal20Regular />} aria-label={`Ações para ${user.fullName}`} /></MenuTrigger>
           <MenuPopover><MenuList>
+            {user.mfaHasFactors ? <MenuItem icon={<KeyReset20Regular />} onClick={() => onResetMfa(user)}>Redefinir MFA</MenuItem> : null}
             <MenuItem icon={<Edit20Regular />} onClick={() => onEdit(user)}>Editar usuário</MenuItem>
             <MenuItem icon={user.status === "active" ? <PersonProhibited20Regular /> : <PersonAvailable20Regular />} onClick={() => onToggleStatus(user)}>{user.status === "active" ? "Inativar" : "Reativar"}</MenuItem>
             <MenuItem icon={<KeyReset20Regular />} disabled={user.status !== "active"} onClick={() => onSendRecovery(user)}>{user.lastSignInAt ? "Enviar recuperação de senha" : "Reenviar acesso"}</MenuItem>
@@ -46,7 +48,7 @@ export function UserGrid({ users, roles, loading, onEdit, onToggleStatus, onSend
         </Menu>
       </div>,
     }),
-  ], [onEdit, onSendRecovery, onToggleStatus, roleNames]);
+  ], [onEdit, onSendRecovery, onToggleStatus, onResetMfa, roleNames]);
 
   if (loading) return <Skeleton className="search-results-skeleton" aria-label="Carregando usuários">{Array.from({ length: 7 }, (_, index) => <SkeletonItem key={index} shape="rectangle" size={40} />)}</Skeleton>;
   if (!users.length) return <div className="user-administration-empty"><strong>Nenhum usuário encontrado</strong><span>Ajuste os filtros ou convide o primeiro usuário desta organização.</span></div>;
