@@ -11,7 +11,7 @@ declare
     '202608280009', '202609010010', '202609030011', '202609030012',
     '202609040013', '202609040014', '202609040015', '202609040016',
     '202609150017', '202609240018', '202610080019', '202610080020',
-    '202610140021', '202610150022', '202610260023'
+    '202610140021', '202610150022', '202610260023', '202610280024'
   ];
   applied_versions text[];
 begin
@@ -20,7 +20,7 @@ begin
   from supabase_migrations.schema_migrations;
 
   if applied_versions is distinct from expected_versions then
-    raise exception 'Migration history differs from the expected 001-023 set.';
+    raise exception 'Migration history differs from the expected 001-024 set.';
   end if;
 end;
 $$;
@@ -35,7 +35,7 @@ declare
     'guarantee_financials', 'guarantee_items', 'document_types', 'rural_documents',
     'document_attachments', 'file_access_log', 'car_records', 'audit_log',
     'report_templates', 'report_log', 'attachment_locations', 'file_gateway_instances',
-    'remote_copy_jobs', 'pending_issue_management', 'pending_issue_events', 'operation_approval_tracking'
+    'remote_copy_jobs', 'pending_issue_management', 'pending_issue_events', 'operation_approval_tracking', 'desktop_proposals'
   ];
   missing text[];
   without_rls text[];
@@ -86,7 +86,8 @@ begin
     'reports.read', 'reports.generate', 'reports.export', 'reports.financial',
     'financial.read', 'financial.write', 'audit.read',
     'pending_issues.read', 'pending_issues.manage', 'pending_issues.financial_read',
-    'proposal_tracking.read', 'proposal_tracking.manage', 'proposal_reports.read', 'proposal_reports.financial'
+    'proposal_tracking.read', 'proposal_tracking.manage', 'proposal_reports.read', 'proposal_reports.financial',
+    'desktop_proposals.sync'
   ]) required(permission_key)
   where not exists (
     select 1 from public.permissions permission
@@ -362,9 +363,33 @@ begin
 end;
 $$;
 
+-- Phase 2 is server-only: browser grants cannot bypass the Edge Auth/AAL2 boundary.
+do $$
+begin
+  if not (select relrowsecurity and relforcerowsecurity from pg_class where oid='public.desktop_proposals'::regclass) then
+    raise exception 'Desktop integration must have forced RLS.';
+  end if;
+  if has_table_privilege('authenticated', 'public.desktop_proposals', 'SELECT,INSERT,UPDATE,DELETE')
+     or has_table_privilege('anon', 'public.desktop_proposals', 'SELECT,INSERT,UPDATE,DELETE')
+     or has_table_privilege('service_role', 'public.desktop_proposals', 'SELECT,INSERT,UPDATE,DELETE') then
+    raise exception 'Desktop integration has a forbidden direct table grant.';
+  end if;
+  if has_function_privilege('authenticated', 'public.sync_desktop_proposal(uuid,jsonb,bigint,bigint)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.sync_desktop_proposal(uuid,jsonb,bigint,bigint)', 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.sync_desktop_proposal(uuid,jsonb,bigint,bigint)', 'EXECUTE') then
+    raise exception 'Desktop sync RPC must be executable only by the server role.';
+  end if;
+  if (select array_agg(role_key order by role_key) from public.role_permissions
+      where permission_key='desktop_proposals.sync' and role_key in ('admin','manager','operator','viewer'))
+     is distinct from array['admin','manager'] then
+    raise exception 'Unexpected default desktop sync permission matrix.';
+  end if;
+end;
+$$;
+
 select
-  23 as migrations_validated,
-  33 as public_tables_validated,
+  24 as migrations_validated,
+  34 as public_tables_validated,
   'rural-documents' as private_bucket_validated,
   'staging database readiness checks passed' as result;
 

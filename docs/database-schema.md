@@ -1,6 +1,6 @@
 # Arquitetura PostgreSQL/Supabase
 
-> Estado do schema versionado: migrations até `023`. As Migrations 019 e 020 implementam o contrato da Central de Pendências; a 021 exige MFA `aal2` no backend; a 022 corrige o status HTTP do conflito de versão. O frontend usa Supabase para Auth/MFA, profiles/permissions e os módulos de negócio, inclusive a Central de Pendências. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
+> Estado do schema desta branch: migrations até `024` (024 validada somente localmente nesta fase). As Migrations 019 e 020 implementam o contrato da Central de Pendências; a 021 exige MFA `aal2` no backend; a 022 corrige o status HTTP do conflito de versão. O frontend usa Supabase para Auth/MFA, profiles/permissions e os módulos de negócio, inclusive a Central de Pendências. Arquivos usam Storage privado e File Gateway outbound-only para cópia Cloud → local e disponibilização local → Cloud sob demanda.
 
 ## Visão geral
 
@@ -49,6 +49,7 @@ Administração de Usuários e Administração de Catálogos estão concluídas 
 | 21 | `202610140021_enforce_mfa_aal2.sql` | helper privado de AAL2, gate compartilhado de permissões, RLS restritiva e Storage privado protegidos após MFA |
 | 22 | `202610150022_fix_pending_issue_conflict_status.sql` | conflito de versão da Central como `PT409`/HTTP 409, sem retry de serialização |
 | 23 | `202610260023_proposal_approval_tracking.sql` | acompanhamento 1:1, relatório agregado, permissões financeiras, RLS, MFA e auditoria; ver `PROPOSAL_TRACKING_VALIDATION.md` |
+| 24 | `202610280024_desktop_proposal_synchronization.sql` | vínculo desktop/operação, snapshots/FNO/OF, RPC exclusiva da Edge, idempotência tenant + UUID, permission dedicada e auditoria sem valores no sync |
 
 A ordem é obrigatória: cada migration referencia somente objetos criados anteriormente, salvo `auth.users`, fornecido pelo Supabase.
 
@@ -231,3 +232,13 @@ URLs, origens permitidas e callbacks serão configurados por ambiente, sem `loca
 - **PENDENTE — CAB:** significado e regras não definidos; nenhum campo ou regra CAB foi cristalizado no schema.
 - **PENDENTE — HP:** significado e regras não definidos; nenhum campo ou regra HP foi cristalizado no schema.
 - Demais decisões abertas estão em `docs/database-open-questions.md`.
+
+## Integração desktop — Migration 024
+
+`desktop_proposals` é o vínculo 1:1 da operação central com `(organization_id,sync_id)` do desktop. Guarda número de origem, proponente, snapshots textuais, datas históricas, FNO/OF, hash/revisão do payload e metadados centrais. O Valor Total continua exclusivamente em `operation_financials.amount`. FK composta impede vínculo com operação de outro tenant; FK diferida exige acompanhamento ao confirmar a transação.
+
+A tabela tem RLS forçada e nenhum acesso direto de usuários. `sync_desktop_proposal` é executável somente pelo servidor Edge (`service_role`); a Edge verifica JWT/AAL2, profile/org/role ativos e `desktop_proposals.sync`. Admin/manager recebem o grant inicial; operator/viewer não. Nomes de responsável/técnico nunca geram associação automática a profiles.
+
+A primeira sincronização cria operação, financeiro e tracking; as seguintes preservam integralmente a linha gerencial já existente. Total não é inferido por FNO + OF. Banco deve existir no catálogo do tenant; números conflitantes não vinculam operações automaticamente. Retry idêntico é no-op; atualização antiga é recusada sem mutação. Auditoria da sincronização omite valores financeiros e registra ator/tenant/UUID/operação/origem. As migrations 001–023 e as regras de acompanhamento/MFA/Pendências permanecem inalteradas.
+
+Contrato, decisões de autoridade, testes e reprodução local: [DESKTOP_PROPOSAL_SYNC_API_VALIDATION.md](../DESKTOP_PROPOSAL_SYNC_API_VALIDATION.md). Nenhuma aplicação remota da 024 nesta fase.
