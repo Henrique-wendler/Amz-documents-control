@@ -10,6 +10,7 @@ interface UserDto {
   role_key: string;
   status: "active" | "inactive";
   mfa_configured: boolean;
+  mfa_has_factors?: boolean;
   created_at: string;
   last_sign_in_at: string | null;
 }
@@ -31,6 +32,7 @@ const mapUser = (user: UserDto): ManagedUser => ({
   roleKey: user.role_key,
   status: user.status,
   mfaConfigured: user.mfa_configured,
+  mfaHasFactors: user.mfa_has_factors ?? user.mfa_configured,
   createdAt: user.created_at,
   lastSignInAt: user.last_sign_in_at ?? undefined,
 });
@@ -69,6 +71,10 @@ export const supabaseUserAdministrationRepository: UserAdministrationRepository 
   async update(id: string, draft: UserUpdateDraft) {
     const data = await invoke<{ user: UserDto }>({ action: "update", targetId: id, ...draft });
     return mapUser(data.user);
+  },
+
+  async resetMfa(id: string) {
+    await invoke<{ success: true }>({ action: "reset_mfa", targetId: id });
   },
 
   async sendRecovery(id: string) {

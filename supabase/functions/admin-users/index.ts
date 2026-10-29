@@ -73,7 +73,7 @@ const corsHeaders = (origin: string | null) => {
 
 const checkRateLimit = (actorId: string, action: string) => {
   const now = Date.now();
-  const sensitive = action === "invite" || action === "send-recovery";
+  const sensitive = action === "invite" || action === "send-recovery" || action === "reset_mfa";
   const limit = sensitive ? 5 : 40;
   const key = `${actorId}:${action}`;
   const current = rateWindows.get(key);
@@ -155,6 +155,11 @@ const requireAdminContext = async (request: Request): Promise<AdminContext> => {
   ]);
   if (!organization || !role || !permission) throw new HttpError(403, "Você não possui permissão para gerenciar usuários.", "forbidden");
 
+  // This RLS-backed check also rejects sessions revoked by an MFA reset.
+  const { data: effective, error: permissionError } = await userClientFor(authorization).rpc("current_user_permissions");
+  if (permissionError || !effective?.some((item: { permission_key: string }) => item.permission_key === "users.manage")) {
+    throw new HttpError(403, "Você não possui permissão para gerenciar usuários.", "forbidden");
+  }
   return {
     actorId: userData.user.id,
     organizationId: profile.organization_id as string,
@@ -177,7 +182,7 @@ const listAuthUsers = async () => {
 const mfaConfigured = async (userId: string) => {
   const { data, error } = await adminClient.auth.admin.mfa.listFactors({ userId });
   if (error) throw new HttpError(502, "Não foi possível consultar a situação do MFA.", "mfa_unavailable");
-  return data.factors.some((factor) => factor.factor_type === "totp" && factor.status === "verified");
+  return { mfa_configured: data.factors.some((factor) => factor.factor_type === "totp" && factor.status === "verified"), mfa_has_factors: data.factors.length > 0 };
 };
 
 const mapUser = async (profile: ProfileRow, authUser?: User) => ({
@@ -186,7 +191,7 @@ const mapUser = async (profile: ProfileRow, authUser?: User) => ({
   email: authUser?.email ?? "",
   role_key: profile.role_key,
   status: profile.status,
-  mfa_configured: await mfaConfigured(profile.id),
+  ...await mfaConfigured(profile.id),
   created_at: authUser?.created_at ?? profile.created_at,
   last_sign_in_at: authUser?.last_sign_in_at ?? null,
 });
@@ -326,6 +331,36 @@ const sendRecovery = async (context: AdminContext, body: JsonRecord) => {
   await recordEvent(context, targetId, "PASSWORD_RECOVERY_SENT");
 };
 
+const resetMfa = async (context: AdminContext, body: JsonRecord) => {
+  if (Object.keys(body).some((key) => key !== "action" && key !== "targetId")) {
+    throw new HttpError(400, "Informe somente o usuário alvo.", "invalid_payload");
+  }
+  const targetId = targetIdField(body);
+  await getTarget(context, targetId);
+  if (targetId === context.actorId) throw new HttpError(409, "Solicite a outro administrador autorizado a redefinição do seu MFA.", "self_mfa_reset");
+  const { data: target, error: targetError } = await adminClient.auth.admin.getUserById(targetId);
+  if (targetError || !target.user) throw new HttpError(404, "Usuário não encontrado.", "not_found");
+  const { data, error } = await adminClient.auth.admin.mfa.listFactors({ userId: targetId });
+  if (error) throw new HttpError(502, "Não foi possível consultar a situação do MFA.", "mfa_unavailable");
+  let removed = 0;
+  let incomplete = false;
+  for (const factor of data.factors) {
+    const { error: deleteError } = await adminClient.auth.admin.mfa.deleteFactor({ userId: targetId, id: factor.id });
+    if (deleteError) { incomplete = true; break; }
+    removed += 1;
+  }
+  const { data: remaining, error: remainingError } = await adminClient.auth.admin.mfa.listFactors({ userId: targetId });
+  incomplete = incomplete || Boolean(remainingError) || Boolean(remaining?.factors.length);
+  // Auth deletion is external; session revocation and audit are atomic in SQL.
+  const { error: auditError } = await adminClient.rpc("complete_user_mfa_reset", {
+    p_actor_user_id: context.actorId, p_target_user_id: targetId,
+    p_removed_factor_count: removed, p_outcome: incomplete ? "partial" : "complete",
+  });
+  if (auditError) throw new HttpError(500, "Não foi possível confirmar a revogação e a auditoria. Atualize a lista antes de tentar novamente.", "audit_failed");
+  if (incomplete) throw new HttpError(502, "A redefinição não foi concluída. Atualize a lista e tente novamente.", "mfa_reset_incomplete");
+  return { success: true, removedFactors: removed, mfaConfigured: false };
+};
+
 Deno.serve(async (request) => {
   let headers: HeadersInit = {};
   try {
@@ -339,6 +374,7 @@ Deno.serve(async (request) => {
     const action = textField(body, "action", 3, 40);
     checkRateLimit(context.actorId, action);
 
+    if (action === "reset_mfa") return json(await resetMfa(context, body), 200, headers);
     if (action === "list") return json(await list(context), 200, headers);
     if (action === "invite") return json({ user: await invite(context, body) }, 201, headers);
     if (action === "update") return json({ user: await update(context, body) }, 200, headers);

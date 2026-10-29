@@ -12,6 +12,7 @@ export interface ManagedUser {
   roleKey: string;
   status: UserProfileStatus;
   mfaConfigured: boolean;
+  mfaHasFactors: boolean;
   createdAt: string;
   lastSignInAt?: string;
 }

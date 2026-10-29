@@ -482,3 +482,7 @@ Confirme a sincronização de horário do computador e do aplicativo autenticado
 - [`docs/file-gateway-homologation-checklist.md`](docs/file-gateway-homologation-checklist.md): preparação e aceite futuro do Gateway em SMB/NTFS dedicado.
 - [`docs/cloud-staging-deployment.md`](docs/cloud-staging-deployment.md): sequência de implantação isolada em homologação Cloud.
 - [`docs/cloud-staging-smoke-test.md`](docs/cloud-staging-smoke-test.md): validação funcional e de segurança após o futuro deploy.
+
+## Recuperação administrativa de MFA
+
+Administração → Usuários permite redefinir os autenticadores de outra conta da mesma organização, exigindo `users.manage` e sessão AAL2. O reset encerra as sessões do alvo e preserva sua identidade/histórico. [Procedimento e troca de funcionário](docs/admin-mfa-recovery.md) · [Validação em staging](ADMIN_MFA_RECOVERY_VALIDATION.md).

@@ -14,7 +14,7 @@ import { userAdministrationService } from "../services/userAdministrationService
 import type { ManagedUser, UserAdministrationData, UserInvitationDraft, UserProfileStatus, UserUpdateDraft } from "../types/userAdministration";
 
 interface UsersPageProps { onNavigate: (path: string) => void; }
-type DialogState = { kind: "none" } | { kind: "status"; user: ManagedUser } | { kind: "recovery"; user: ManagedUser };
+type DialogState = { kind: "none" } | { kind: "status"; user: ManagedUser } | { kind: "recovery"; user: ManagedUser } | { kind: "reset-mfa"; user: ManagedUser };
 
 export function UsersPage({ onNavigate }: UsersPageProps) {
   const { profile, refreshProfile } = useAuth();
@@ -108,6 +108,10 @@ export function UsersPage({ onNavigate }: UsersPageProps) {
         notify(current.user.status === "active" ? "Usuário inativado." : "Usuário reativado.");
         await load();
         if (current.user.id === profile?.id) await refreshProfile();
+      } else if (current.kind === "reset-mfa") {
+        await userAdministrationService.resetMfa(current.user.id);
+        notify("MFA redefinido. O usuário deverá entrar e configurar um novo autenticador.");
+        await load();
       } else {
         await userAdministrationService.sendRecovery(current.user.id);
         notify("E-mail de recuperação enviado.");
@@ -127,6 +131,10 @@ export function UsersPage({ onNavigate }: UsersPageProps) {
     title: dialog.user.lastSignInAt ? "Enviar recuperação de senha?" : "Reenviar acesso?",
     message: "O usuário receberá um link seguro e definirá a própria senha.",
     confirmLabel: "Enviar e-mail",
+  } : dialog.kind === "reset-mfa" ? {
+    title: "Redefinir autenticação em duas etapas?",
+    message: `Os autenticadores cadastrados para ${dialog.user.fullName} serão removidos e as sessões atuais desse usuário serão encerradas. No próximo acesso, ele deverá configurar um novo aplicativo autenticador.`,
+    confirmLabel: "Redefinir MFA",
   } : undefined;
 
   return <div className="app-shell">
@@ -140,7 +148,7 @@ export function UsersPage({ onNavigate }: UsersPageProps) {
           <Field label="Situação"><Dropdown value={status === "all" ? "Todas" : status === "active" ? "Ativo" : "Inativo"} selectedOptions={[status]} onOptionSelect={(_, value) => setStatus(value.optionValue as "all" | UserProfileStatus)}><Option value="all">Todas</Option><Option value="active">Ativo</Option><Option value="inactive">Inativo</Option></Dropdown></Field>
           <Button className="user-administration-toolbar__new" appearance="primary" icon={<PersonAdd20Regular />} onClick={openInvite}>Convidar usuário</Button>
         </section>
-        {error ? <DashboardMessageState kind="error" title="Não foi possível carregar os usuários" description="Verifique a conexão e tente novamente." onRetry={() => void load()} /> : <SectionCard className="user-administration-results" title={`${users.length} usuário${users.length === 1 ? "" : "s"}`} subtitle="Somente usuários vinculados à sua organização"><UserGrid users={users} roles={data.roles} loading={loading} onEdit={openEdit} onToggleStatus={(user) => setDialog({ kind: "status", user })} onSendRecovery={(user) => setDialog({ kind: "recovery", user })} /></SectionCard>}
+        {error ? <DashboardMessageState kind="error" title="Não foi possível carregar os usuários" description="Verifique a conexão e tente novamente." onRetry={() => void load()} /> : <SectionCard className="user-administration-results" title={`${users.length} usuário${users.length === 1 ? "" : "s"}`} subtitle="Somente usuários vinculados à sua organização"><UserGrid users={users} roles={data.roles} loading={loading} onEdit={openEdit} onToggleStatus={(user) => setDialog({ kind: "status", user })} onSendRecovery={(user) => setDialog({ kind: "recovery", user })} onResetMfa={(user) => setDialog({ kind: "reset-mfa", user })} /></SectionCard>}
       </main>
     </div>
     <UserFormDrawer open={formOpen} user={editing} roles={data.roles} saving={saving} error={formError} onClose={() => { if (!saving) setFormOpen(false); }} onInvite={(draft) => void invite(draft)} onUpdate={(draft) => void update(draft)} />

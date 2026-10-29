@@ -39,6 +39,7 @@ export const userAdministrationService = {
     });
   },
 
+  resetMfa: (id: string) => supabaseUserAdministrationRepository.resetMfa(id),
   sendRecovery: (id: string) => supabaseUserAdministrationRepository.sendRecovery(id),
 };
 

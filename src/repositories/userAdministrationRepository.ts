@@ -5,5 +5,6 @@ export interface UserAdministrationRepository {
   invite(draft: UserInvitationDraft): Promise<ManagedUser>;
   update(id: string, draft: UserUpdateDraft): Promise<ManagedUser>;
   sendRecovery(id: string): Promise<void>;
+  resetMfa(id: string): Promise<void>;
 }
 

@@ -96,7 +96,9 @@ select is((select count(*) from public.desktop_proposals),1::bigint,'No duplicat
 select is((select version from public.desktop_proposals),1::bigint,'No-op preserves version');
 
 -- The web owns all management data after creation, including assignments and snapshots.
-select set_config('request.jwt.claims','{"sub":"b6102800-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',true);
+-- SQL fixtures model real Auth sessions required by migration 025.
+insert into auth.sessions(id,user_id,created_at,updated_at,aal) select id,id,now(),now(),'aal2' from auth.users;
+select set_config('request.jwt.claims','{"sub":"b6102800-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2","session_id":"b6102800-0000-4000-8000-000000000001"}',true);
 select public.save_proposal_tracking((select operation_id from public.desktop_proposals),1,
  '{"approval_status":"approved","approval_deadline":"2026-10-20","delay_reason":"QA management reason","delay_notes":"QA management notes","responsible_profile_id":"b6102800-0000-4000-8000-000000000005"}');
 create temp table tracking_before as select to_jsonb(t) value from public.operation_approval_tracking t;
