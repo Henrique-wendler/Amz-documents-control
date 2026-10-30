@@ -14,6 +14,13 @@ const backend: SyncBackend = {
     const {data,error} = await server.auth.getUser(token);
     return error ? null : data.user;
   },
+  async sessionActive(token) {
+    const userClient = createClient(url!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global:{headers:{Authorization:`Bearer ${token}`}}, auth:{autoRefreshToken:false,persistSession:false},
+    });
+    const live = await userClient.rpc("desktop_proposal_session_active");
+    return !live.error && live.data === true;
+  },
   async profileFor(id) {
     return check(await server.from("profiles").select("id,organization_id,role_key,status").eq("id",id).maybeSingle());
   },

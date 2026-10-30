@@ -38,7 +38,7 @@ create function pg_temp.call_sync(p_actor uuid,p_values jsonb,p_revision bigint 
 declare v_old text:=current_setting('request.jwt.claims',true); v_result jsonb;
 begin
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
- v_result:=public.sync_desktop_proposal(p_actor,p_values,p_revision,p_expected);
+ v_result:=private.sync_desktop_proposal_v1(p_actor,p_values,p_revision,p_expected);
  perform set_config('request.jwt.claims',coalesce(v_old,'{}'),true);
  return v_result;
 end; $$;

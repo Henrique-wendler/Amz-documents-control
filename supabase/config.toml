@@ -441,3 +441,13 @@ enabled = true
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/sync-desktop-proposal/index.ts"
+
+[functions.reserve-proposal-number]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/reserve-proposal-number/index.ts"
+
+[functions.claim-legacy-proposal-number]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/claim-legacy-proposal-number/index.ts"
