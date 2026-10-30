@@ -20,6 +20,7 @@ import { SectionCard } from "../components/SectionCard";
 import { KpiCard } from "../components/dashboard/KpiCard";
 import { DashboardMessageState } from "../components/dashboard/DashboardState";
 import { TrackingGroups } from "../components/proposal-tracking/TrackingGroups";
+import { ProposalFiles } from "../components/proposal-tracking/ProposalFiles";
 import { TrackingEditor } from "../components/proposal-tracking/TrackingEditor";
 import { usePermissions } from "../hooks/usePermissions";
 import { proposalTrackingService } from "../services/proposalTrackingService";
@@ -77,6 +78,9 @@ function TrackingContent({
   access,
   onNavigate,
 }: Props & { access: TrackingAccess }) {
+  const {hasPermission}=usePermissions();
+  const filesRead=hasPermission("proposal_files.read");
+  const [fileEntry,setFileEntry]=useState<TrackingEntry>();
   const [filters, setFilters] = useState<TrackingFilters>(
     initialTrackingFilters,
   );
@@ -389,7 +393,7 @@ function TrackingContent({
                               ...(financial ? ["Valor total"] : []),
                               "Motivo",
                               "Última atualização",
-                              ...(access.manage ? ["Ações"] : []),
+                              ...((access.manage || filesRead) ? ["Ações"] : []),
                             ].map((label) => (
                               <TableHeaderCell key={label}>
                                 {label}
@@ -438,15 +442,10 @@ function TrackingContent({
                               <TableCell>
                                 {trackingDate(row.updatedAt)}
                               </TableCell>
-                              {access.manage && (
+                              {(access.manage || filesRead) && (
                                 <TableCell>
-                                  <Button
-                                    size="small"
-                                    aria-label={`Editar acompanhamento ${row.operationNumber}`}
-                                    onClick={() => setEditor(row)}
-                                  >
-                                    Editar
-                                  </Button>
+                                  {access.manage && <Button size="small" aria-label={`Editar acompanhamento ${row.operationNumber}`} onClick={()=>setEditor(row)}>Editar</Button>}
+                                  {filesRead && <Button size="small" aria-label={`Arquivos da proposta ${row.operationNumber}`} onClick={()=>setFileEntry(row)}>Arquivos</Button>}
                                 </TableCell>
                               )}
                             </TableRow>
@@ -480,6 +479,7 @@ function TrackingContent({
               </>
             )
           )}
+          {filesRead && fileEntry && <ProposalFiles key={fileEntry.operationId} operationId={fileEntry.operationId} number={fileEntry.operationNumber} onClose={()=>setFileEntry(undefined)}/>}
           {access.manage && editor && (
             <TrackingEditor
               key={editor === "new" ? "new" : editor.operationId}

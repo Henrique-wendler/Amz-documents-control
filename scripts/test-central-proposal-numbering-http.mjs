@@ -9,7 +9,8 @@ dns.setDefaultResultOrder("ipv4first");
 // Explicit targets only. Credentials and disposable per-account TOTP secrets stay in memory.
 const staging=process.argv[2]==="--staging";
 const legacyClaims=process.argv[3]==="--legacy-claims";
-if(!["--local","--staging"].includes(process.argv[2])||process.argv.length!==(legacyClaims?4:3))throw Error("Use --local or --staging, optionally --legacy-claims");
+const fileSync=process.argv[3]==="--proposal-files";
+if(!["--local","--staging"].includes(process.argv[2])||process.argv.length!==((legacyClaims||fileSync)?4:3))throw Error("Use --local or --staging, optionally --legacy-claims or --proposal-files");
 const root=process.cwd(),ref="iglciwizbxtkfwlboihe",project="central-proposal-numbering-qa";
 const qa=resolve(root,".tmp",staging?"central-numbering-staging":"central-proposal-numbering-local");
 await mkdir(qa,{recursive:true});
@@ -34,7 +35,7 @@ const quote=v=>"'"+String(v).replaceAll("'","''")+"'";
 const orgA=randomUUID(),orgB=randomUUID(),run=randomUUID().slice(0,8),users={},checks=[];
 const summary={ok:false,staging,project_ref:staging?ref:project,organization_ids:[orgA,orgB],users:[],checks};
 const pass=(name,condition=true)=>{assert.ok(condition,name);checks.push(name);process.stdout.write("PASS "+name+"\n");};
-async function record(){await writeFile(join(qa,legacyClaims?"legacy-claims-report.json":"numbering-report.json"),JSON.stringify(summary,null,2)+"\n");}
+async function record(){await writeFile(join(qa,fileSync?"proposal-files-report.json":legacyClaims?"legacy-claims-report.json":"numbering-report.json"),JSON.stringify(summary,null,2)+"\n");}
 function totp(seed){const alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";let bits="";for(const c of seed.toUpperCase().replace(/=+$/,""))bits+=alphabet.indexOf(c).toString(2).padStart(5,"0");const key=Buffer.from((bits.match(/.{8}/g)??[]).map(v=>parseInt(v,2)));const moving=Buffer.alloc(8);moving.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));const mac=createHmac("sha1",key).update(moving).digest(),offset=mac[19]&15;return String((mac.readUInt32BE(offset)&0x7fffffff)%1000000).padStart(6,"0");}
 async function call(name,body,user=users.a){
  // Both endpoints are idempotent for the same immutable UUID/body. Retry transport loss with identical bytes.
@@ -77,7 +78,10 @@ try{
   serve=spawn(process.execPath,[cli,"functions","serve","--workdir",qa,"--env-file",join(qa,"functions.env")],{cwd:root,stdio:["ignore","ignore","ignore"],windowsHide:true});
   let ready=false;for(let i=0;i<45;i++){try{if((await reserve(randomUUID(),date,null)).status===401){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,1000));}if(!ready)throw Error("Local Edge not ready");
  }
- if(legacyClaims){
+ if(fileSync){
+  const {runProposalFilesQa}=await import("./qa/proposal-files.mjs");
+  await runProposalFilesQa({call,reserve,sql,quote,users,orgA,orgB,run,pass,summary,staging,base,anon,admin});summary.ok=true;
+ }else if(legacyClaims){
   const {runLegacyClaimsQa}=await import("./qa/legacy-proposal-number-claims.mjs");
   await runLegacyClaimsQa({call,reserve,sql,quote,users,orgA,orgB,run,pass,summary,staging,base,anon});summary.ok=true;
  }else{

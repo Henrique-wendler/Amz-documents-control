@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "feature/proposal-file-sync": false
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
