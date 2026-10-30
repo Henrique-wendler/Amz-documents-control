@@ -67,6 +67,9 @@ O upload/download documental usa `Component → Service → Repository → Edge 
 
 A função `sync-desktop-proposal` recebe somente metadados do desktop, exige JWT válido/AAL2 e `desktop_proposals.sync`, deriva o tenant do profile e preserva o acompanhamento gerencial existente. A migration 024 e a função foram validadas apenas no stack local descartável; nenhuma implantação remota foi realizada nesta fase. Contrato, autoridade dos campos, permissões e evidências estão em [DESKTOP_PROPOSAL_SYNC_API_VALIDATION.md](DESKTOP_PROPOSAL_SYNC_API_VALIDATION.md).
 
+Os PDF/XLSX finais gerados pelo desktop usam o bucket privado dedicado `proposal-files`, a Edge Function homônima e a migration 028. O envio reutiliza `desktop_proposals.sync`; a consulta/download requer `proposal_files.read` (admin/manager), sessão AAL2 ativa e o tenant correto. A ação **Arquivos** em Acompanhamento de Propostas mostra as versões atuais e autoriza links de curta duração. Contratos, testes e implantação exclusiva em homologação: [PROPOSAL_FILE_SYNC_VALIDATION.md](PROPOSAL_FILE_SYNC_VALIDATION.md).
+
+
 ## Tecnologias
 
 - React 19

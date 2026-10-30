@@ -30,6 +30,7 @@ vi.mock("../src/hooks/usePermissions", () => ({
     hasPermission: (key: string) => state.permissions.includes(key),
   }),
 }));
+vi.mock("../src/services/proposalFileService", () => ({proposalFileService: {list: vi.fn(async () => []), open: vi.fn(), download: vi.fn()}}));
 vi.mock("../src/services/proposalTrackingService", () => ({
   proposalTrackingService: state.service,
 }));
@@ -311,4 +312,20 @@ describe("proposal tracking page", () => {
     );
     expect(screen.queryByText("STALE-QA")).toBeNull();
   });
+});
+
+
+it("file action requires proposal_files.read independently from tracking manage", async () => {
+  state.permissions = ["proposal_reports.read"];
+  const page = renderPage();
+  await loaded();
+  expect(screen.queryByRole("button", {name: /^Arquivos/})).toBeNull();
+  page.unmount();
+  state.permissions = ["proposal_reports.read", "proposal_files.read"];
+  renderPage();
+  await loaded();
+  const actions=screen.getAllByRole("button", {name: /^Arquivos/});
+  fireEvent.click(actions[0]);
+  expect(await screen.findByText(/Arquivos da proposta —/)).toBeTruthy();
+  expect(screen.queryByRole("button", {name: /^Editar/})).toBeNull();
 });

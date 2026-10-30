@@ -451,3 +451,8 @@ entrypoint = "./functions/reserve-proposal-number/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/claim-legacy-proposal-number/index.ts"
+
+[functions.proposal-files]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/proposal-files/index.ts"

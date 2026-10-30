@@ -20,6 +20,7 @@
     "test:central-numbering": "node --experimental-strip-types --test scripts/test-central-proposal-numbering.mjs",
     "test:desktop-sync": "node --experimental-strip-types --test scripts/test-desktop-proposal-sync.mjs",
     "test:desktop-sync:local": "node scripts/test-desktop-proposal-sync-local.mjs",
+    "test:proposal-files": "node --experimental-strip-types --test scripts/test-proposal-files.mjs",
     "test:admin-mfa": "node --experimental-strip-types --test scripts/test-admin-mfa-recovery.mjs"
   },
   "dependencies": {
