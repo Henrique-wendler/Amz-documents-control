@@ -38,6 +38,8 @@ export function createSyncHandler(backend: SyncBackend, allowedOrigins: string[]
       const result = await backend.sync(context.actorId,payload,headers.revision,headers.expectedVersion);
       if (result.error) {
         const errors: Record<string,[number,string,string]> = {
+          PN404:[409,"proposal_number_not_reserved","Número histórico não reservado. Solicite conciliação antes de sincronizar."],
+          PN409:[409,"proposal_number_reservation_mismatch","O número não corresponde à reserva desta proposta."],
           DS400:[400,"invalid_payload","Metadados da proposta inválidos ou incompletos."],
           DS403:[403,"permission_denied","Sem autorização para sincronizar propostas."],
           DS404:[404,"institution_not_found","Banco não encontrado no catálogo da organização."],

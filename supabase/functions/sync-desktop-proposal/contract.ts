@@ -22,7 +22,7 @@ const invalid = () => new FunctionHttpError(400, "invalid_payload", "Metadados d
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const controls = /[\u0000-\u001f\u007f-\u009f]/;
 
-function validTimestamp(value: unknown): value is string | null {
+export function validTimestamp(value: unknown): value is string | null {
   if (value === null) return true; // Preserve unknown historical dates; never invent today's date.
   if (typeof value !== "string" || value.length > 40) return false;
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|[+-](\d{2}):(\d{2}))$/);

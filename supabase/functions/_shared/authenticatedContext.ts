@@ -19,6 +19,7 @@ export interface ActiveProfile {
 
 export interface AuthContextBackend {
   verifyUser(token: string): Promise<{ id: string } | null>;
+  sessionActive?(token: string): Promise<boolean>;
   profileFor(id: string): Promise<ActiveProfile | null>;
   organizationActive(id: string): Promise<boolean>;
   roleActive(key: string): Promise<boolean>;
@@ -40,6 +41,7 @@ export async function requireAuthenticatedContext(request: Request, backend: Aut
   } catch { /* Invalid claims fail closed after Auth verification. */ }
   if (!userSession) throw new FunctionHttpError(401, "authentication_required", "Utilize uma sessão de usuário válida.");
   if (!verifiedJwtHasAal2(token)) throw new FunctionHttpError(403, "mfa_required", "Confirme sua autenticação em duas etapas.");
+  if (backend.sessionActive && !await backend.sessionActive(token)) throw new FunctionHttpError(401,"authentication_required","Sessão encerrada ou expirada.");
   const profile = await backend.profileFor(user.id);
   if (!profile || profile.id !== user.id || profile.status !== "active") {
     throw new FunctionHttpError(403, "permission_denied", "Perfil sem autorização para sincronizar.");
